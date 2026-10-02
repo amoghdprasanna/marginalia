@@ -15,7 +15,7 @@ class DoubtLog:
         now = datetime.now()
         shots = self.dir / "shots"
         shots.mkdir(parents=True, exist_ok=True)
-        stamp = now.strftime("%Y%m%d-%H%M%S")
+        stamp = now.strftime("%Y%m%d-%H%M%S-%f")  # microseconds: quick follow-ups must not collide
         screenshot.save(shots / f"{stamp}.png")
         page = self.dir / f"{now:%Y-%m-%d}.md"
         with page.open("a", encoding="utf-8") as f:

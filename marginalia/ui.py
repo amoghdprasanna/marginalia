@@ -22,6 +22,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .voice import SilenceDetector
+
 SLATE = QColor(27, 32, 49, 246)
 EDGE = QColor(255, 255, 255, 34)
 TEXT = QColor(236, 239, 247)
@@ -491,7 +493,8 @@ class AnswerBubble(_Panel):
         self.close_btn.setToolTip("Close (Esc). Ends this thread.")
         self.close_btn.setCursor(Qt.PointingHandCursor)
         self.close_btn.setStyleSheet(
-            f"QToolButton {{ color: {MUTED_HEX}; background: transparent; border: none; font-size: 13px; padding: 2px 4px; }}"
+            f"QToolButton {{ color: {MUTED_HEX}; background: transparent; border: none;"
+            " font-size: 13px; padding: 2px 4px; }"
             f"QToolButton:hover {{ color: {TEXT_HEX}; }}"
         )
         self.close_btn.clicked.connect(self.dismiss)
@@ -617,9 +620,7 @@ class AnswerBubble(_Panel):
         self.copy_btn.hide()
 
     def _space_paragraphs(self) -> None:
-        from PySide6.QtGui import QTextCursor
-
-        from PySide6.QtGui import QTextBlockFormat
+        from PySide6.QtGui import QTextBlockFormat, QTextCursor
 
         cur = QTextCursor(self.body.document())
         cur.select(QTextCursor.Document)
@@ -649,7 +650,7 @@ class AnswerBubble(_Panel):
     def _copy(self) -> None:
         QGuiApplication.clipboard().setText(self._markdown)
         self.copy_btn.setText("Copied")
-        QTimer.singleShot(1200, lambda: self.copy_btn.setText("Copy"))
+        QTimer.singleShot(1200, self, lambda: self.copy_btn.setText("Copy"))
 
     def _followup(self) -> None:
         q = self.follow.text().strip()
@@ -744,11 +745,10 @@ class ListenBox(_Panel):
     stop_requested = Signal()
     cancelled = Signal()
 
-    SILENCE_S = 1.4  # pause after speech that ends the question
-    MAX_S = 45.0
 
-    def __init__(self) -> None:
+    def __init__(self, detector: SilenceDetector | None = None) -> None:
         super().__init__()
+        self.detector = detector or SilenceDetector()
         self.setFixedWidth(400)
         self.status = QLabel()
         self.status.setStyleSheet(f"color: {TEXT_HEX}; font-size: 15px; font-weight: 500; background: transparent;")
@@ -783,9 +783,7 @@ class ListenBox(_Panel):
     def open_at(self, cursor: QPoint, screen: QRect, level_fn) -> None:
         self.level_fn = level_fn
         self._listening = True
-        self._floor: list[float] = []
-        self._heard = False
-        self._quiet_since: float | None = None
+        self.detector.reset()
         self.status.setText("Listening…")
         self.timer_lab.setText("0:00")
         self.timer_lab.show()
@@ -824,7 +822,8 @@ class ListenBox(_Panel):
         set_hints(self.hint, ("Orb", "try again"), ("Esc", "close"))
         self.adjustSize()
         self.update()
-        QTimer.singleShot(2600, lambda: None if self._listening else self.hide())
+        # `self` as context: Qt cancels the timer if this widget is destroyed first.
+        QTimer.singleShot(2600, self, lambda: None if self._listening else self.hide())
 
     def close_quietly(self) -> None:
         self._listening = False
@@ -841,19 +840,8 @@ class ListenBox(_Panel):
         self.wave.push(self.level)
         t = self.clock.elapsed() / 1000
         self.timer_lab.setText(f"{int(t) // 60}:{int(t) % 60:02d}")
-        if t < 0.35:  # learn the room's noise floor before judging speech vs. silence
-            self._floor.append(raw)
-        else:
-            floor = sum(self._floor) / len(self._floor) if self._floor else 0.0
-            speaking = raw > max(3 * floor, 0.012)
-            if speaking:
-                self._heard, self._quiet_since = True, None
-            elif self._heard:
-                self._quiet_since = self._quiet_since or t
-                if t - self._quiet_since >= self.SILENCE_S:
-                    self._send()
-            if t >= self.MAX_S:
-                self._send()
+        if self.detector.feed(t, raw):
+            self._send()
         self.update()
 
     def _send(self) -> None:

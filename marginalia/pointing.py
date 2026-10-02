@@ -5,7 +5,6 @@ from .brain import Point
 from .capture import Prepared, Snapshot
 from .ocr import TextLine
 
-
 MERGE_RADIUS = 48  # logical px; closer markers would draw as one ring split in two
 
 

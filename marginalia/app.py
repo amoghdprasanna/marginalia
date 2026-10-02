@@ -6,7 +6,10 @@ import os
 import signal
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable
+from concurrent.futures import Executor, ThreadPoolExecutor
+from dataclasses import dataclass, field
+from typing import Any
 
 from PySide6.QtCore import QObject, QPoint, QRect, QTimer, Signal
 from PySide6.QtGui import QCursor
@@ -15,6 +18,7 @@ from PySide6.QtWidgets import QApplication
 from .brain import BrainError, ClaudeBrain, DemoBrain
 from .capture import Snapshot, grab_screen, prepare
 from .config import Config, load_config
+from .cursor import RestTracker
 from .doubtlog import DoubtLog
 from .ocr import OCR
 from .pointing import place_box, resolve_points
@@ -53,15 +57,36 @@ def start_hotkey(combo: str, callback):
         return None
 
 
+@dataclass
+class Services:
+    """Everything the controller talks to that is slow, external or hardware. Tests swap these out."""
+
+    brain: Any
+    log: DoubtLog
+    ocr: OCR | None = None
+    transcriber: Transcriber | None = None
+    recorder: Recorder = field(default_factory=Recorder)
+    grab: Callable[[int, int], Snapshot] = grab_screen
+    pool: Executor = field(default_factory=lambda: ThreadPoolExecutor(max_workers=3))
+
+
+def default_services(cfg: Config) -> Services:
+    return Services(
+        brain=DemoBrain() if cfg.demo else ClaudeBrain(cfg),
+        log=DoubtLog(cfg.log_dir),
+        ocr=OCR() if cfg.ocr_enabled else None,
+        transcriber=Transcriber(cfg.whisper_model) if cfg.voice_enabled else None,
+    )
+
+
 class Controller(QObject):
-    def __init__(self, cfg: Config) -> None:
+    def __init__(self, cfg: Config, services: Services | None = None) -> None:
         super().__init__()
         self.cfg = cfg
         self.bus = Bus()
-        self.brain = DemoBrain() if cfg.demo else ClaudeBrain(cfg)
-        self.ocr = OCR() if cfg.ocr_enabled else None
-        self.log = DoubtLog(cfg.log_dir)
-        self.pool = ThreadPoolExecutor(max_workers=3)
+        sv = services or default_services(cfg)
+        self.brain, self.ocr, self.log, self.pool = sv.brain, sv.ocr, sv.log, sv.pool
+        self.transcriber, self.recorder, self.grab = sv.transcriber, sv.recorder, sv.grab
 
         self.orb = Orb(pretty_hotkey(cfg.hotkey) if cfg.hotkey_enabled else None)
         self.askbox = AskBox()
@@ -69,8 +94,6 @@ class Controller(QObject):
         self.overlay = PointerOverlay()
         self.chooser = ModeChooser()
         self.listenbox = ListenBox()
-        self.recorder = Recorder()
-        self.transcriber = Transcriber(cfg.whisper_model) if cfg.voice_enabled else None
         if self.transcriber is None:
             self.chooser.set_voice_available(False, "disabled in settings")
         elif not self.transcriber.available:
@@ -79,6 +102,7 @@ class Controller(QObject):
         self.askbox.set_voice_available(voice_ok)
         self.bubble.set_voice_available(voice_ok)
         self.listen_id = 0
+        self._panels = (self.orb, self.askbox, self.bubble, self.chooser, self.listenbox)
 
         self.snapshot: Snapshot | None = None
         self.ocr_future = None
@@ -87,9 +111,8 @@ class Controller(QObject):
         self._capturing = False
 
         # Where the mouse last rested on content (not on our windows): the orb asks about that spot.
-        self.last_rest = QCursor.pos()
-        self._anchor = QCursor.pos()
-        self._anchor_since = time.monotonic()
+        start = QCursor.pos()
+        self.rest = RestTracker((start.x(), start.y()), time.monotonic())
         self._poll = QTimer(self)
         self._poll.setInterval(100)
         self._poll.timeout.connect(self._track_cursor)
@@ -128,7 +151,7 @@ class Controller(QObject):
         elif self.transcriber is not None:
             self.pool.submit(self._warm_voice)
         if self.ocr is not None and not self.ocr.available:
-            print("[marginalia] OCR not installed; pointing still works. pip install -r requirements-ocr.txt")
+            print("[marginalia] OCR not installed; pointing still works. pip install -e '.[ocr]'")
 
     def _warm_voice(self) -> None:
         try:
@@ -139,16 +162,16 @@ class Controller(QObject):
     # cursor tracking -------------------------------------------------------------------------
 
     def _on_own_window(self, pos: QPoint) -> bool:
-        return any(w.isVisible() and w.frameGeometry().contains(pos) for w in (self.orb, self.askbox, self.bubble, self.chooser, self.listenbox))
+        return any(w.isVisible() and w.frameGeometry().contains(pos) for w in self._panels)
 
     def _track_cursor(self) -> None:
         pos = QCursor.pos()
-        if self._on_own_window(pos):
-            return
-        if (pos - self._anchor).manhattanLength() > 12:
-            self._anchor, self._anchor_since = pos, time.monotonic()
-        elif time.monotonic() - self._anchor_since >= 0.45:
-            self.last_rest = pos
+        if not self._on_own_window(pos):
+            self.rest.feed(time.monotonic(), (pos.x(), pos.y()))
+
+    @property
+    def last_rest(self) -> QPoint:
+        return QPoint(*self.rest.rest)
 
     # capture ---------------------------------------------------------------------------------
 
@@ -170,11 +193,11 @@ class Controller(QObject):
         self._stop_recorder()
         for w in (self.overlay, self.askbox, self.bubble, self.chooser, self.listenbox, self.orb):
             w.hide()
-        QTimer.singleShot(HIDE_DELAY_MS, lambda: self._finish_capture(pos, then))
+        QTimer.singleShot(HIDE_DELAY_MS, self, lambda: self._finish_capture(pos, then))
 
     def _finish_capture(self, pos: QPoint, then) -> None:
         try:
-            self.snapshot = grab_screen(pos.x(), pos.y())
+            self.snapshot = self.grab(pos.x(), pos.y())
         except Exception as exc:  # noqa: BLE001
             self.orb.show()
             self._capturing = False

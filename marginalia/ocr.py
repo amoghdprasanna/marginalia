@@ -59,7 +59,7 @@ class OCR:
         else:
             result = self.engine(arr)
             if getattr(result, "boxes", None) is not None:
-                for box, text, score in zip(result.boxes, result.txts, result.scores):
+                for box, text, score in zip(result.boxes, result.txts, result.scores, strict=False):
                     raw.append((box, text, float(score)))
 
         lines: list[TextLine] = []
