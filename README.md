@@ -12,13 +12,12 @@ the parts of the screen it's talking about.
 ```bash
 python -m venv .venv
 source .venv/bin/activate            # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-pip install -r requirements-ocr.txt  # optional, improves pointing
-pip install -r requirements-voice.txt # optional, ask by voice (local Whisper)
+pip install -e .                     # the core app
+pip install -e ".[ocr,voice]"        # optional: sharper pointing, ask by voice
 cp .env.example .env                 # then paste your Anthropic API key into .env
 
 python run.py --demo                 # try the interface with canned answers, no key needed
-python run.py                        # the real thing
+python run.py                        # the real thing (or just: marginalia)
 ```
 
 ## Use it
@@ -60,7 +59,8 @@ shortcut / orb
 | `marginalia/pointing.py` | Point resolution and snapping, bubble placement |
 | `marginalia/ui.py` | Orb, type/speak chooser, ask and listen boxes, answer bubble, pointer overlay |
 | `marginalia/voice.py` | Optional mic recording and local Whisper transcription |
-| `marginalia/app.py` | Wiring, threads, hotkey, follow-ups, journal |
+| `marginalia/cursor.py` | Where the mouse last rested (what the orb asks about) |
+| `marginalia/app.py` | Wiring, injectable services, threads, hotkey, follow-ups, journal |
 | `eval/run_eval.py` | Accuracy harness: pointing hit rate and answer checks |
 
 ## Measure accuracy
@@ -73,3 +73,22 @@ python eval/run_eval.py --no-ocr   # compare with OCR off
 Whenever an answer or pointer is wrong in real use, copy its screenshot from
 `~/Marginalia/doubts/shots/` into a new folder under `eval/cases/` and write a `case.json`
 (see the docstring in `eval/run_eval.py`). Aim for 30+ real cases before changing prompts or models.
+
+## Develop
+
+```bash
+pip install -e ".[ocr,voice,dev]"
+pytest                               # ~150 tests, offscreen, no network or mic needed
+pytest --cov=marginalia              # with coverage
+ruff check .                         # lint
+```
+
+- **Architecture:** [`docs/architecture.md`](docs/architecture.md) explains the layers, the three
+  coordinate spaces and the threading rules. Each design choice has a short record in
+  [`docs/adr/`](docs/adr/) with the alternatives that were turned down.
+- **Workflow:** branch from `main`, keep commits small, open a PR; CI runs lint and tests on
+  Linux and macOS. A change to a dependency, data flow or module boundary gets a new ADR.
+- **Tests:** logic goes in plain modules and gets plain tests; widgets get pytest-qt tests; slow
+  or external things are injected through `app.Services` and replaced by the fakes in
+  `tests/helpers.py`. A bug fix starts with a failing test that names the bug.
+- **Plan:** [`ROADMAP.md`](ROADMAP.md).
