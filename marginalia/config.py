@@ -39,6 +39,7 @@ class Config:
     demo: bool
     user_context: str
     max_tokens: int
+    effort: str
     voice_enabled: bool
     whisper_model: str
 
@@ -46,7 +47,7 @@ class Config:
 def load_config(demo: bool = False, no_hotkey: bool = False, no_ocr: bool = False, no_voice: bool = False) -> Config:
     return Config(
         api_key=os.environ.get("ANTHROPIC_API_KEY") or None,
-        model=os.environ.get("MARGINALIA_MODEL", "claude-sonnet-5-5"),
+        model=os.environ.get("MARGINALIA_MODEL", "claude-opus-5"),
         # Set to 1 only for models on the high-resolution image tier (sharper small text).
         hires=_flag("MARGINALIA_HIRES"),
         hotkey=os.environ.get("MARGINALIA_HOTKEY", "<ctrl>+<alt>+<space>"),
@@ -55,7 +56,10 @@ def load_config(demo: bool = False, no_hotkey: bool = False, no_ocr: bool = Fals
         log_dir=Path(os.environ.get("MARGINALIA_LOG_DIR", str(Path.home() / "Marginalia"))).expanduser(),
         demo=demo or _flag("MARGINALIA_DEMO"),
         user_context=os.environ.get("MARGINALIA_USER_CONTEXT", DEFAULT_CONTEXT),
-        max_tokens=int(os.environ.get("MARGINALIA_MAX_TOKENS", "1500")),
+        # Thinking shares this budget on current models, so keep it generous; answers stay short anyway.
+        max_tokens=int(os.environ.get("MARGINALIA_MAX_TOKENS", "16000")),
+        # low | medium | high | xhigh | max. Trades answer depth against wait time.
+        effort=os.environ.get("MARGINALIA_EFFORT", "medium"),
         voice_enabled=(not no_voice) and _flag("MARGINALIA_VOICE", True),
         # Whisper size: tiny.en, base.en, small.en (sharper, slower). Downloaded once on first use.
         whisper_model=os.environ.get("MARGINALIA_WHISPER_MODEL", "base.en"),
