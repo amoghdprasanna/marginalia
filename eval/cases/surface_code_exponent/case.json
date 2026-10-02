@@ -1,0 +1,8 @@
+{
+  "image": "screen.png",
+  "screen": [1440, 900],
+  "cursor": [775, 290],
+  "question": "what does this exponent mean?",
+  "targets": [[740, 270, 845, 310]],
+  "must_mention": ["(d+1)/2", "distance"]
+}
