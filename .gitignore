@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 .venv/
 eval/cases/results-*.json
+.coverage
+*.egg-info/
+.pytest_cache/
+.ruff_cache/

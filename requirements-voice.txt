@@ -1,3 +1,0 @@
-# Optional: ask by voice. Transcribes locally (Whisper); the model downloads once on first run.
-faster-whisper>=1.0
-sounddevice>=0.4.6

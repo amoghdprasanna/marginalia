@@ -1,3 +1,0 @@
-# Optional but recommended: exact text for small fonts, and boxes the pointer can snap to.
-# Bundles its models (no download). If it has no wheel for your Python version, try: pip install rapidocr
-rapidocr_onnxruntime>=1.3
