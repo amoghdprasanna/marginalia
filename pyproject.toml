@@ -35,7 +35,7 @@ version = { attr = "marginalia.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests"]
+pythonpath = ["tests", "eval"]
 qt_api = "pyside6"
 markers = ["qt: needs a Qt application (runs offscreen in CI)"]
 

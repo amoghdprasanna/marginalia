@@ -252,3 +252,12 @@ def test_streaming_bubble_slides_up_instead_of_off_screen(qtbot, cfg):
     c.bubble.move(100, 850)
     c._keep_bubble_on_screen()
     assert c.bubble.frameGeometry().bottom() <= 900 - 12
+
+
+def test_eval_cases_are_saved_only_when_asked(qtbot, cfg):
+    c = build(qtbot, cfg)
+    ask_typed(qtbot, c, "q")
+    assert not (cfg.log_dir / "cases").exists()
+    cfg.save_cases = True
+    ask_typed(qtbot, c, "q2")
+    assert len(list((cfg.log_dir / "cases").glob("*/case.json"))) == 1

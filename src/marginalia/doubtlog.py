@@ -1,15 +1,19 @@
 """Saves every question, answer and screenshot to a dated Markdown journal you can review later."""
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 
 from PIL import Image
 
+from .capture import Snapshot
+
 
 class DoubtLog:
     def __init__(self, root: Path) -> None:
         self.dir = Path(root) / "doubts"
+        self.cases_dir = Path(root) / "cases"
 
     def add(self, question: str, answer: str, screenshot: Image.Image, model: str) -> Path:
         now = datetime.now()
@@ -25,3 +29,29 @@ class DoubtLog:
             f.write(f"![screen](shots/{stamp}.png)\n\n{answer}\n\n")
             f.write(f"<sub>{model}</sub>\n\n---\n\n")
         return page
+
+    def save_case(
+        self, snap: Snapshot, question: str, answer: str, points: list[tuple[float, float, str]]
+    ) -> Path:
+        """Save a ready-to-label eval case: the raw screen (no cursor ring) and a case.json.
+
+        Copy the folder into eval/cases/, then fill in `targets` (boxes the answer should point
+        inside) and `must_mention`. `model_points` shows where the model pointed, in the same
+        logical coordinates, which is often the quickest way to draw a target box.
+        """
+        folder = self.cases_dir / datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        folder.mkdir(parents=True, exist_ok=True)
+        snap.image.save(folder / "screen.png")
+        gx, gy, gw, gh = snap.screen_geo
+        case = {
+            "image": "screen.png",
+            "screen": [gw, gh],
+            "cursor": [snap.cursor[0] - gx, snap.cursor[1] - gy],
+            "question": question,
+            "targets": [],
+            "must_mention": [],
+            "model_answer": answer,
+            "model_points": [[round(x - gx), round(y - gy), label] for x, y, label in points],
+        }
+        (folder / "case.json").write_text(json.dumps(case, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        return folder

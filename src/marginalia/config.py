@@ -43,6 +43,7 @@ class Config:
     effort: str
     voice_enabled: bool
     whisper_model: str
+    save_cases: bool = False
 
 
 def load_config(demo: bool = False, no_hotkey: bool = False, no_ocr: bool = False, no_voice: bool = False) -> Config:
@@ -64,4 +65,7 @@ def load_config(demo: bool = False, no_hotkey: bool = False, no_ocr: bool = Fals
         voice_enabled=(not no_voice) and _flag("MARGINALIA_VOICE", True),
         # Whisper size: tiny.en, base.en, small.en (sharper, slower). Downloaded once on first use.
         whisper_model=os.environ.get("MARGINALIA_WHISPER_MODEL", "base.en"),
+        # Also save each question as an unlabelled eval case (raw screenshot + case.json) under
+        # <log dir>/cases. Off by default: full-resolution screenshots add up, and may be private.
+        save_cases=_flag("MARGINALIA_SAVE_CASES"),
     )

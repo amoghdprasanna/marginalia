@@ -363,6 +363,11 @@ class Controller(QObject):
             self.log.add(question, answer.text, prep.full, answer.model)
         except OSError as exc:
             print(f"[marginalia] Could not write the journal: {exc}")
+        if self.cfg.save_cases:
+            try:
+                self.log.save_case(snap, question, answer.text, targets)
+            except OSError as exc:
+                print(f"[marginalia] Could not save the eval case: {exc}")
 
     def _followup(self, question: str) -> None:
         # Re-capture first: the lecture or page may have moved on since the last question.
