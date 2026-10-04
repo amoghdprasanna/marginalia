@@ -1,6 +1,6 @@
 # 0004. Points as JSON, snapped to OCR lines
 
-**Status:** Accepted, 2026-10-02
+**Status:** Accepted, 2026-10-02. Parsing superseded by [0011](0011-structured-outputs-and-prompt-caching.md).
 
 ## Context
 An answer needs prose *and* zero to four screen targets with labels. Model coordinates are good

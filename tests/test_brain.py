@@ -1,5 +1,6 @@
 """The model boundary: what we send, and how forgivingly we read what comes back."""
 
+import json
 from types import SimpleNamespace
 
 import anthropic
@@ -8,75 +9,95 @@ import pytest
 from helpers import fake_client, make_snapshot
 
 from marginalia.brain import (
+    ANSWER_SCHEMA,
     MAX_HISTORY_CHARS,
+    MAX_LABEL,
     BrainError,
     ClaudeBrain,
     DemoBrain,
     build_user_text,
     parse_reply,
+    partial_answer,
     select_lines,
 )
 from marginalia.capture import prepare
 from marginalia.ocr import TextLine
 
 # parse_reply -------------------------------------------------------------------------------
+# The API enforces ANSWER_SCHEMA, so replies are valid JSON; what's left to handle is a reply that
+# was cut off, and keeping the UI's limits (4 points, short labels) that the schema can't express.
 
 
-def test_parses_plain_json():
-    a = parse_reply(
-        '{"answer": "**Yes.**", "points": [{"image": "full", "x": 10, "y": 20, "line": 3, "label": "eq 4"}]}'
-    )
+def _reply(answer="ok", points=()):
+    return json.dumps({"answer": answer, "points": list(points)})
+
+
+def _pt(**kw):
+    return {"image": "full", "x": 10, "y": 20, "line": None, "label": "eq 4", **kw}
+
+
+def test_parses_the_envelope():
+    a = parse_reply(_reply("**Yes.**", [_pt(line=3)]))
     assert a.text == "**Yes.**"
-    assert len(a.points) == 1
     p = a.points[0]
     assert (p.image, p.x, p.y, p.line, p.label) == ("full", 10.0, 20.0, 3, "eq 4")
 
 
-@pytest.mark.parametrize(
-    "raw",
-    [
-        '```json\n{"answer": "ok", "points": []}\n```',
-        'Sure, here it is:\n{"answer": "ok", "points": []}\nHope that helps',
-        '{"answer": "ok"}',
-    ],
-)
-def test_tolerates_fences_prose_and_missing_points(raw):
-    a = parse_reply(raw)
-    assert a.text == "ok" and a.points == []
+def test_latex_survives_because_the_api_escapes_it():
+    """The old lenient parser repaired "\beta" by hand; with structured outputs it arrives escaped."""
+    assert parse_reply(_reply(r"\beta and \rho")).text == r"\beta and \rho"
 
 
-def test_repairs_stray_latex_backslashes():
-    a = parse_reply(r'{"answer": "the state \alpha|0⟩ + \beta|1⟩", "points": []}')
-    assert a.text == r"the state \alpha|0⟩ + \beta|1⟩"
+def test_keeps_at_most_four_points():
+    a = parse_reply(_reply(points=[_pt(x=i) for i in range(7)]))
+    assert [p.x for p in a.points] == [0, 1, 2, 3]
 
 
-def test_non_json_reply_is_shown_as_is():
-    a = parse_reply("I can't see the screen clearly.")
-    assert a.text == "I can't see the screen clearly." and a.points == []
+def test_labels_get_a_default_and_a_length_limit():
+    a = parse_reply(_reply(points=[_pt(label="  "), _pt(label="L" * 80), _pt(image="zoom")]))
+    assert a.points[0].label == "here"
+    assert len(a.points[1].label) == MAX_LABEL
+    assert a.points[2].image == "zoom"
+
+
+def test_cut_off_reply_shows_the_prose_that_arrived():
+    a = parse_reply('{"answer": "The distance is d = 2t + 1, so', model="m")
+    assert a.text == "The distance is d = 2t + 1, so" and a.points == []
+
+
+def test_reply_without_an_envelope_is_shown_as_is():
+    assert parse_reply("I can't see the screen clearly.").text == "I can't see the screen clearly."
 
 
 def test_empty_reply_gets_a_placeholder():
     assert "empty" in parse_reply("   ").text
 
 
-def test_point_variants_are_normalised():
-    a = parse_reply(
-        '{"answer": "x", "points": ['
-        '{"image": "Zoom image", "point": [5, 6], "label": "a"},'
-        '{"x": "7.5", "y": " 8 ", "label": ""},'
-        '{"line": 4.0, "label": "' + "L" * 80 + '"},'
-        '{"x": true, "y": 3},'
-        '{"label": "nowhere"},'
-        '"not a dict"'
-        "]}"
-    )
-    assert [(p.image, p.x, p.y, p.line) for p in a.points] == [
-        ("zoom", 5.0, 6.0, None),
-        ("full", 7.5, 8.0, None),
-        ("full", None, None, 4),
-    ]
-    assert a.points[1].label == "here"  # blank label gets a default
-    assert len(a.points[2].label) == 48  # long label is cut
+# partial_answer: decoding the answer while it streams ---------------------------------------
+
+
+def test_partial_answer_is_none_until_the_key_arrives():
+    assert partial_answer("") is None
+    assert partial_answer('{"ans') is None
+
+
+def test_partial_answer_grows_with_the_stream():
+    raw = _reply("Line one.\nIt's \"quoted\" ⊗ |ψ⟩")
+    seen = [partial_answer(raw[:i]) for i in range(len(raw) + 1)]
+    texts = [t for t in seen if t is not None]
+    assert texts[-1] == "Line one.\nIt's \"quoted\" ⊗ |ψ⟩"
+    assert all(b.startswith(a) for a, b in zip(texts, texts[1:], strict=False)), "never shows text it later takes back"
+
+
+@pytest.mark.parametrize("cut", range(1, 13))
+def test_partial_answer_never_shows_half_an_escape(cut):
+    escaped = r"é😀"  # é, then 😀 as a surrogate pair
+    t = partial_answer('{"answer": "a' + escaped[:cut])
+    assert t in {"a", "aé", "aé😀"} and "\\" not in t
+
+
+def test_partial_answer_stops_at_the_closing_quote():
+    assert partial_answer('{"answer": "done", "points": [{"label": "x"}]}') == "done"
 
 
 # select_lines / build_user_text ------------------------------------------------------------
@@ -128,9 +149,11 @@ def test_request_shape(cfg, prep):
     req = messages.requests[0]
     assert req["model"] == "claude-opus-5"
     assert req["max_tokens"] == 16000
-    assert req["output_config"] == {"effort": "medium"}
+    assert req["output_config"] == {"effort": "medium", "format": {"type": "json_schema", "schema": ANSWER_SCHEMA}}
     assert req["fallbacks"] == "default" and req["betas"] == [ClaudeBrain.FALLBACK_BETA]
-    assert "quantum error correction" in req["system"]
+    [system] = req["system"]
+    assert "quantum error correction" in system["text"]
+    assert system["cache_control"] == {"type": "ephemeral"}, "the fixed system prompt is cached"
     content = req["messages"][0]["content"]
     assert [b["type"] for b in content] == ["image", "image", "text"]
     assert all(set(b) == {"type", "source"} for b in content[:2]), "no undocumented fields on image blocks"
@@ -193,14 +216,10 @@ def test_demo_brain_points_once_at_the_cursor(prep):
     assert (a.points[0].x, a.points[0].y) == prep.cursor_zoom
 
 
-@pytest.mark.parametrize("cmd", [r"\beta", r"\frac", r"\rho", r"\theta", r"\nu", r"\otimes", r"\langle"])
-def test_latex_that_collides_with_json_escapes_survives(cmd):
-    assert parse_reply('{"answer": "' + cmd.replace("\\", "\\") + ' here", "points": []}').text == cmd + " here"
-
-
-def test_real_newlines_before_words_stay_newlines():
-    assert parse_reply(r'{"answer": "First.\nThen\ttab", "points": []}').text == "First.\nThen\ttab"
-
-
-def test_correctly_escaped_latex_is_untouched():
-    assert parse_reply(r'{"answer": "\\beta and \\rho", "points": []}').text == r"\beta and \rho"
+def test_usage_is_reported_for_cost_tracking(cfg, prep):
+    client, messages = fake_client()
+    messages.response.usage = SimpleNamespace(
+        input_tokens=3100, output_tokens=240, cache_read_input_tokens=700, cache_creation_input_tokens=None
+    )
+    u = ClaudeBrain(cfg, client=client).ask(prep, [], "q", []).usage
+    assert (u.input_tokens, u.output_tokens, u.cache_read, u.cache_write) == (3100, 240, 700, 0)

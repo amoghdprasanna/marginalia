@@ -6,8 +6,20 @@ import time
 from ..capture import Prepared, to_b64_png
 from ..ocr import TextLine
 from .parsing import parse_reply
-from .prompt import SYSTEM_PROMPT, build_user_text
-from .types import Answer, BrainError
+from .prompt import ANSWER_SCHEMA, SYSTEM_PROMPT, build_user_text
+from .types import Answer, BrainError, Usage
+
+
+def read_usage(resp) -> Usage | None:
+    u = getattr(resp, "usage", None)
+    if u is None:
+        return None
+    return Usage(
+        input_tokens=getattr(u, "input_tokens", 0) or 0,
+        output_tokens=getattr(u, "output_tokens", 0) or 0,
+        cache_read=getattr(u, "cache_read_input_tokens", 0) or 0,
+        cache_write=getattr(u, "cache_creation_input_tokens", 0) or 0,
+    )
 
 
 class ClaudeBrain:
@@ -37,9 +49,14 @@ class ClaudeBrain:
         return {
             "model": self.model,
             "max_tokens": self.cfg.max_tokens,
-            "system": self.system,
+            # The system prompt is identical on every call, so it is cached (ADR 0011). Images and the
+            # question come after the breakpoint because they change every time.
+            "system": [{"type": "text", "text": self.system, "cache_control": {"type": "ephemeral"}}],
             "messages": [{"role": "user", "content": content}],
-            "output_config": {"effort": self.cfg.effort},
+            "output_config": {
+                "effort": self.cfg.effort,
+                "format": {"type": "json_schema", "schema": ANSWER_SCHEMA},
+            },
             # On a safety decline the API re-runs the request on Anthropic's recommended model.
             "betas": [self.FALLBACK_BETA],
             "fallbacks": "default",
@@ -80,6 +97,7 @@ class ClaudeBrain:
             raise BrainError("Claude declined to answer this one. Try rephrasing the question.")
         raw = "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text")
         answer = parse_reply(raw, getattr(resp, "model", self.model), time.time() - t0)
+        answer.usage = read_usage(resp)
         if resp.stop_reason == "max_tokens":
             answer.text += "\n\n*(Cut off at the length limit. Raise MARGINALIA_MAX_TOKENS for longer answers.)*"
         return answer

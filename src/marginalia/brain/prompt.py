@@ -17,8 +17,31 @@ How to answer:
 4. Write math with Unicode inline (|ψ⟩, ⟨0|, ⊗, †, √2, Σ, ρ, Tr, ≈), not LaTeX; the answer box cannot render LaTeX. Markdown (bold, lists, `code`) is fine.
 5. Point at things on the screen when it helps: the term you define, the equation you explain, the figure panel, the variable that answers the question. Usually one point is enough; add more (at most 4) only for separate targets far apart on screen, never two points on the same thing. Each gets a label of 2 to 5 words. Give integer pixel coordinates of the target's center in the image where you located it: "zoom" for things inside the close-up (more precise), otherwise "full". If the target is one of the OCR lines, also give its "line" id. Do not point at the red ring itself unless asked. Use no points if nothing on screen is worth pointing at.
 
-Reply with a single JSON object and nothing else (no code fences):
-{"answer": "<markdown>", "points": [{"image": "full", "x": 0, "y": 0, "line": null, "label": "short label"}]}"""
+Your reply is a JSON object: "answer" holds the markdown answer, "points" the screen targets (an empty list when there are none)."""
+
+# Structured outputs (ADR 0011): the API constrains the reply to this schema, so it always parses.
+# The schema language has no maxItems or string lengths; parsing caps points at 4 and labels at 48 chars.
+POINT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "image": {"type": "string", "enum": ["full", "zoom"]},
+        "x": {"type": "integer"},
+        "y": {"type": "integer"},
+        "line": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+        "label": {"type": "string"},
+    },
+    "required": ["image", "x", "y", "line", "label"],
+    "additionalProperties": False,
+}
+ANSWER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "answer": {"type": "string"},
+        "points": {"type": "array", "items": POINT_SCHEMA},
+    },
+    "required": ["answer", "points"],
+    "additionalProperties": False,
+}
 
 MAX_OCR_LINES = 220
 MAX_HISTORY_CHARS = 1200
