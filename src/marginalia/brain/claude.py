@@ -1,11 +1,12 @@
-"""The real brain: one Messages API call per question."""
+"""The real brain: one streamed Messages API call per question."""
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 
 from ..capture import Prepared, to_b64_png
 from ..ocr import TextLine
-from .parsing import parse_reply
+from .parsing import parse_reply, partial_answer
 from .prompt import ANSWER_SCHEMA, SYSTEM_PROMPT, build_user_text
 from .types import Answer, BrainError, Usage
 
@@ -62,7 +63,19 @@ class ClaudeBrain:
             "fallbacks": "default",
         }
 
-    def ask(self, prep: Prepared, lines: list[TextLine], question: str, history: list[tuple[str, str]]) -> Answer:
+    def ask(
+        self,
+        prep: Prepared,
+        lines: list[TextLine],
+        question: str,
+        history: list[tuple[str, str]],
+        on_text: Callable[[str], None] | None = None,
+    ) -> Answer:
+        """Stream the reply. `on_text` gets the whole answer-so-far each time it grows (ADR 0012).
+
+        `on_text` runs on this (worker) thread. It may raise Cancelled to stop the stream early,
+        which closes the connection so an abandoned answer stops costing tokens.
+        """
         import anthropic
 
         if self.client is None:
@@ -71,9 +84,21 @@ class ClaudeBrain:
                 "or start with --demo to try the interface without one."
             )
         request = self.build_request(prep, lines, question, history)
-        t0 = time.time()
+        t0 = time.monotonic()
+        first_text: float | None = None
+        raw, shown = "", ""
         try:
-            resp = self.client.beta.messages.create(**request)
+            with self.client.beta.messages.stream(**request) as stream:
+                for chunk in stream.text_stream:
+                    raw += chunk
+                    text = partial_answer(raw)
+                    if text and text != shown:
+                        shown = text
+                        if first_text is None:
+                            first_text = time.monotonic() - t0
+                        if on_text is not None:
+                            on_text(text)
+                resp = stream.get_final_message()
         except anthropic.BadRequestError as exc:
             msg = str(exc)
             if "image" in msg and ("exceed" in msg or "too large" in msg):
@@ -92,12 +117,16 @@ class ClaudeBrain:
             raise BrainError(f"API error {exc.status_code}: {str(exc)[:300]}") from exc
         except anthropic.APIConnectionError as exc:
             raise BrainError("Could not reach the API. Check your internet connection.") from exc
+        except anthropic.APIError as exc:  # an error event in the middle of the stream
+            raise BrainError(f"The answer stream broke off: {str(exc)[:300]}") from exc
 
         if resp.stop_reason == "refusal":
             raise BrainError("Claude declined to answer this one. Try rephrasing the question.")
+        # With a mid-answer fallback the reply spans several text blocks; together they are one reply.
         raw = "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text")
-        answer = parse_reply(raw, getattr(resp, "model", self.model), time.time() - t0)
+        answer = parse_reply(raw, getattr(resp, "model", self.model), time.monotonic() - t0)
         answer.usage = read_usage(resp)
+        answer.first_text = first_text
         if resp.stop_reason == "max_tokens":
             answer.text += "\n\n*(Cut off at the length limit. Raise MARGINALIA_MAX_TOKENS for longer answers.)*"
         return answer

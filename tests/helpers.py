@@ -61,10 +61,16 @@ class FakeBrain:
     text: str = "It is the code distance."
     points: list[Point] = field(default_factory=list)
     error: Exception | None = None
+    partials: list[str] = field(default_factory=list)  # streamed to on_text before answering
     asked: list[tuple[str, list]] = field(default_factory=list)
+    delivered: list[str] = field(default_factory=list)  # partials the caller accepted (didn't cancel)
 
-    def ask(self, prep, lines, question, history) -> Answer:
+    def ask(self, prep, lines, question, history, on_text=None) -> Answer:
         self.asked.append((question, list(history)))
+        for t in self.partials:
+            if on_text is not None:
+                on_text(t)
+                self.delivered.append(t)
         if self.error is not None:
             raise self.error
         return Answer(self.text, list(self.points), "fake-model", 0.1, "")
@@ -102,21 +108,53 @@ class FakeWhisper:
         return [SimpleNamespace(text=f" {self.text} ")], None
 
 
-class FakeMessages:
-    def __init__(self, response=None, error: Exception | None = None) -> None:
-        self.response, self.error = response, error
-        self.requests: list[dict] = []
+class FakeMessageStream:
+    """What `client.beta.messages.stream(...)` returns: a context manager with text_stream."""
 
-    def create(self, **kwargs):
-        self.requests.append(kwargs)
-        if self.error is not None:
+    def __init__(self, response, chunks: list[str], error: Exception | None) -> None:
+        self.response, self.chunks, self.error = response, chunks, error
+        self.closed = False
+        self.read = 0  # chunks the caller actually consumed
+
+    def __enter__(self):
+        if self.error is not None:  # the SDK sends the request on entry
             raise self.error
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.closed = True
+
+    @property
+    def text_stream(self):
+        for c in self.chunks:
+            self.read += 1
+            yield c
+
+    def get_final_message(self):
         return self.response
 
 
+class FakeMessages:
+    def __init__(self, response=None, error: Exception | None = None, chunk: int = 7) -> None:
+        self.response, self.error, self.chunk = response, error, chunk
+        self.requests: list[dict] = []
+        self.streams: list[FakeMessageStream] = []
+
+    def stream(self, **kwargs):
+        self.requests.append(kwargs)
+        text = "".join(getattr(b, "text", "") for b in self.response.content if getattr(b, "type", "") == "text")
+        chunks = [text[i : i + self.chunk] for i in range(0, len(text), self.chunk)]
+        s = FakeMessageStream(self.response, chunks, self.error)
+        self.streams.append(s)
+        return s
+
+
 def fake_client(text: str = '{"answer": "hi", "points": []}', stop_reason: str = "end_turn", error=None, blocks=None):
-    """An object shaped like anthropic.Anthropic() for the one call ClaudeBrain makes."""
+    """An object shaped like anthropic.Anthropic() for the one call ClaudeBrain makes.
+
+    The reply streams back in 7-character chunks, cutting through words and escapes on purpose.
+    """
     content = blocks if blocks is not None else [SimpleNamespace(type="text", text=text)]
-    response = SimpleNamespace(content=content, stop_reason=stop_reason, model="claude-opus-5")
+    response = SimpleNamespace(content=content, stop_reason=stop_reason, model="claude-opus-5", usage=None)
     messages = FakeMessages(response, error)
     return SimpleNamespace(beta=SimpleNamespace(messages=messages)), messages

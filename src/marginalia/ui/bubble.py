@@ -149,7 +149,7 @@ class AnswerBubble(Panel):
         self._dot_timer.start()
         self.adjustSize()
 
-    def show_answer(self, question: str, markdown: str, meta: str) -> None:
+    def _show_body(self, question: str, markdown: str) -> None:
         self._dot_timer.stop()
         self._set_title(question)
         self._markdown = markdown
@@ -157,13 +157,27 @@ class AnswerBubble(Panel):
         self.body.setMarkdown(markdown)
         self._space_paragraphs()
         self.body.show()
-        self.meta.setText(meta)
         self.meta.show()
+
+    def show_partial(self, question: str, markdown: str) -> None:
+        """The answer so far, while it streams. No copy or follow-up until it is complete."""
+        self._show_body(question, markdown)
+        self.meta.setText("Writing…")
+        self.copy_btn.hide()
+        self.follow_wrap.hide()
+        self._fit()
+        bar = self.body.verticalScrollBar()  # once it outgrows the bubble, follow the newest words
+        bar.setValue(bar.maximum())
+
+    def show_answer(self, question: str, markdown: str, meta: str) -> None:
+        self._show_body(question, markdown)
+        self.meta.setText(meta)
         self.copy_btn.setText("Copy")
         self.copy_btn.show()
         self.follow.clear()
         self.follow_wrap.show()
         self._fit()
+        self.body.verticalScrollBar().setValue(0)  # finished: read from the top
 
     def show_error(self, question: str, message: str) -> None:
         self.show_answer(question, message, "Nothing was sent to the log.")

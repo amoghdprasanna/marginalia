@@ -13,6 +13,7 @@ from marginalia.brain import (
     MAX_HISTORY_CHARS,
     MAX_LABEL,
     BrainError,
+    Cancelled,
     ClaudeBrain,
     DemoBrain,
     build_user_text,
@@ -223,3 +224,49 @@ def test_usage_is_reported_for_cost_tracking(cfg, prep):
     )
     u = ClaudeBrain(cfg, client=client).ask(prep, [], "q", []).usage
     assert (u.input_tokens, u.output_tokens, u.cache_read, u.cache_write) == (3100, 240, 700, 0)
+
+
+# streaming -----------------------------------------------------------------------------------
+
+
+def test_answer_streams_to_on_text_as_it_grows(cfg, prep):
+    reply = _reply("The code distance: d = 2t + 1.", [_pt()])
+    client, _ = fake_client(text=reply)
+    seen = []
+    a = ClaudeBrain(cfg, client=client).ask(prep, [], "q", [], on_text=seen.append)
+    assert seen[-1] == "The code distance: d = 2t + 1."
+    assert len(seen) > 2 and all(b.startswith(a) for a, b in zip(seen, seen[1:], strict=False))
+    assert a.text == seen[-1] and len(a.points) == 1
+    assert a.first_text is not None and a.first_text <= a.elapsed
+
+
+def test_cancelling_closes_the_stream_early(cfg, prep):
+    client, messages = fake_client(text=_reply("word " * 50))
+
+    def stop(_text):
+        raise Cancelled
+
+    with pytest.raises(Cancelled):
+        ClaudeBrain(cfg, client=client).ask(prep, [], "q", [], on_text=stop)
+    stream = messages.streams[0]
+    assert stream.closed and stream.read < len(stream.chunks)
+
+
+def test_cut_off_stream_keeps_the_prose_and_says_so(cfg, prep):
+    client, _ = fake_client(text='{"answer": "Because the syndrome', stop_reason="max_tokens")
+    a = ClaudeBrain(cfg, client=client).ask(prep, [], "q", [])
+    assert a.text.startswith("Because the syndrome") and "length limit" in a.text
+
+
+def test_refusal_after_partial_text_is_still_an_error(cfg, prep):
+    client, _ = fake_client(text='{"answer": "Sure, the', stop_reason="refusal")
+    seen = []
+    with pytest.raises(BrainError, match="declined"):
+        ClaudeBrain(cfg, client=client).ask(prep, [], "q", [], on_text=seen.append)
+    assert seen, "the partial was shown first; the controller replaces it with the error"
+
+
+def test_demo_brain_streams_too(prep):
+    seen = []
+    a = DemoBrain(delay=0).ask(prep, [], "q", [], on_text=seen.append)
+    assert seen and seen[-1].strip() == a.text.strip()

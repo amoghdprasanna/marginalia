@@ -20,3 +20,4 @@ supersedes it, so the history of *why* survives.
 | [0009](0009-model-defaults.md) | Model, effort and refusal fallback defaults | Accepted |
 | [0010](0010-src-layout-and-packages.md) | `src/` layout, packages for brain and ui | Accepted |
 | [0011](0011-structured-outputs-and-prompt-caching.md) | Structured outputs for the answer; cache the system prompt | Accepted |
+| [0012](0012-stream-the-answer.md) | Stream the answer into the bubble | Accepted |

@@ -8,6 +8,10 @@ class BrainError(Exception):
     """An error with a message that is safe and useful to show in the bubble."""
 
 
+class Cancelled(Exception):  # noqa: N818 - it is a signal, not an error
+    """Raised from an on_text callback to stop streaming an answer nobody is waiting for."""
+
+
 @dataclass
 class Point:
     image: str
@@ -35,3 +39,4 @@ class Answer:
     elapsed: float = 0.0
     raw: str = ""
     usage: Usage | None = None
+    first_text: float | None = None  # seconds until the first words of the answer

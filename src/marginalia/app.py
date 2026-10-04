@@ -15,7 +15,7 @@ from PySide6.QtCore import QObject, QPoint, QRect, QTimer, Signal
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import QApplication
 
-from .brain import BrainError, ClaudeBrain, DemoBrain
+from .brain import BrainError, Cancelled, ClaudeBrain, DemoBrain
 from .capture import Snapshot, grab_screen, prepare
 from .config import Config, load_config
 from .cursor import RestTracker
@@ -27,6 +27,7 @@ from .voice import Recorder, Transcriber
 
 HISTORY_TURNS = 4
 HIDE_DELAY_MS = 140  # let our own windows disappear before the screenshot
+PARTIAL_MS = 50  # redraw a streaming answer at most this often
 
 
 class Bus(QObject):
@@ -34,6 +35,7 @@ class Bus(QObject):
 
     hotkey = Signal()
     answer_ready = Signal(object)
+    answer_partial = Signal(object)
     transcript_ready = Signal(object)
 
 
@@ -109,6 +111,12 @@ class Controller(QObject):
         self.history: list[tuple[str, str]] = []
         self.request_id = 0
         self._capturing = False
+        # Streamed text arrives faster than it is worth redrawing; keep the newest, draw on a timer.
+        self._partial: tuple[int, str, str] | None = None
+        self._partial_timer = QTimer(self)
+        self._partial_timer.setSingleShot(True)
+        self._partial_timer.setInterval(PARTIAL_MS)
+        self._partial_timer.timeout.connect(self._draw_partial)
 
         # Where the mouse last rested on content (not on our windows): the orb asks about that spot.
         start = QCursor.pos()
@@ -131,6 +139,7 @@ class Controller(QObject):
         self.orb.quit_requested.connect(QApplication.quit)
         self.bus.hotkey.connect(lambda: self.start_ask(at_cursor=True))
         self.bus.answer_ready.connect(self._on_answer)
+        self.bus.answer_partial.connect(self._on_partial)
         self.askbox.submitted.connect(self.ask)
         self.bubble.closed.connect(self._end_thread)
         self.bubble.followup.connect(self._followup)
@@ -281,6 +290,11 @@ class Controller(QObject):
         self._show_bubble_near(cursor, [])
         self.orb.set_busy(True)
 
+        def on_text(text: str) -> None:  # worker thread
+            if rid != self.request_id:
+                raise Cancelled  # nobody is waiting: stop paying for tokens
+            self.bus.answer_partial.emit((rid, question, text))
+
         def work():
             lines = []
             if ocr_future is not None:
@@ -289,16 +303,35 @@ class Controller(QObject):
                 except Exception:  # noqa: BLE001
                     lines = []
             prep = prepare(snap, hires=self.cfg.hires)
-            answer = self.brain.ask(prep, lines, question, history)
+            answer = self.brain.ask(prep, lines, question, history, on_text=on_text)
             return prep, lines, answer
 
         future = self.pool.submit(work)
         future.add_done_callback(lambda f: self.bus.answer_ready.emit((rid, question, snap, f)))
 
+    def _on_partial(self, payload) -> None:
+        if payload[0] != self.request_id:
+            return
+        self._partial = payload
+        if not self._partial_timer.isActive():
+            self._partial_timer.start()
+
+    def _draw_partial(self) -> None:
+        if self._partial is None or self._partial[0] != self.request_id:
+            return
+        _, question, text = self._partial
+        self.bubble.show_partial(question, text)
+        self._keep_bubble_on_screen()
+
+    def _drop_partial(self) -> None:
+        self._partial_timer.stop()
+        self._partial = None
+
     def _on_answer(self, payload) -> None:
         rid, question, snap, future = payload
         if rid != self.request_id:
             return
+        self._drop_partial()  # a redraw still queued must not paint over the final answer
         self.orb.set_busy(False)
         cursor = QPoint(*snap.cursor)
         try:
@@ -315,6 +348,8 @@ class Controller(QObject):
         targets = resolve_points(prep, snap, lines, answer.points)
         self.overlay.point_to(QRect(*snap.screen_geo), cursor, targets)
         meta = f"{answer.model}, {answer.elapsed:.1f}s"
+        if answer.first_text is not None:
+            meta = f"{answer.model}, first words {answer.first_text:.1f}s, done {answer.elapsed:.1f}s"
         if lines:
             meta += f", {len(lines)} OCR lines"
         self.bubble.show_answer(question, answer.text, meta)
@@ -336,9 +371,17 @@ class Controller(QObject):
 
     def _end_thread(self) -> None:
         self.request_id += 1
+        self._drop_partial()
         self.history.clear()
         self.overlay.clear()
         self.orb.set_busy(False)
+
+    def _keep_bubble_on_screen(self) -> None:
+        """A streaming bubble grows downwards; slide it up rather than let it run off the screen."""
+        screen = QRect(*self.snapshot.screen_geo) if self.snapshot else self.orb.screen().geometry()
+        g = self.bubble.frameGeometry()
+        if g.bottom() > screen.bottom() - 12:
+            self.bubble.move(g.x(), max(screen.top() + 12, screen.bottom() - 12 - g.height()))
 
     def _show_bubble_near(self, cursor: QPoint, targets: list[QPoint]) -> None:
         screen = QRect(*self.snapshot.screen_geo) if self.snapshot else self.orb.screen().geometry()
