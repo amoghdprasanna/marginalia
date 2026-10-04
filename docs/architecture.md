@@ -32,6 +32,18 @@ sequenceDiagram
     C->>UI: bubble + markers
 ```
 
+## Folders
+
+```
+src/marginalia/      the app (installed with pip install -e .; see ADR 0010)
+  brain/             prompt, parsing, the API call, demo mode
+  ui/                theme and painting, shared widgets, one module per window
+  *.py               capture, ocr, pointing, cursor, voice, doubtlog, config, app (wiring)
+tests/               unit and pytest-qt tests; fakes in helpers.py
+eval/                answer-quality harness and labelled cases (costs real API calls)
+docs/                this file, ADRs, README images
+```
+
 ## Layers
 
 The rule: **logic lives in plain Python modules; Qt widgets only draw and emit signals.**
@@ -39,9 +51,9 @@ That is what lets 150 tests run in seconds with no display, no microphone and no
 
 | Layer | Modules | Knows about Qt? | Tested by |
 |---|---|---|---|
-| Pure core | `capture` (math), `brain` (prompt, parsing), `pointing`, `cursor`, `voice.SilenceDetector`, `config`, `doubtlog` | No | plain unit tests |
-| Adapters | `capture.grab_screen`, `ocr.OCR`, `voice.Recorder`/`Transcriber`, `brain.ClaudeBrain` | Only `grab_screen` | fakes injected through factories |
-| UI | `ui` widgets | Yes | pytest-qt, offscreen |
+| Pure core | `capture` (math), `brain.prompt`, `brain.parsing`, `pointing`, `cursor`, `voice.SilenceDetector`, `config`, `doubtlog` | No | plain unit tests |
+| Adapters | `capture.grab_screen`, `ocr.OCR`, `voice.Recorder`/`Transcriber`, `brain.claude.ClaudeBrain` | Only `grab_screen` | fakes injected through factories |
+| UI | `ui/` (one module per window) | Yes | pytest-qt, offscreen |
 | Wiring | `app.Controller`, `app.Services` | Yes | pytest-qt with every service faked |
 
 ## Three coordinate spaces

@@ -6,9 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 try:
-    from dotenv import load_dotenv
+    from dotenv import find_dotenv, load_dotenv
 
-    load_dotenv()
+    # The folder you start from first, then the folders above the package (an editable checkout).
+    load_dotenv(find_dotenv(usecwd=True)) or load_dotenv()
 except ImportError:
     pass
 

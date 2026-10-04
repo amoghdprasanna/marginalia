@@ -4,8 +4,8 @@ A study companion that floats over your screen. Press a shortcut (or click the o
 whatever you're reading or watching, and it answers in a small bubble while amber markers fly to
 the parts of the screen it's talking about.
 
-![Asking](docs/ask.png)
-![Answer with pointers](docs/answer.png)
+![Asking](docs/images/ask.png)
+![Answer with pointers](docs/images/answer.png)
 
 ## Run it
 
@@ -16,8 +16,8 @@ pip install -e .                     # the core app
 pip install -e ".[ocr,voice]"        # optional: sharper pointing, ask by voice
 cp .env.example .env                 # then paste your Anthropic API key into .env
 
-python run.py --demo                 # try the interface with canned answers, no key needed
-python run.py                        # the real thing (or just: marginalia)
+marginalia --demo                    # try the interface with canned answers, no key needed
+marginalia                           # the real thing (also: python -m marginalia)
 ```
 
 ## Use it
@@ -53,14 +53,14 @@ shortcut / orb
 
 | File | Job |
 |---|---|
-| `marginalia/capture.py` | Screen grab, HiDPI mapping, image resizing, cursor ring |
-| `marginalia/ocr.py` | Optional RapidOCR text lines with boxes |
-| `marginalia/brain.py` | Prompt, API call, lenient JSON parsing, demo mode |
-| `marginalia/pointing.py` | Point resolution and snapping, bubble placement |
-| `marginalia/ui.py` | Orb, type/speak chooser, ask and listen boxes, answer bubble, pointer overlay |
-| `marginalia/voice.py` | Optional mic recording and local Whisper transcription |
-| `marginalia/cursor.py` | Where the mouse last rested (what the orb asks about) |
-| `marginalia/app.py` | Wiring, injectable services, threads, hotkey, follow-ups, journal |
+| `src/marginalia/capture.py` | Screen grab, HiDPI mapping, image resizing, cursor ring |
+| `src/marginalia/ocr.py` | Optional RapidOCR text lines with boxes |
+| `src/marginalia/brain/` | Prompt, API call, reply parsing, demo mode |
+| `src/marginalia/pointing.py` | Point resolution and snapping, bubble placement |
+| `src/marginalia/ui/` | Orb, type/speak chooser, ask and listen boxes, answer bubble, pointer overlay |
+| `src/marginalia/voice.py` | Optional mic recording and local Whisper transcription |
+| `src/marginalia/cursor.py` | Where the mouse last rested (what the orb asks about) |
+| `src/marginalia/app.py` | Wiring, injectable services, threads, hotkey, follow-ups, journal |
 | `eval/run_eval.py` | Accuracy harness: pointing hit rate and answer checks |
 
 ## Measure accuracy
