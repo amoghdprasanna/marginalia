@@ -16,6 +16,25 @@ jobs:
       - run: pip install "ruff>=0.6"
       - run: ruff check .
 
+  package:
+    # Catches a wheel that silently leaves out a subpackage (ADR 0010).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip wheel . --no-deps -w dist
+      - name: Wheel contains every subpackage
+        run: |
+          python - <<'PY'
+          import glob, zipfile
+          names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
+          for pkg in ("marginalia/brain/", "marginalia/ui/"):
+              assert any(n.startswith(pkg) for n in names), f"{pkg} missing from wheel: {names}"
+          print("ok:", len(names), "files")
+          PY
+
   test:
     strategy:
       fail-fast: false

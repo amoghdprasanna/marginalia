@@ -27,7 +27,11 @@ sequenceDiagram
         V-->>C: transcript (worker thread)
     end
     C-->>B: prepare images + ask (worker thread)
-    B-->>C: answer text + points
+    loop while the answer streams
+        B-->>C: answer so far (on_text, via Bus)
+        C->>UI: redraw bubble (at most every 50 ms)
+    end
+    B-->>C: complete answer + points
     C->>P: map points to screen, snap to OCR lines
     C->>UI: bubble + markers
 ```
@@ -47,7 +51,7 @@ docs/                this file, ADRs, README images
 ## Layers
 
 The rule: **logic lives in plain Python modules; Qt widgets only draw and emit signals.**
-That is what lets 150 tests run in seconds with no display, no microphone and no network.
+That is what lets ~170 tests run in seconds with no display, no microphone and no network.
 
 | Layer | Modules | Knows about Qt? | Tested by |
 |---|---|---|---|
@@ -71,7 +75,9 @@ The hardest correctness problem in the app. See [ADR 0003](adr/0003-resize-image
 The Qt main thread owns every widget. Slow work (OCR, the API call, transcription, loading the
 speech model) runs on a `ThreadPoolExecutor`; results come back through `Bus` signals, which Qt
 delivers on the main thread. Every request carries an id, so a late answer to an abandoned
-question is dropped. See [ADR 0007](adr/0007-concurrency-model.md).
+question is dropped. See [ADR 0007](adr/0007-concurrency-model.md). A streaming answer whose
+request went stale is cancelled from the worker side, so it stops costing tokens
+([ADR 0012](adr/0012-stream-the-answer.md)).
 
 ## Decisions
 

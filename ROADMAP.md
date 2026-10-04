@@ -12,14 +12,21 @@ Overlay, screenshot to answer with markers, OCR snapping, journal, demo mode, vo
 - Architecture overview and ADRs 0001 to 0009
 - Fixed: invalid default model, refusal handling, LaTeX decoding, journal collisions, timer crash
 
-## Stage 2: Answer quality and speed (proposed next)
+## Stage 1.5: Project layout ✅
+- `src/` layout; `brain/` and `ui/` split into packages by reason to change (ADR 0010)
+- `run.py` replaced by the `marginalia` command; CI checks the built wheel contains every subpackage
+
+## Stage 2: Answer quality and speed (in progress)
 Goal: answers you trust, faster.
-- [ ] Grow `eval/cases` to 30+ real cases from your own reading (ask, save, label)
-- [ ] Baseline the eval: pointing hit rate, must-mention rate, latency, cost per question
-- [ ] Structured outputs for the answer envelope; delete most of the lenient parser (ADR 0004)
-- [ ] Stream the answer into the bubble as it is written
-- [ ] Prompt caching for the system prompt
-- [ ] Tune effort and model with the numbers, not by feel
+- [x] Structured outputs for the answer envelope; lenient parser deleted (ADR 0011)
+- [x] Stream the answer into the bubble as it is written; cancel abandoned streams (ADR 0012)
+- [x] Prompt caching for the system prompt (ADR 0011; may be below the 512-token minimum, the eval will tell)
+- [x] Eval measures time to first words, total time, tokens and cost; `--model/--effort/--repeat`
+- [x] `MARGINALIA_SAVE_CASES=1` saves real questions as ready-to-label eval cases
+- [x] Default model `claude-opus-5-5` (ADR 0013), to be confirmed by the first eval run
+- [ ] **You:** grow `eval/cases` to 30+ real cases from your own reading (save, label, copy)
+- [ ] Baseline run on those cases; record the numbers in an ADR
+- [ ] Effort sweep (`low`/`medium`/`high`) and a `claude-sonnet-5-5` comparison; pick defaults by the numbers
 
 ## Stage 3: Everyday product
 Goal: a tool you open every day without the terminal.

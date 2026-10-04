@@ -27,7 +27,8 @@ marginalia                           # the real thing (also: python -m marginali
   pick **Type** or **Speak**. Speaking ends on a short pause (or Enter/click); Esc cancels.
   Drag the orb anywhere; right-click it to quit.
 - **Follow-ups** in the bubble re-capture the screen first, so they work while a lecture plays.
-- **Esc or the close button** ends the thread and clears the markers.
+- **The answer streams in** as it is written; the markers fly once it is complete.
+- **Esc or the close button** ends the thread, clears the markers and stops an answer mid-stream.
 - Every question, answer and screenshot is saved to `~/Marginalia/doubts/<date>.md`.
 
 ## Platform notes
@@ -46,7 +47,8 @@ shortcut / orb
    -> OCR starts in the background while you type
    -> two images: full screen + close-up around the cursor (red ring marks the cursor)
       resized exactly the way the API resizes, so returned coordinates line up 1:1
-   -> model replies with JSON: answer + up to 4 points (pixel coords, optional OCR line id)
+   -> model replies in a schema-checked JSON envelope: answer + up to 4 points
+      (pixel coords, optional OCR line id); the answer is decoded and shown while it streams
    -> points snap onto OCR lines when the two agree, then map back to screen coordinates
    -> overlay animates markers; bubble picks a spot that covers neither cursor nor targets
 ```
@@ -63,22 +65,27 @@ shortcut / orb
 | `src/marginalia/app.py` | Wiring, injectable services, threads, hotkey, follow-ups, journal |
 | `eval/run_eval.py` | Accuracy harness: pointing hit rate and answer checks |
 
-## Measure accuracy
+## Measure quality, speed and cost
 
 ```bash
-python eval/run_eval.py            # runs every case in eval/cases
-python eval/run_eval.py --no-ocr   # compare with OCR off
+python eval/run_eval.py                     # every case in eval/cases, configured model and effort
+python eval/run_eval.py --effort low        # compare settings: --model, --effort, --repeat N
+python eval/run_eval.py --no-ocr            # compare with OCR off
 ```
 
-Whenever an answer or pointer is wrong in real use, copy its screenshot from
-`~/Marginalia/doubts/shots/` into a new folder under `eval/cases/` and write a `case.json`
-(see the docstring in `eval/run_eval.py`). Aim for 30+ real cases before changing prompts or models.
+Each run prints pointing hit rates, the must-mention rate, time to first words, total time and
+cost per question, and saves details to `eval/results/`. It makes real API calls.
+
+To grow the case set, run the app with `MARGINALIA_SAVE_CASES=1`. Each question is saved to
+`~/Marginalia/cases/` with its raw screenshot and a `case.json` that already has the question,
+cursor and where the model pointed; fill in `targets` and `must_mention`, then copy the folder
+into `eval/cases/`. Aim for 30+ real cases before changing prompts or models.
 
 ## Develop
 
 ```bash
 pip install -e ".[ocr,voice,dev]"
-pytest                               # ~150 tests, offscreen, no network or mic needed
+pytest                               # ~170 tests, offscreen, no network or mic needed
 pytest --cov=marginalia              # with coverage
 ruff check .                         # lint
 ```
