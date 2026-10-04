@@ -1,10 +1,12 @@
 """Asking by typing, end to end: capture, answer, markers, follow-ups, threads ending, errors."""
 
-from helpers import FakeBrain, ManualExecutor, ask_typed, build, make_snapshot
+from helpers import FakeBrain, FakeOCR, ManualExecutor, ask_typed, build, make_snapshot
 from PySide6.QtCore import QPoint
 
 from marginalia.app import HISTORY_TURNS, pretty_hotkey
 from marginalia.brain import BrainError
+from marginalia.doubtlog import DoubtLog
+from marginalia.ocr import TextLine
 
 
 def test_pretty_hotkey():
@@ -114,3 +116,95 @@ def test_eval_cases_are_saved_only_when_asked(qtbot, cfg):
     cfg.save_cases = True
     ask_typed(qtbot, c, "q2")
     assert len(list((cfg.log_dir / "cases").glob("*/case.json"))) == 1
+
+
+# OCR in the loop ----------------------------------------------------------------------------
+
+
+def test_ocr_lines_reach_the_model_and_the_footer(qtbot, cfg):
+    lines = [TextLine(0, "d = 2t + 1", (100, 100, 300, 120), 0.99), TextLine(1, "Theorem 2", (100, 140, 300, 160), 0.9)]
+    brain, ocr = FakeBrain(), FakeOCR(lines)
+    c = build(qtbot, cfg, brain=brain, ocr=ocr)
+    ask_typed(qtbot, c, "why odd?")
+    assert ocr.reads == 1, "OCR runs once per screenshot, while you type"
+    assert brain.lines_seen == [lines]
+    assert "2 OCR lines" in c.bubble.meta.text()
+
+
+def test_a_failing_ocr_does_not_cost_the_answer(qtbot, cfg):
+    brain = FakeBrain(text="Still answered.")
+    c = build(qtbot, cfg, brain=brain, ocr=FakeOCR(error=RuntimeError("onnx crashed")))
+    ask_typed(qtbot, c, "q")
+    assert brain.lines_seen == [[]]
+    assert "Still answered." in c.bubble.body.toPlainText()
+
+
+def test_unavailable_ocr_is_not_run(qtbot, cfg):
+    ocr = FakeOCR(available=False)
+    c = build(qtbot, cfg, ocr=ocr)
+    ask_typed(qtbot, c, "q")
+    assert ocr.reads == 0
+
+
+# robustness ------------------------------------------------------------------------------
+
+
+def test_a_second_trigger_during_capture_is_ignored(qtbot, cfg):
+    grabs = []
+
+    def grab(x, y):
+        grabs.append((x, y))
+        return make_snapshot(cursor=(x, y))
+
+    c = build(qtbot, cfg, grab=grab)
+    c.start_ask(at_cursor=False)
+    c.start_ask(at_cursor=False)  # double-click on the orb, or hotkey + orb
+    qtbot.waitUntil(c.askbox.isVisible)
+    qtbot.wait(200)
+    assert len(grabs) == 1
+
+
+def test_an_unexpected_error_is_shown_not_raised(qtbot, cfg):
+    c = build(qtbot, cfg, brain=FakeBrain(error=KeyError("surprise")))
+    ask_typed(qtbot, c, "q")
+    assert "Something went wrong" in c.bubble.body.toPlainText()
+    assert not c.orb._spin.isActive(), "the orb stops spinning"
+
+
+def test_a_full_disk_does_not_lose_the_answer(qtbot, cfg, capsys):
+    class FullDisk(DoubtLog):
+        def add(self, *a, **kw):
+            raise OSError("No space left on device")
+
+    c = build(qtbot, cfg, log=FullDisk(cfg.log_dir))
+    ask_typed(qtbot, c, "q")
+    assert "code distance" in c.bubble.body.toPlainText()
+    assert c.history, "the thread continues"
+    assert "Could not write the journal" in capsys.readouterr().out
+
+
+def test_orb_spins_while_waiting_and_stops_with_the_answer(qtbot, cfg):
+    pool = ManualExecutor()
+    c = build(qtbot, cfg, pool=pool)
+    c.snapshot = make_snapshot()
+    c.ask("q")
+    assert c.orb._spin.isActive()
+    assert "Reading your screen" in c.bubble.status.text()
+    pool.run_all()
+    assert not c.orb._spin.isActive()
+
+
+def test_follow_up_recaptures_the_screen_first(qtbot, cfg):
+    """A lecture keeps playing: a follow-up must look at the screen as it is now."""
+    grabs = []
+
+    def grab(x, y):
+        grabs.append((x, y))
+        return make_snapshot(cursor=(x, y))
+
+    brain = FakeBrain()
+    c = build(qtbot, cfg, brain=brain, grab=grab)
+    ask_typed(qtbot, c, "q1")
+    c._followup("q2")
+    qtbot.waitUntil(lambda: len(brain.asked) == 2)
+    assert len(grabs) == 2

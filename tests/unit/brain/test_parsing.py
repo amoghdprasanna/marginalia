@@ -69,3 +69,22 @@ def test_partial_answer_never_shows_half_an_escape(cut):
 
 def test_partial_answer_stops_at_the_closing_quote():
     assert partial_answer('{"answer": "done", "points": [{"label": "x"}]}') == "done"
+
+
+def test_a_point_that_breaks_the_schema_is_skipped_not_fatal():
+    a = parse_reply(envelope("ok", [{"label": "no coords"}, "not an object", point_dict(x=5)]))
+    assert a.text == "ok" and [p.x for p in a.points] == [5.0]
+
+
+def test_a_non_integer_line_id_is_ignored():
+    [p] = parse_reply(envelope("ok", [point_dict(line="3")])).points
+    assert p.line is None
+
+
+def test_partial_answer_stops_at_a_malformed_escape():
+    assert partial_answer(r'{"answer": "ok \uZZZZ more"}') == "ok "
+
+
+def test_partial_answer_ignores_answer_keys_inside_other_strings():
+    raw = '{"points": [{"label": "\\"answer\\": \\"no\\""}], "answer": "yes"}'
+    assert partial_answer(raw) == "yes"

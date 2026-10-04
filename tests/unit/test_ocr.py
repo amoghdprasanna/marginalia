@@ -12,9 +12,8 @@ def quad(x1, y1, x2, y2):
 
 
 def ocr_with(kind, engine):
-    o = OCR.__new__(OCR)  # skip the real engine import
-    o.engine, o.kind, o.error = engine, kind, None
-    return o
+    """An OCR whose only loader returns `engine`, so no real model is imported."""
+    return OCR(loaders=[(kind, lambda: engine)]) if engine else OCR(loaders=[])
 
 
 RAW = [
@@ -58,3 +57,28 @@ def test_big_screens_are_downscaled_for_ocr_and_boxes_scaled_back():
 def test_missing_engine_returns_nothing():
     o = ocr_with(None, None)
     assert not o.available and o.read(Image.new("RGB", (10, 10))) == []
+
+
+# loading the engine -----------------------------------------------------------------------
+
+
+def _fails(exc):
+    def load():
+        raise exc
+
+    return load
+
+
+def test_first_engine_that_loads_wins():
+    o = OCR(loaders=[("v1", lambda: "engine-1"), ("v2", lambda: "engine-2")])
+    assert (o.engine, o.kind, o.available) == ("engine-1", "v1", True)
+
+
+def test_falls_back_to_the_newer_package():
+    o = OCR(loaders=[("v1", _fails(ImportError("no rapidocr_onnxruntime"))), ("v2", lambda: "engine-2")])
+    assert (o.engine, o.kind) == ("engine-2", "v2")
+
+
+def test_no_engine_keeps_the_reason():
+    o = OCR(loaders=[("v1", _fails(ImportError("a"))), ("v2", _fails(OSError("onnxruntime broken")))])
+    assert not o.available and isinstance(o.error, OSError)

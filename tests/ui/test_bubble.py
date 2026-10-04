@@ -1,7 +1,9 @@
 """The answer bubble: thinking, answer and error states, copy, follow-ups, Esc."""
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtTest import QTest
 
 from marginalia.ui import (
     AnswerBubble,
@@ -75,3 +77,56 @@ def test_esc_closes_the_thread(qtbot, bubble):
     with qtbot.waitSignal(bubble.closed):
         qtbot.keyClick(bubble, Qt.Key_Escape)
     assert not bubble.isVisible()
+
+
+# streaming ------------------------------------------------------------------------------
+
+
+def test_partial_answer_shows_writing_and_hides_actions(bubble):
+    bubble.show_thinking("q")
+    bubble.show_partial("q", "The distance **is")
+    assert not bubble.status.isVisible() and bubble.body.isVisible()
+    assert bubble.meta.text() == "Writing…"
+    assert not bubble.copy_btn.isVisible() and not bubble.follow_wrap.isVisible()
+
+
+def test_long_partial_follows_the_newest_words(bubble):
+    bubble.show_partial("q", "\n\n".join(f"Paragraph {i} of a long derivation." for i in range(60)))
+    bar = bubble.body.verticalScrollBar()
+    assert bar.maximum() > 0 and bar.value() == bar.maximum()
+
+
+def test_finished_answer_is_read_from_the_top(bubble):
+    long = "\n\n".join(f"Paragraph {i}." for i in range(60))
+    bubble.show_partial("q", long)
+    bubble.show_answer("q", long, "meta")
+    assert bubble.body.verticalScrollBar().value() == 0
+    assert bubble.copy_btn.isVisible() and bubble.follow_wrap.isVisible()
+
+
+def test_copy_after_streaming_copies_the_final_text(qtbot, bubble):
+    bubble.show_partial("q", "Half")
+    bubble.show_answer("q", "Whole answer.", "meta")
+    bubble._copy()
+    assert QGuiApplication.clipboard().text() == "Whole answer."
+
+
+# dragging -------------------------------------------------------------------------------
+
+
+def test_bubble_drags_by_its_header(bubble):
+    bubble.show_answer("q", "answer", "meta")
+    start = bubble.pos()
+    QTest.mousePress(bubble, Qt.LeftButton, Qt.NoModifier, QPoint(100, 15))
+    QTest.mouseMove(bubble, QPoint(160, 55))
+    QTest.mouseRelease(bubble, Qt.LeftButton, Qt.NoModifier, QPoint(160, 55))
+    assert bubble.pos() == start + QPoint(60, 40)
+
+
+def test_bubble_does_not_drag_from_its_body(bubble):
+    bubble.show_answer("q", "answer", "meta")
+    start = bubble.pos()
+    y = bubble.height() - 10
+    QTest.mousePress(bubble, Qt.LeftButton, Qt.NoModifier, QPoint(100, y))
+    QTest.mouseMove(bubble, QPoint(160, y + 40))
+    assert bubble.pos() == start

@@ -51,14 +51,14 @@ docs/                this file, ADRs, README images
 ## Layers
 
 The rule: **logic lives in plain Python modules; Qt widgets only draw and emit signals.**
-That is what lets ~170 tests run in seconds with no display, no microphone and no network.
+That is what lets ~230 tests run in seconds with no display, no microphone and no network.
 
 | Layer | Modules | Knows about Qt? | Tested by |
 |---|---|---|---|
-| Pure core | `capture` (math), `brain.prompt`, `brain.parsing`, `pointing`, `cursor`, `voice.SilenceDetector`, `config`, `doubtlog` | No | plain unit tests |
-| Adapters | `capture.grab_screen`, `ocr.OCR`, `voice.Recorder`/`Transcriber`, `brain.claude.ClaudeBrain` | Only `grab_screen` | fakes injected through factories |
-| UI | `ui/` (one module per window) | Yes | pytest-qt, offscreen |
-| Wiring | `app.Controller`, `app.Services` | Yes | pytest-qt with every service faked |
+| Pure core | `capture` (math), `brain.prompt`, `brain.parsing`, `pointing`, `cursor`, `voice.SilenceDetector`, `config`, `doubtlog` | No | `tests/unit/` |
+| Adapters | `capture.grab_screen`, `ocr.OCR`, `voice.Recorder`/`Transcriber`, `brain.claude.ClaudeBrain` | Only `grab_screen` | `tests/unit/`, fakes injected through factories |
+| UI | `ui/` (one module per window) | Yes | `tests/ui/`, pytest-qt, offscreen |
+| Wiring | `app.Controller`, `app.Services` | Yes | `tests/integration/`, every service faked |
 
 ## Three coordinate spaces
 

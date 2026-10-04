@@ -162,6 +162,16 @@ class Controller(QObject):
         if self.ocr is not None and not self.ocr.available:
             print("[marginalia] OCR not installed; pointing still works. pip install -e '.[ocr]'")
 
+    def stop(self) -> None:
+        """Undo start(): stop polling the cursor, release the hotkey hook and the microphone."""
+        self._poll.stop()
+        self._drop_partial()
+        self.request_id += 1  # an answer still streaming is cancelled at its next chunk
+        if self.hotkey is not None:
+            self.hotkey.stop()
+            self.hotkey = None
+        self._stop_recorder()
+
     def _warm_voice(self) -> None:
         try:
             self.transcriber.warm()
@@ -420,5 +430,6 @@ def main(argv: list[str] | None = None) -> None:
         print("[marginalia] No ANTHROPIC_API_KEY found. Add it to .env, or run with --demo.")
 
     controller = Controller(cfg)
+    app.aboutToQuit.connect(controller.stop)
     controller.start()
     sys.exit(app.exec())

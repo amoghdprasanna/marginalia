@@ -118,3 +118,24 @@ def test_model_loads_once_even_under_concurrency():
 def test_reports_why_voice_is_unavailable():
     t = Transcriber("base.en", problem="no mic library")
     assert not t.available and t.problem == "no mic library"
+
+
+def test_missing_whisper_package_is_named(monkeypatch):
+    import importlib.util
+
+    from marginalia import voice
+
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    assert "faster-whisper is not installed" in voice._missing()
+
+
+def test_missing_portaudio_is_named(monkeypatch):
+    import sys
+
+    from marginalia import voice
+
+    monkeypatch.setattr(voice.importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setitem(sys.modules, "sounddevice", None)  # import fails, as without PortAudio
+    problem = voice._missing()
+    assert problem and "pip install -e '.[voice]'" in problem
+    assert not Transcriber("tiny.en").available

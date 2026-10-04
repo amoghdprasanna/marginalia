@@ -68,9 +68,11 @@ class FakeBrain:
     partials: list[str] = field(default_factory=list)  # streamed to on_text before answering
     asked: list[tuple[str, list]] = field(default_factory=list)
     delivered: list[str] = field(default_factory=list)  # partials the caller accepted (didn't cancel)
+    lines_seen: list[list] = field(default_factory=list)  # OCR lines handed in with each question
 
     def ask(self, prep, lines, question, history, on_text=None) -> Answer:
         self.asked.append((question, list(history)))
+        self.lines_seen.append(list(lines))
         for t in self.partials:
             if on_text is not None:
                 on_text(t)
@@ -78,6 +80,20 @@ class FakeBrain:
         if self.error is not None:
             raise self.error
         return Answer(self.text, list(self.points), "fake-model", 0.1, "")
+
+
+class FakeOCR:
+    """Returns fixed text lines (or raises), like ocr.OCR with an engine installed."""
+
+    def __init__(self, lines=(), available: bool = True, error: Exception | None = None) -> None:
+        self.lines, self.available, self.error = list(lines), available, error
+        self.reads = 0
+
+    def read(self, image):
+        self.reads += 1
+        if self.error is not None:
+            raise self.error
+        return list(self.lines)
 
 
 class FakeStream:
@@ -119,6 +135,7 @@ class FakeMessageStream:
         self.response, self.chunks, self.error = response, chunks, error
         self.closed = False
         self.read = 0  # chunks the caller actually consumed
+        self.mid_error: Exception | None = None  # raised after the first chunk, like an SSE error event
 
     def __enter__(self):
         if self.error is not None:  # the SDK sends the request on entry
@@ -133,6 +150,8 @@ class FakeMessageStream:
         for c in self.chunks:
             self.read += 1
             yield c
+            if self.mid_error is not None:
+                raise self.mid_error
 
     def get_final_message(self):
         return self.response
@@ -141,6 +160,7 @@ class FakeMessageStream:
 class FakeMessages:
     def __init__(self, response=None, error: Exception | None = None, chunk: int = 7) -> None:
         self.response, self.error, self.chunk = response, error, chunk
+        self.mid_error: Exception | None = None
         self.requests: list[dict] = []
         self.streams: list[FakeMessageStream] = []
 
@@ -149,6 +169,7 @@ class FakeMessages:
         text = "".join(getattr(b, "text", "") for b in self.response.content if getattr(b, "type", "") == "text")
         chunks = [text[i : i + self.chunk] for i in range(0, len(text), self.chunk)]
         s = FakeMessageStream(self.response, chunks, self.error)
+        s.mid_error = self.mid_error
         self.streams.append(s)
         return s
 
@@ -167,11 +188,12 @@ def fake_client(text: str = '{"answer": "hi", "points": []}', stop_reason: str =
 # controller harness ---------------------------------------------------------------------
 
 
-def build(qtbot, cfg, *, brain=None, pool=None, voice_text=None, grab=None):
+def build(qtbot, cfg, *, brain=None, pool=None, voice_text=None, grab=None, ocr=None, log=None):
     streams = []
     services = Services(
         brain=brain or FakeBrain(),
-        log=DoubtLog(cfg.log_dir),
+        log=log or DoubtLog(cfg.log_dir),
+        ocr=ocr,
         transcriber=None
         if voice_text is None
         else Transcriber("tiny.en", model_factory=lambda n: FakeWhisper(voice_text), problem=None),

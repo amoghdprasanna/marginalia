@@ -125,3 +125,16 @@ def test_refusal_after_partial_text_is_still_an_error(cfg, prep):
     with pytest.raises(BrainError, match="declined"):
         ClaudeBrain(cfg, client=client).ask(prep, [], "q", [], on_text=seen.append)
     assert seen, "the partial was shown first; the controller replaces it with the error"
+
+
+def test_a_key_builds_a_real_client_without_calling_the_network(cfg):
+    brain = ClaudeBrain(cfg)
+    assert isinstance(brain.client, anthropic.Anthropic)
+
+
+def test_an_error_in_the_middle_of_the_stream_is_explained(cfg, prep):
+    client, messages = fake_client(text=envelope("word " * 20))
+    messages.mid_error = anthropic.APIError("overloaded", _REQ, body=None)
+    with pytest.raises(BrainError, match="broke off"):
+        ClaudeBrain(cfg, client=client).ask(prep, [], "q", [])
+    assert messages.streams[0].closed

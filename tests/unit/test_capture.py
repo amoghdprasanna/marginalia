@@ -119,3 +119,21 @@ def test_to_b64_png_round_trips():
     img = Image.new("RGB", (4, 3), (1, 2, 3))
     back = Image.open(io.BytesIO(base64.standard_b64decode(to_b64_png(img))))
     assert back.format == "PNG" and back.size == (4, 3) and back.getpixel((0, 0)) == (1, 2, 3)
+
+
+# Qt image conversion ---------------------------------------------------------------------
+
+
+def test_qimage_converts_to_pil_with_exact_pixels():
+    """Odd widths have padded rows in Qt; a wrong stride would shear the picture."""
+    from PySide6.QtGui import QColor, QImage
+
+    from marginalia.capture import qimage_to_pil
+
+    q = QImage(5, 3, QImage.Format_RGB32)
+    q.fill(QColor(10, 20, 30))
+    q.setPixelColor(4, 2, QColor(255, 178, 36))
+    img = qimage_to_pil(q)
+    assert img.mode == "RGB" and img.size == (5, 3)
+    assert img.getpixel((0, 0)) == (10, 20, 30)
+    assert img.getpixel((4, 2)) == (255, 178, 36)

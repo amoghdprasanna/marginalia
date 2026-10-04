@@ -85,8 +85,10 @@ into `eval/cases/`. Aim for 30+ real cases before changing prompts or models.
 
 ```bash
 pip install -e ".[ocr,voice,dev]"
-pytest                               # ~170 tests, offscreen, no network or mic needed
-pytest --cov=marginalia              # with coverage
+pytest                               # ~230 tests, offscreen, no network or mic needed
+pytest -m unit                       # just the pure-logic tests (a few seconds)
+pytest -m "ui or integration"        # widgets, and the controller end to end
+pytest --cov=marginalia              # with coverage (~96%)
 ruff check .                         # lint
 ```
 
@@ -95,7 +97,9 @@ ruff check .                         # lint
   [`docs/adr/`](docs/adr/) with the alternatives that were turned down.
 - **Workflow:** branch from `main`, keep commits small, open a PR; CI runs lint and tests on
   Linux and macOS. A change to a dependency, data flow or module boundary gets a new ADR.
-- **Tests:** logic goes in plain modules and gets plain tests; widgets get pytest-qt tests; slow
-  or external things are injected through `app.Services` and replaced by the fakes in
-  `tests/helpers.py`. A bug fix starts with a failing test that names the bug.
+- **Tests:** `tests/unit/` for logic in plain modules, `tests/ui/` for one widget at a time
+  (pytest-qt), `tests/integration/` for whole flows through the controller (ask, voice,
+  streaming, startup). The folder sets the marker. Slow or external things are injected through
+  `app.Services` and replaced by the fakes in `tests/helpers.py`. Test names state the behaviour
+  ("a failing OCR does not cost the answer"). A bug fix starts with a failing test that names the bug.
 - **Plan:** [`ROADMAP.md`](ROADMAP.md).
