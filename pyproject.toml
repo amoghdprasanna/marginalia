@@ -37,7 +37,13 @@ version = { attr = "marginalia.__version__" }
 testpaths = ["tests"]
 pythonpath = ["tests", "eval"]
 qt_api = "pyside6"
-markers = ["qt: needs a Qt application (runs offscreen in CI)"]
+markers = [
+    "unit: pure logic, no Qt event loop (tests/unit)",
+    "ui: one widget at a time under pytest-qt (tests/ui)",
+    "integration: the controller end to end with fakes (tests/integration)",
+    "qt: needs a Qt application (runs offscreen in CI)",
+]
+addopts = "--strict-markers"
 
 [tool.ruff]
 line-length = 120

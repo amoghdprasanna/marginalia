@@ -19,21 +19,32 @@ class TextLine:
     score: float
 
 
+def _rapidocr_v1():
+    from rapidocr_onnxruntime import RapidOCR  # bundles its models, no download
+
+    return RapidOCR()
+
+
+def _rapidocr_v2():
+    from rapidocr import RapidOCR  # newer package, downloads models on first run
+
+    return RapidOCR()
+
+
+# Tried in order; the first that loads wins. Each returns an engine; the kind says how to read its output.
+LOADERS = (("v1", _rapidocr_v1), ("v2", _rapidocr_v2))
+
+
 class OCR:
-    def __init__(self) -> None:
+    def __init__(self, loaders=LOADERS) -> None:
         self.engine = None
         self.kind = None
         self.error: Exception | None = None
-        try:
-            from rapidocr_onnxruntime import RapidOCR  # bundles its models, no download
-
-            self.engine, self.kind = RapidOCR(), "v1"
-        except Exception:
+        for kind, load in loaders:
             try:
-                from rapidocr import RapidOCR  # newer package, downloads models on first run
-
-                self.engine, self.kind = RapidOCR(), "v2"
-            except Exception as exc:  # noqa: BLE001
+                self.engine, self.kind = load(), kind
+                return
+            except Exception as exc:  # noqa: BLE001  (ImportError, or a broken onnxruntime)
                 self.error = exc
 
     @property

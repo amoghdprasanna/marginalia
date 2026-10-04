@@ -114,13 +114,15 @@ class PointerOverlay(QWidget):
             if local >= 1.0 and label:
                 self._label(p, pos, label, bounds)
 
-    def _label(self, p: QPainter, at: QPointF, text: str, bounds: QRectF) -> None:
-        """Label sits above and to the right of the ring, so the target line stays readable."""
+    def label_font(self) -> QFont:
         f = QFont(self.font())
         f.setPointSizeF(10.5)
         f.setWeight(QFont.DemiBold)
-        p.setFont(f)
-        fm = QFontMetricsF(f)
+        return f
+
+    def label_rect(self, at: QPointF, text: str, bounds: QRectF) -> QRectF:
+        """Above and to the right of the ring, so the target line stays readable; flipped at edges."""
+        fm = QFontMetricsF(self.label_font())
         w, h = fm.horizontalAdvance(text) + 22, fm.height() + 10
         x = at.x() + 10
         if x + w > bounds.right() - 8:
@@ -128,7 +130,12 @@ class PointerOverlay(QWidget):
         y = at.y() - 22 - h
         if y < bounds.top() + 8:
             y = at.y() + 22
-        r = QRectF(x, y, w, h)
+        return QRectF(x, y, w, h)
+
+    def _label(self, p: QPainter, at: QPointF, text: str, bounds: QRectF) -> None:
+        p.setFont(self.label_font())
+        r = self.label_rect(at, text, bounds)
+        h = r.height()
         p.setPen(QPen(EDGE, 1))
         p.setBrush(PILL)
         p.drawRoundedRect(r, h / 2, h / 2)

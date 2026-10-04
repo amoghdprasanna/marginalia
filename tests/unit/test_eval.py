@@ -7,7 +7,7 @@ from run_eval import PRICES, cost_usd, run_case, score, summarize
 
 from marginalia.brain import DemoBrain, Usage
 
-CASES = Path(__file__).resolve().parents[1] / "eval" / "cases"
+CASES = Path(__file__).resolve().parents[2] / "eval" / "cases"
 
 
 def test_score_counts_hits_with_a_margin_and_mentions():

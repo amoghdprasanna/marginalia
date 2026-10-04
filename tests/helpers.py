@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from concurrent.futures import Executor, Future
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -9,8 +10,11 @@ from types import SimpleNamespace
 import numpy as np
 from PIL import Image
 
+from marginalia.app import Controller, Services
 from marginalia.brain import Answer, Point
 from marginalia.capture import Snapshot
+from marginalia.doubtlog import DoubtLog
+from marginalia.voice import Recorder, Transcriber
 
 
 def make_snapshot(logical=(1440, 900), dpr=2.0, cursor=(700, 450), origin=(0, 0), color=(250, 250, 250)) -> Snapshot:
@@ -158,3 +162,44 @@ def fake_client(text: str = '{"answer": "hi", "points": []}', stop_reason: str =
     response = SimpleNamespace(content=content, stop_reason=stop_reason, model="claude-opus-5-5", usage=None)
     messages = FakeMessages(response, error)
     return SimpleNamespace(beta=SimpleNamespace(messages=messages)), messages
+
+
+# controller harness ---------------------------------------------------------------------
+
+
+def build(qtbot, cfg, *, brain=None, pool=None, voice_text=None, grab=None):
+    streams = []
+    services = Services(
+        brain=brain or FakeBrain(),
+        log=DoubtLog(cfg.log_dir),
+        transcriber=None
+        if voice_text is None
+        else Transcriber("tiny.en", model_factory=lambda n: FakeWhisper(voice_text), problem=None),
+        recorder=Recorder(stream_factory=lambda cb: streams.append(FakeStream(cb)) or streams[-1]),
+        grab=grab or (lambda x, y: make_snapshot(cursor=(x, y))),
+        pool=pool or ImmediateExecutor(),
+    )
+    c = Controller(cfg, services)
+    for w in (c.orb, c.askbox, c.bubble, c.overlay, c.chooser, c.listenbox):
+        qtbot.addWidget(w)
+    c.streams = streams
+    return c
+
+
+def ask_typed(qtbot, c, question):
+    c.start_ask(at_cursor=False)
+    qtbot.waitUntil(c.askbox.isVisible)
+    c.askbox.edit.setText(question)
+    c.askbox._submit()
+
+
+# reply envelopes --------------------------------------------------------------------------
+
+
+def envelope(answer: str = "ok", points=()) -> str:
+    """A reply as the API returns it under ANSWER_SCHEMA."""
+    return json.dumps({"answer": answer, "points": list(points)})
+
+
+def point_dict(**kw) -> dict:
+    return {"image": "full", "x": 10, "y": 20, "line": None, "label": "eq 4", **kw}

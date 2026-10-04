@@ -86,10 +86,13 @@ class Orb(QWidget):
             self.clicked.emit()
         self._press = None
 
-    def contextMenuEvent(self, e) -> None:  # noqa: N802
+    def build_menu(self) -> QMenu:
         menu = QMenu(self)
         menu.addAction("Ask by typing", self.type_requested.emit)
         menu.addAction("Ask by voice", self.voice_requested.emit)
         menu.addSeparator()
         menu.addAction("Quit Marginalia", self.quit_requested.emit)
-        menu.exec(e.globalPos())
+        return menu
+
+    def contextMenuEvent(self, e) -> None:  # noqa: N802
+        self.build_menu().exec(e.globalPos())
