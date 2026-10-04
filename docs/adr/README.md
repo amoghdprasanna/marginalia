@@ -17,7 +17,8 @@ supersedes it, so the history of *why* survives.
 | [0006](0006-local-speech-to-text.md) | Local speech-to-text with faster-whisper | Accepted |
 | [0007](0007-concurrency-model.md) | Worker pool, Qt signals and request ids | Accepted |
 | [0008](0008-testable-core-thin-shell.md) | Testable core, thin Qt shell, fakes over mocks | Accepted |
-| [0009](0009-model-defaults.md) | Model, effort and refusal fallback defaults | Accepted |
+| [0009](0009-model-defaults.md) | Model, effort and refusal fallback defaults | Model superseded by 0013 |
 | [0010](0010-src-layout-and-packages.md) | `src/` layout, packages for brain and ui | Accepted |
 | [0011](0011-structured-outputs-and-prompt-caching.md) | Structured outputs for the answer; cache the system prompt | Accepted |
 | [0012](0012-stream-the-answer.md) | Stream the answer into the bubble | Accepted |
+| [0013](0013-default-to-opus-5-5.md) | Default model: Claude Opus 5.5 | Accepted |

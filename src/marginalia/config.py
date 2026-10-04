@@ -49,7 +49,7 @@ class Config:
 def load_config(demo: bool = False, no_hotkey: bool = False, no_ocr: bool = False, no_voice: bool = False) -> Config:
     return Config(
         api_key=os.environ.get("ANTHROPIC_API_KEY") or None,
-        model=os.environ.get("MARGINALIA_MODEL", "claude-opus-5"),
+        model=os.environ.get("MARGINALIA_MODEL", "claude-opus-5-5"),
         # Set to 1 only for models on the high-resolution image tier (sharper small text).
         hires=_flag("MARGINALIA_HIRES"),
         hotkey=os.environ.get("MARGINALIA_HOTKEY", "<ctrl>+<alt>+<space>"),

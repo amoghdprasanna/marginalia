@@ -13,7 +13,7 @@ from marginalia.config import Config  # noqa: E402
 def cfg(tmp_path) -> Config:
     return Config(
         api_key="test-key",
-        model="claude-opus-5",
+        model="claude-opus-5-5",
         hires=False,
         hotkey="<ctrl>+<alt>+<space>",
         hotkey_enabled=False,

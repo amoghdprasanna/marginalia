@@ -155,6 +155,6 @@ def fake_client(text: str = '{"answer": "hi", "points": []}', stop_reason: str =
     The reply streams back in 7-character chunks, cutting through words and escapes on purpose.
     """
     content = blocks if blocks is not None else [SimpleNamespace(type="text", text=text)]
-    response = SimpleNamespace(content=content, stop_reason=stop_reason, model="claude-opus-5", usage=None)
+    response = SimpleNamespace(content=content, stop_reason=stop_reason, model="claude-opus-5-5", usage=None)
     messages = FakeMessages(response, error)
     return SimpleNamespace(beta=SimpleNamespace(messages=messages)), messages

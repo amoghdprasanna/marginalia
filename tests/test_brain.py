@@ -148,7 +148,7 @@ def test_request_shape(cfg, prep):
     client, messages = fake_client()
     ClaudeBrain(cfg, client=client).ask(prep, [], "what is d?", [])
     req = messages.requests[0]
-    assert req["model"] == "claude-opus-5"
+    assert req["model"] == "claude-opus-5-5"
     assert req["max_tokens"] == 16000
     assert req["output_config"] == {"effort": "medium", "format": {"type": "json_schema", "schema": ANSWER_SCHEMA}}
     assert req["fallbacks"] == "default" and req["betas"] == [ClaudeBrain.FALLBACK_BETA]

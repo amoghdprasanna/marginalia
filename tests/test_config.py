@@ -30,7 +30,7 @@ def clean_env(monkeypatch):
 def test_defaults():
     c = load_config()
     assert c.api_key is None
-    assert c.model == "claude-opus-5"
+    assert c.model == "claude-opus-5-5"
     assert c.effort == "medium" and c.max_tokens == 16000
     assert c.hotkey_enabled and c.ocr_enabled and c.voice_enabled
     assert not c.demo and not c.hires

@@ -1,6 +1,6 @@
 # 0009. Model, effort and refusal fallback defaults
 
-**Status:** Accepted, 2026-10-02
+**Status:** Accepted, 2026-10-02. Model choice superseded by [0013](0013-default-to-opus-5-5.md).
 
 ## Context
 The prototype defaulted to `claude-sonnet-5-5`, which is not a real model id, so every
