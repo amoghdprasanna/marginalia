@@ -22,3 +22,4 @@ supersedes it, so the history of *why* survives.
 | [0011](0011-structured-outputs-and-prompt-caching.md) | Structured outputs for the answer; cache the system prompt | Accepted |
 | [0012](0012-stream-the-answer.md) | Stream the answer into the bubble | Accepted |
 | [0013](0013-default-to-opus-5-5.md) | Default model: Claude Opus 5.5 | Accepted |
+| [0014](0014-logging.md) | Log with `logging`: console lines, JSON lines in a file | Accepted |

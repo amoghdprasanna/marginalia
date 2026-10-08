@@ -171,7 +171,7 @@ def test_an_unexpected_error_is_shown_not_raised(qtbot, cfg):
     assert not c.orb._spin.isActive(), "the orb stops spinning"
 
 
-def test_a_full_disk_does_not_lose_the_answer(qtbot, cfg, capsys):
+def test_a_full_disk_does_not_lose_the_answer(qtbot, cfg, caplog):
     class FullDisk(DoubtLog):
         def add(self, *a, **kw):
             raise OSError("No space left on device")
@@ -180,7 +180,7 @@ def test_a_full_disk_does_not_lose_the_answer(qtbot, cfg, capsys):
     ask_typed(qtbot, c, "q")
     assert "code distance" in c.bubble.body.toPlainText()
     assert c.history, "the thread continues"
-    assert "Could not write the journal" in capsys.readouterr().out
+    assert "Could not write the journal" in caplog.text
 
 
 def test_orb_spins_while_waiting_and_stops_with_the_answer(qtbot, cfg):

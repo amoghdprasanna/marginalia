@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import signal
 import sys
@@ -20,10 +21,13 @@ from .capture import Snapshot, grab_screen, prepare
 from .config import Config, load_config
 from .cursor import RestTracker
 from .doubtlog import DoubtLog
+from .logs import setup_logging
 from .ocr import OCR
 from .pointing import place_box, resolve_points
 from .ui import AnswerBubble, AskBox, ListenBox, ModeChooser, Orb, PointerOverlay
 from .voice import Recorder, Transcriber
+
+log = logging.getLogger(__name__)
 
 HISTORY_TURNS = 4
 # Enough for OCR, the answer, transcription and a speech-model download at once, plus answers that
@@ -48,7 +52,7 @@ def pretty_hotkey(combo: str) -> str:
 
 def start_hotkey(combo: str, callback):
     if sys.platform.startswith("linux") and os.environ.get("XDG_SESSION_TYPE") == "wayland":
-        print("[marginalia] Wayland session: global hotkeys are blocked here. Use the orb, or log in with X11.")
+        log.warning("Wayland session: global hotkeys are blocked here. Use the orb, or log in with X11.")
         return None
     try:
         from pynput import keyboard
@@ -58,7 +62,7 @@ def start_hotkey(combo: str, callback):
         listener.start()
         return listener
     except Exception as exc:  # noqa: BLE001
-        print(f"[marginalia] Hotkey unavailable ({exc}). Use the orb instead.")
+        log.warning("Hotkey unavailable (%s). Use the orb instead.", exc)
         return None
 
 
@@ -160,13 +164,13 @@ class Controller(QObject):
         ocr = "on" if self.ocr and self.ocr.available else "off"
         voice = "on" if self.transcriber and self.transcriber.available else "off"
         keys = pretty_hotkey(self.cfg.hotkey) if self.hotkey else "orb only"
-        print(f"[marginalia] Ready ({mode}, OCR {ocr}, voice {voice}, trigger: {keys}). Journal: {self.log.dir}")
+        log.info("Ready (%s, OCR %s, voice %s, trigger: %s). Journal: %s", mode, ocr, voice, keys, self.log.dir)
         if self.transcriber is not None and not self.transcriber.available:
-            print(f"[marginalia] Voice not installed ({self.transcriber.problem})")
+            log.warning("Voice not installed (%s)", self.transcriber.problem)
         elif self.transcriber is not None:
             self.pool.submit(self._warm_voice)
         if self.ocr is not None and not self.ocr.available:
-            print("[marginalia] OCR not installed; pointing still works. pip install -e '.[ocr]'")
+            log.warning("OCR not installed; pointing still works. pip install -e '.[ocr]'")
 
     def stop(self) -> None:
         """Undo start(): stop polling the cursor, release the hotkey hook and the microphone."""
@@ -183,7 +187,7 @@ class Controller(QObject):
         try:
             self.transcriber.warm()
         except Exception as exc:  # noqa: BLE001
-            print(f"[marginalia] Could not load the speech model '{self.cfg.whisper_model}': {exc}")
+            log.error("Could not load the speech model '%s': %s", self.cfg.whisper_model, exc)
 
     # cursor tracking -------------------------------------------------------------------------
 
@@ -357,13 +361,30 @@ class Controller(QObject):
         try:
             prep, lines, answer = future.result()
         except BrainError as exc:
+            log.warning("Answer failed: %s", exc)
             self.bubble.show_error(question, str(exc))
             self._show_bubble_near(cursor, [])
             return
         except Exception as exc:  # noqa: BLE001
+            log.exception("Unexpected error while answering")
             self.bubble.show_error(question, f"Something went wrong: {exc!r}")
             self._show_bubble_near(cursor, [])
             return
+
+        u = answer.usage
+        log.debug(
+            "answered",
+            extra={
+                "model": answer.model,
+                "first_text_s": answer.first_text,
+                "seconds": round(answer.elapsed, 2),
+                "points": len(answer.points),
+                "ocr_lines": len(lines),
+                "input_tokens": u.input_tokens if u else None,
+                "output_tokens": u.output_tokens if u else None,
+                "cache_read": u.cache_read if u else None,
+            },
+        )
 
         targets = resolve_points(prep, snap, lines, answer.points)
         self.overlay.point_to(QRect(*snap.screen_geo), cursor, targets)
@@ -382,12 +403,12 @@ class Controller(QObject):
         try:
             self.log.add(question, answer.text, prep.full, answer.model)
         except OSError as exc:
-            print(f"[marginalia] Could not write the journal: {exc}")
+            log.error("Could not write the journal: %s", exc)
         if self.cfg.save_cases:
             try:
                 self.log.save_case(snap, question, answer.text, targets)
             except OSError as exc:
-                print(f"[marginalia] Could not save the eval case: {exc}")
+                log.error("Could not save the eval case: %s", exc)
 
     def _followup(self, question: str) -> None:
         # Re-capture first: the lecture or page may have moved on since the last question.
@@ -431,6 +452,7 @@ class Controller(QObject):
 
 def hard_exit(code: int) -> None:
     """End the process now. sys.exit would first wait for every busy worker thread."""
+    logging.shutdown()
     sys.stdout.flush()
     sys.stderr.flush()
     os._exit(code)
@@ -444,14 +466,16 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--no-voice", action="store_true", help="disable asking by voice")
     args = ap.parse_args(argv)
 
+    setup_logging()  # console only, so problems reading the config are reported
     cfg = load_config(demo=args.demo, no_hotkey=args.no_hotkey, no_ocr=args.no_ocr, no_voice=args.no_voice)
+    setup_logging(cfg.log_dir, cfg.log_level.upper())
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName("Marginalia")
     app.setQuitOnLastWindowClosed(False)
     signal.signal(signal.SIGINT, signal.SIG_DFL)  # Ctrl+C in the terminal quits
 
     if not cfg.demo and not cfg.api_key:
-        print("[marginalia] No ANTHROPIC_API_KEY found. Add it to .env, or run with --demo.")
+        log.warning("No ANTHROPIC_API_KEY found. Add it to .env, or run with --demo.")
 
     controller = Controller(cfg)
     app.aboutToQuit.connect(controller.stop)

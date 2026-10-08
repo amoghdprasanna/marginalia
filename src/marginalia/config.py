@@ -1,6 +1,7 @@
 """Settings, read from environment variables (and from a .env file if python-dotenv is installed)."""
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,11 +22,14 @@ DEFAULT_CONTEXT = (
 )
 
 
+log = logging.getLogger(__name__)
+
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
+LOG_LEVELS = ("debug", "info", "warning", "error")
 
 
 def _warn(message: str) -> None:
-    print(f"[marginalia] {message}")
+    log.warning(message)
 
 
 def _number(name: str, default: int) -> int:
@@ -68,6 +72,7 @@ class Config:
     voice_enabled: bool
     whisper_model: str
     save_cases: bool = False
+    log_level: str = "info"
 
 
 def load_config(demo: bool = False, no_hotkey: bool = False, no_ocr: bool = False, no_voice: bool = False) -> Config:
@@ -92,4 +97,6 @@ def load_config(demo: bool = False, no_hotkey: bool = False, no_ocr: bool = Fals
         # Also save each question as an unlabelled eval case (raw screenshot + case.json) under
         # <log dir>/cases. Off by default: full-resolution screenshots add up, and may be private.
         save_cases=_flag("MARGINALIA_SAVE_CASES"),
+        # Console detail. The log file (<log dir>/logs/marginalia.jsonl) always keeps everything.
+        log_level=_choice("MARGINALIA_LOG_LEVEL", "info", LOG_LEVELS),
     )

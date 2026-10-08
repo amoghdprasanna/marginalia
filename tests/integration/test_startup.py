@@ -46,19 +46,19 @@ def test_hotkey_is_registered_on_a_daemon_thread(fake_pynput):
     assert listener.started and listener.daemon, "a daemon thread must not keep the app alive on quit"
 
 
-def test_hotkey_is_skipped_on_wayland_with_a_reason(fake_pynput, monkeypatch, capsys):
+def test_hotkey_is_skipped_on_wayland_with_a_reason(fake_pynput, monkeypatch, caplog):
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
     assert start_hotkey("<ctrl>+<alt>+<space>", lambda: None) is None
     assert fake_pynput.instances == []
-    assert "Wayland" in capsys.readouterr().out
+    assert "Wayland" in caplog.text
 
 
-def test_hotkey_failure_falls_back_to_the_orb(monkeypatch, capsys):
+def test_hotkey_failure_falls_back_to_the_orb(monkeypatch, caplog):
     monkeypatch.setitem(sys.modules, "pynput", None)  # import fails, as with a blocked keyboard hook
     monkeypatch.delenv("XDG_SESSION_TYPE", raising=False)
     assert start_hotkey("<ctrl>+<alt>+<space>", lambda: None) is None
-    assert "Use the orb" in capsys.readouterr().out
+    assert "Use the orb" in caplog.text
 
 
 def test_hotkey_asks_about_exactly_where_the_mouse_is(qtbot, cfg):
@@ -94,10 +94,10 @@ def started(qtbot, cfg):
 # start() and stop() --------------------------------------------------------------------------------------
 
 
-def test_ready_message_says_what_is_on(started, capsys):
+def test_ready_message_says_what_is_on(started, caplog):
     c = started()
     c.start()
-    out = capsys.readouterr().out
+    out = caplog.text
     assert "Ready (claude-opus-5-5, OCR off, voice off, trigger: orb only)" in out
     assert str(c.log.dir) in out
     assert c.orb.isVisible()
@@ -111,21 +111,21 @@ def test_speech_model_is_loaded_in_the_background_at_start(started):
     assert loads == ["tiny.en"], "warmed once at start, so the first spoken question is not slow"
 
 
-def test_speech_model_that_fails_to_load_is_reported_not_raised(started, capsys):
+def test_speech_model_that_fails_to_load_is_reported_not_raised(started, caplog):
     def broken(name):
         raise OSError("disk full")
 
     c = started()
     c.transcriber = Transcriber("tiny.en", model_factory=broken, problem=None)
     c.start()
-    assert "Could not load the speech model 'tiny.en': disk full" in capsys.readouterr().out
+    assert "Could not load the speech model 'tiny.en': disk full" in caplog.text
 
 
-def test_missing_extras_are_explained_at_start(started, capsys):
+def test_missing_extras_are_explained_at_start(started, caplog):
     c = started(ocr=FakeOCR(available=False))
     c.transcriber = Transcriber("tiny.en", problem="faster-whisper is not installed")
     c.start()
-    out = capsys.readouterr().out
+    out = caplog.text
     assert "Voice not installed (faster-whisper is not installed)" in out
     assert "OCR not installed" in out
 
@@ -174,9 +174,10 @@ def test_default_services_follow_the_config(cfg):
 
 
 @pytest.fixture
-def fake_main(monkeypatch, qapp):
+def fake_main(monkeypatch, qapp, tmp_path):
     """Run main() without a real controller, event loop, or touching the test runner's Ctrl+C."""
     made = []
+    monkeypatch.setenv("MARGINALIA_LOG_DIR", str(tmp_path))  # main opens a log file there
 
     class FakeController:
         def __init__(self, cfg):
@@ -207,12 +208,12 @@ def test_command_line_flags_reach_the_config(fake_main):
     assert exit_.value.code == 7, "the process exits with the event loop's status"
 
 
-def test_missing_api_key_is_pointed_out(fake_main, monkeypatch, capsys):
+def test_missing_api_key_is_pointed_out(fake_main, monkeypatch, caplog):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("MARGINALIA_DEMO", raising=False)
     with pytest.raises(SystemExit):
         app_module.main([])
-    assert "No ANTHROPIC_API_KEY found" in capsys.readouterr().out
+    assert "No ANTHROPIC_API_KEY found" in caplog.text
 
 
 def test_quitting_does_not_wait_for_busy_workers(fake_main, monkeypatch):
@@ -246,3 +247,9 @@ def test_stop_drops_queued_work(started):
     c.stop()
     release.set()
     assert queued.cancelled()
+
+
+def test_main_keeps_a_json_log_in_the_log_folder(fake_main, tmp_path):
+    with pytest.raises(SystemExit):
+        app_module.main(["--demo"])
+    assert (tmp_path / "logs" / "marginalia.jsonl").exists()

@@ -57,15 +57,15 @@ def test_env_values(monkeypatch, tmp_path):
     assert c.api_key == "sk-test" and c.effort == "low" and c.log_dir == tmp_path
 
 
-def test_a_bad_number_falls_back_to_the_default_instead_of_crashing(monkeypatch, capsys):
+def test_a_bad_number_falls_back_to_the_default_instead_of_crashing(monkeypatch, caplog):
     """Bug: MARGINALIA_MAX_TOKENS=16k stopped the app at startup with a ValueError traceback."""
     monkeypatch.setenv("MARGINALIA_MAX_TOKENS", "16k")
     assert load_config().max_tokens == 16000
-    assert "MARGINALIA_MAX_TOKENS" in capsys.readouterr().out
+    assert "MARGINALIA_MAX_TOKENS" in caplog.text
 
 
-def test_an_unknown_effort_falls_back_to_medium(monkeypatch, capsys):
+def test_an_unknown_effort_falls_back_to_medium(monkeypatch, caplog):
     """Bug: a typo here made every single question fail with an API error."""
     monkeypatch.setenv("MARGINALIA_EFFORT", "hihg")
     assert load_config().effort == "medium"
-    assert "MARGINALIA_EFFORT" in capsys.readouterr().out
+    assert "MARGINALIA_EFFORT" in caplog.text

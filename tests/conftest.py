@@ -6,6 +6,7 @@ Layout, and the marker each folder gets automatically:
   integration/  the controller with every service faked  -m integration
 """
 
+import logging
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -34,6 +35,20 @@ def cfg(tmp_path) -> Config:
         voice_enabled=False,
         whisper_model="tiny.en",
     )
+
+
+@pytest.fixture(autouse=True)
+def _log_everything(caplog):
+    """App messages are logged, not printed; let every test see them in caplog.text.
+
+    Afterwards, drop handlers a test's setup_logging() added: they hold that test's stdout and log file.
+    """
+    caplog.set_level(logging.DEBUG, logger="marginalia")
+    yield
+    logger = logging.getLogger("marginalia")
+    for h in [h for h in logger.handlers if getattr(h, "_marginalia", False)]:
+        logger.removeHandler(h)
+        h.close()
 
 
 LAYERS = ("unit", "ui", "integration")
