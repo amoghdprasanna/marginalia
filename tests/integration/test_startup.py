@@ -374,3 +374,19 @@ def test_download_opens_the_release(qtbot, cfg, monkeypatch):
     qtbot.addWidget(c.notice)
     c.notice.buttons["Download…"].click()
     assert opened == ["https://github.com/o/r/releases/tag/v9.9.9"]
+
+
+def test_a_second_notice_does_not_close_the_first(qtbot, cfg, crashed):
+    """Bug: the update notice replaced the crash notice's only reference, so it vanished."""
+    import gc
+
+    cfg.crash_reports = True
+    c = build(qtbot, cfg)
+    c.offer_crash_reports(crashed)
+    first = c.notice
+    with_release(c)
+    c.check_for_updates()
+    gc.collect()
+    assert first.isVisible() and c.notice is not first
+    for n in c.notices:
+        qtbot.addWidget(n)

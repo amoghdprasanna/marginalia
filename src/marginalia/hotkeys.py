@@ -240,8 +240,9 @@ class CarbonBackend:
         self._proc = None
 
     def register(self, combo: Combo, on_press: Callback, on_release: Callback | None = None) -> None:
-        if combo.key not in MAC_KEYCODES:
-            raise ValueError(f"no macOS key code for '{combo.key}'")
+        if combo.key not in MAC_KEYCODES:  # skip this one; the others still work
+            log.warning("Hotkey skipped: no macOS key code for '%s' in %s", combo.key, format_combo(combo))
+            return
         hid = len(self._callbacks) + 1
         self._callbacks[hid] = (on_press, on_release)
         self._pending.append((hid, combo))
@@ -333,6 +334,7 @@ def start_hotkeys(bindings: list[tuple[str, Callback, Callback | None]], backend
             log.warning("Hotkey skipped: %s", exc)
     if not parsed:
         return None
+    backend = None
     try:
         backend = (backend_factory or default_backend)()
         for combo, on_press, on_release in parsed:
@@ -340,6 +342,11 @@ def start_hotkeys(bindings: list[tuple[str, Callback, Callback | None]], backend
         backend.start()
         return backend
     except Exception as exc:  # noqa: BLE001  (no pynput, a blocked keyboard hook, a taken combo, no portal)
+        if backend is not None:
+            try:  # a half-started backend may hold a handler, a listener thread or a portal session
+                backend.stop()
+            except Exception:  # noqa: BLE001
+                pass
         why = " Wayland needs a desktop with the GlobalShortcuts portal (KDE, GNOME 48+)." if wayland() else ""
         log.warning("Hotkey unavailable (%s).%s Use the orb instead.", exc, why)
         return None

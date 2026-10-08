@@ -50,7 +50,11 @@ class Orb(QWidget):
         screen = QGuiApplication.primaryScreen().availableGeometry()
         self.move(screen.right() - self.SIZE - 18, screen.center().y())
         # Unplugging a monitor can leave the orb where no screen is; with no hotkey it is the only way in.
-        QGuiApplication.instance().screenRemoved.connect(lambda _s: QTimer.singleShot(0, self, self.rehome))
+        # A bound method, so Qt disconnects it when the orb goes away.
+        QGuiApplication.instance().screenRemoved.connect(self._screen_removed)
+
+    def _screen_removed(self, _screen) -> None:
+        QTimer.singleShot(0, self, self.rehome)  # after Qt has moved windows off the old screen
 
     def set_hotkeys(self, hotkey_text: str | None, voice_hotkey_text: str | None = None) -> None:
         tip = "Ask about what's on screen, by typing or by voice. It looks where your mouse last rested."

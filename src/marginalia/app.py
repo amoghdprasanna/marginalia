@@ -145,7 +145,8 @@ class Controller(QObject):
         self.settings_window: SettingsWindow | None = None
         self.setup_window: SetupWindow | None = None
         self.journal_window: JournalWindow | None = None
-        self.notice: Notice | None = None
+        self.notice: Notice | None = None  # the latest
+        self.notices: list[Notice] = []  # every one still open: Qt doesn't keep a window alive for us
         self.journal_request = 0
         self._show_hotkeys()
         self._show_voice_availability()
@@ -362,7 +363,9 @@ class Controller(QObject):
             self.open_url(QUrl(self.available_update.download_url()))
 
     def _notice(self, title: str, text: str, buttons) -> None:
+        self.notices = [n for n in self.notices if n.isVisible()]
         self.notice = Notice(title, text, buttons)
+        self.notices.append(self.notice)
         self.notice.open()
 
     # journal ----------------------------------------------------------------------------------

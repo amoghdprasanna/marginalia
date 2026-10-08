@@ -123,9 +123,12 @@ class HotkeyEdit(QLineEdit):
         self.clearFocus()
 
 
-def _locked(widget: QWidget, setting_env: str) -> None:
+CLI_FLAGS = {"hotkey_enabled": "--no-hotkey", "ocr_enabled": "--no-ocr", "voice_enabled": "--no-voice"}
+
+
+def _locked(widget: QWidget, why: str) -> None:
     widget.setEnabled(False)
-    widget.setToolTip(f"Set by {setting_env} in your environment or .env file; remove it there to edit here.")
+    widget.setToolTip(why)
 
 
 class SettingsWindow(QWidget):
@@ -274,10 +277,14 @@ class SettingsWindow(QWidget):
                 w.setText(str(value))
             w.setEnabled(True)
             w.setToolTip("")
-            if cfg.sources.get(key) == "env":
-                _locked(w, BY_KEY[key].env)
-                if key == "log_dir":
-                    self.browse_btn.setEnabled(False)
+            source = cfg.sources.get(key)
+            if source == "env":
+                env = BY_KEY[key].env
+                _locked(w, f"Set by {env} in your environment or .env file; remove it there to edit here.")
+            elif source == "command line":
+                _locked(w, f"Set by {CLI_FLAGS.get(key, 'a command-line switch')} for this run.")
+            if key == "log_dir" and not w.isEnabled():
+                self.browse_btn.setEnabled(False)
         self.key_edit.clear()
         self._show_key_status()
         self.error.hide()
@@ -339,13 +346,13 @@ class SettingsWindow(QWidget):
             self.error.setText(f"Could not save the key to the keychain: {self.keychain.problem}")
             self.error.show()
             return False
-        # Save what you changed, and keep what the file already had; never write env-pinned
-        # values, or removing the variable later would leave its value stuck in the file.
+        # Save what you changed, and keep what the file already had. Never write a value an
+        # environment variable or a command-line switch decided: it would outlive that override.
         stored = self.store.load()
         changed = {
             k: v
             for k, v in values.items()
-            if self.cfg.sources.get(k) != "env" and (k in stored or v != getattr(self.cfg, k))
+            if self.cfg.sources.get(k) not in ("env", "command line") and (k in stored or v != getattr(self.cfg, k))
         }
         try:
             self.store.save(changed)

@@ -147,3 +147,15 @@ def test_backspace_clears_and_escape_keeps(qtbot, edit):
     edit.setFocus()
     QTest.keyClick(edit, Qt.Key_Backspace)
     assert edit.value == ""
+
+
+def test_command_line_switches_are_locked_and_never_saved(qtbot, store, keychain):
+    """Bug: with --no-ocr, saving wrote ocr_enabled=False over the True already in the file."""
+    store.save({"ocr_enabled": True})
+    cfg = load_config(no_ocr=True, store=store, keychain=keychain)
+    w = SettingsWindow(cfg, store, keychain)
+    qtbot.addWidget(w)
+    assert not w.fields["ocr_enabled"].isEnabled() and "--no-ocr" in w.fields["ocr_enabled"].toolTip()
+    w.fields["effort"].setCurrentText("high")
+    w.save()
+    assert store.load()["ocr_enabled"] is True

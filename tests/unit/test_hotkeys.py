@@ -230,3 +230,24 @@ def test_carbon_registers_and_releases_a_real_hotkey(qapp):
     assert len(b._refs) == 1
     b.stop()
     assert b._refs == [] and b._handler_ref is None
+
+
+def test_a_backend_that_fails_to_start_is_stopped(monkeypatch):
+    """Bug: a half-started backend (handler installed, portal session open) was left running."""
+    monkeypatch.delenv("XDG_SESSION_TYPE", raising=False)
+    b = FakeBackend(OSError("taken"))
+    b.stopped = False
+    b.stop = lambda: setattr(b, "stopped", True)
+    assert start_hotkeys([("<ctrl>+<space>", print, None)], lambda: b) is None
+    assert b.stopped
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Carbon is macOS only")
+def test_carbon_skips_a_key_it_cannot_map_instead_of_failing_all(qapp, caplog):
+    """Bug: one shortcut on a key with no macOS key code (e.g. '!') cost every shortcut."""
+    b = hotkeys.CarbonBackend()
+    b.register(parse_combo("<ctrl>+<alt>+!"), print)
+    b.register(parse_combo("<ctrl>+<alt>+<shift>+<f11>"), print)
+    b.start()
+    assert len(b._refs) == 1 and "no macOS key code" in caplog.text
+    b.stop()
