@@ -8,14 +8,28 @@ from pathlib import Path
 from PIL import Image
 
 from .capture import Snapshot
+from .journal import INDEX, Entry
 
 
 class DoubtLog:
+    """Writes the journal: a dated Markdown page for you, and an index line for the journal browser."""
+
     def __init__(self, root: Path) -> None:
         self.dir = Path(root) / "doubts"
         self.cases_dir = Path(root) / "cases"
+        self.last_entry: Entry | None = None
 
-    def add(self, question: str, answer: str, screenshot: Image.Image, model: str) -> Path:
+    def add(
+        self,
+        question: str,
+        answer: str,
+        screenshot: Image.Image,
+        model: str,
+        *,
+        thread: str = "",
+        snap: Snapshot | None = None,
+        points: list[tuple[float, float, str]] = (),
+    ) -> Path:
         now = datetime.now()
         shots = self.dir / "shots"
         shots.mkdir(parents=True, exist_ok=True)
@@ -28,6 +42,21 @@ class DoubtLog:
             f.write(f"## {now:%H:%M}  {question}\n\n")
             f.write(f"![screen](shots/{stamp}.png)\n\n{answer}\n\n")
             f.write(f"<sub>{model}</sub>\n\n---\n\n")
+        entry = Entry(
+            id=stamp,
+            time=now.isoformat(),
+            question=question,
+            answer=answer,
+            model=model,
+            shot=f"shots/{stamp}.png",
+            thread=thread,
+            screen=list(snap.screen_geo) if snap else None,
+            cursor=list(snap.cursor) if snap else None,
+            points=[[round(x, 1), round(y, 1), label] for x, y, label in points],
+        )
+        with (self.dir / INDEX).open("a", encoding="utf-8") as f:
+            f.write(entry.to_json() + "\n")
+        self.last_entry = entry
         return page
 
     def save_case(

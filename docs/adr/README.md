@@ -27,3 +27,4 @@ supersedes it, so the history of *why* survives.
 | [0016](0016-api-key-in-keychain.md) | The API key lives in the OS credential store | Accepted |
 | [0017](0017-native-hotkeys-hold-to-talk.md) | Native hotkeys on macOS, and a hold-to-talk voice key | Accepted |
 | [0018](0018-setup-check.md) | A setup check with fix-it buttons | Accepted |
+| [0019](0019-journal-index-and-browser.md) | A journal index, and a browser that reopens threads | Accepted |

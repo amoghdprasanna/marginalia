@@ -27,6 +27,7 @@ class Orb(QWidget):
     quit_requested = Signal()
     settings_requested = Signal()
     setup_requested = Signal()
+    journal_requested = Signal()
     SIZE = 48
 
     def __init__(self, hotkey_text: str | None, voice_hotkey_text: str | None = None) -> None:
@@ -111,6 +112,7 @@ class Orb(QWidget):
         menu.addAction("Ask by typing", self.type_requested.emit)
         menu.addAction("Ask by voice", self.voice_requested.emit)
         menu.addSeparator()
+        menu.addAction("Journal…", self.journal_requested.emit)
         menu.addAction("Settings…", self.settings_requested.emit)
         menu.addAction("Setup check…", self.setup_requested.emit)
         menu.addSeparator()

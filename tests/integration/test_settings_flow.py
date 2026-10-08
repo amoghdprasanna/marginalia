@@ -167,3 +167,49 @@ def test_orb_menu_has_the_setup_check(qtbot, cfg):
     actions["Setup check…"].trigger()
     qtbot.addWidget(c.setup_window)
     assert c.setup_window.isVisible()
+
+
+# the journal -----------------------------------------------------------------------------------
+
+
+def test_a_follow_up_in_the_journal_asks_about_the_saved_screen(qtbot, cfg):
+    from helpers import ask_typed
+
+    brain = FakeBrain(text="first answer", partials=["fir", "first answer"])
+    c = build(qtbot, cfg, brain=brain)
+    ask_typed(qtbot, c, "what is d?")
+    c.bubble.dismiss()
+    c.open_journal()
+    w = c.journal_window
+    qtbot.addWidget(w)
+    brain.text = "the saved screen says 3"
+    w.ask.setText("and here?")
+    w._send()
+    question, history = brain.asked[-1]
+    assert question == "and here?" and history == [("what is d?", "first answer")]
+    assert [e.question for e in w.thread.entries] == ["what is d?", "and here?"]
+    assert "the saved screen says 3" in w.body.toPlainText()
+    assert w.ask.text() == "" and w.ask.isEnabled()
+
+
+def test_journal_errors_show_in_the_window(qtbot, cfg):
+    from helpers import ask_typed
+
+    from marginalia.brain import BrainError
+
+    brain = FakeBrain()
+    c = build(qtbot, cfg, brain=brain)
+    ask_typed(qtbot, c, "q")
+    c.open_journal()
+    qtbot.addWidget(c.journal_window)
+    brain.error = BrainError("Rate limited by the API.")
+    c.ask_journal(c.journal_window.thread.id, "again?")
+    assert c.journal_window.status.text() == "Rate limited by the API."
+
+
+def test_orb_menu_opens_the_journal(qtbot, cfg):
+    c = build(qtbot, cfg)
+    actions = {a.text(): a for a in c.orb.build_menu().actions() if a.text()}
+    actions["Journal…"].trigger()
+    qtbot.addWidget(c.journal_window)
+    assert c.journal_window.isVisible()

@@ -260,3 +260,16 @@ def test_capture_failure_is_explained_on_the_screen_you_asked_about(qtbot, cfg):
     here = c.orb.screen().geometry()
     assert here.contains(c.bubble.frameGeometry().center())
     assert c.snapshot is None, "a failed capture must not leave the old screenshot to ask about"
+
+
+def test_answers_in_one_thread_share_a_journal_thread(qtbot, cfg):
+    from marginalia.journal import Journal
+
+    c = build(qtbot, cfg)
+    ask_typed(qtbot, c, "q1")
+    c._followup("q2")
+    qtbot.waitUntil(lambda: len(Journal(cfg.log_dir).entries()) == 2)
+    c.bubble.dismiss()
+    ask_typed(qtbot, c, "fresh")
+    threads = Journal(cfg.log_dir).threads()
+    assert [[e.question for e in t.entries] for t in threads] == [["fresh"], ["q1", "q2"]]

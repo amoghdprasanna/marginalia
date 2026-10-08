@@ -8,6 +8,7 @@ Widgets only draw and emit signals; the controller in app.py decides what happen
 from .askbox import AskBox
 from .bubble import AnswerBubble
 from .chooser import ModeChooser
+from .journal import JournalWindow
 from .listen import ListenBox
 from .orb import Orb
 from .overlay import PointerOverlay
@@ -18,6 +19,7 @@ from .setup import SetupWindow
 __all__ = [
     "AnswerBubble",
     "AskBox",
+    "JournalWindow",
     "ListenBox",
     "ModeChooser",
     "Orb",

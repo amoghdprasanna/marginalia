@@ -22,12 +22,23 @@ from .config import Config, SettingsStore, load_config
 from .cursor import RestTracker
 from .doubtlog import DoubtLog
 from .hotkeys import format_combo, start_hotkeys
+from .journal import Journal
 from .logs import setup_logging
 from .ocr import OCR
 from .permissions import Fixer, default_probes, host_app, needs_attention, run_checks
 from .pointing import place_box, resolve_points
 from .secrets import Keychain
-from .ui import AnswerBubble, AskBox, ListenBox, ModeChooser, Orb, PointerOverlay, SettingsWindow, SetupWindow
+from .ui import (
+    AnswerBubble,
+    AskBox,
+    JournalWindow,
+    ListenBox,
+    ModeChooser,
+    Orb,
+    PointerOverlay,
+    SettingsWindow,
+    SetupWindow,
+)
 from .voice import Recorder, Transcriber
 
 log = logging.getLogger(__name__)
@@ -50,6 +61,8 @@ class Bus(QObject):
     answer_ready = Signal(object)
     answer_partial = Signal(object)
     transcript_ready = Signal(object)
+    journal_partial = Signal(object)
+    journal_ready = Signal(object)
 
 
 def make_brain(cfg: Config):
@@ -119,6 +132,8 @@ class Controller(QObject):
         self.listenbox = ListenBox()
         self.settings_window: SettingsWindow | None = None
         self.setup_window: SetupWindow | None = None
+        self.journal_window: JournalWindow | None = None
+        self.journal_request = 0
         self._show_hotkeys()
         self._show_voice_availability()
         self.listen_id = 0
@@ -127,6 +142,7 @@ class Controller(QObject):
         self.snapshot: Snapshot | None = None
         self.ocr_future = None
         self.history: list[tuple[str, str]] = []
+        self.thread_id = ""  # journal id of this thread's first answer; "" until it has one
         self.request_id = 0
         self._capturing = False
         # Streamed text arrives faster than it is worth redrawing; keep the newest, draw on a timer.
@@ -160,6 +176,9 @@ class Controller(QObject):
         self.orb.quit_requested.connect(QApplication.quit)
         self.orb.settings_requested.connect(self.open_settings)
         self.orb.setup_requested.connect(self.open_setup)
+        self.orb.journal_requested.connect(self.open_journal)
+        self.bus.journal_partial.connect(self._on_journal_partial)
+        self.bus.journal_ready.connect(self._on_journal_answer)
         self.bus.hotkey.connect(lambda: self.start_ask(at_cursor=True))
         self.bus.voice_down.connect(self._voice_key_down)
         self.bus.voice_up.connect(self._voice_key_up)
@@ -245,6 +264,69 @@ class Controller(QObject):
         if self.setup_window is not None and self.setup_window.isVisible():
             self.setup_window.show_checks(self.setup_checks(), host_app())
 
+    # journal ----------------------------------------------------------------------------------
+
+    def open_journal(self) -> None:
+        if self.journal_window is None:
+            self.journal_window = JournalWindow(Journal(self.cfg.log_dir))
+            self.journal_window.followup.connect(self.ask_journal)
+        self.journal_window.open()
+
+    def ask_journal(self, thread_id: str, question: str) -> None:
+        """A follow-up in a reopened thread, about the screenshot saved with it."""
+        w = self.journal_window
+        thread = next((t for t in w.journal.threads() if t.id == thread_id), None)
+        snap = w.journal.snapshot(thread.last) if thread else None
+        if snap is None:
+            return w.show_error("That screenshot is gone, so there is nothing to ask about.")
+        self.journal_request += 1
+        jid = self.journal_request
+        history = thread.history(HISTORY_TURNS)
+        w.show_thinking(question)
+
+        def on_text(text: str) -> None:  # worker thread
+            if jid != self.journal_request:
+                raise Cancelled
+            self.bus.journal_partial.emit((jid, question, text))
+
+        def work():
+            lines = []
+            if self.ocr is not None and self.ocr.available:
+                try:
+                    lines = self.ocr.read(snap.image)
+                except Exception:  # noqa: BLE001
+                    lines = []
+            prep = prepare(snap, hires=self.cfg.hires)
+            return prep, lines, self.brain.ask(prep, lines, question, history, on_text=on_text)
+
+        future = self.pool.submit(work)
+        future.add_done_callback(lambda f: self.bus.journal_ready.emit((jid, thread_id, question, snap, f)))
+
+    def _on_journal_partial(self, payload) -> None:
+        jid, question, text = payload
+        if jid == self.journal_request and self.journal_window is not None:
+            self.journal_window.show_partial(question, text)
+
+    def _on_journal_answer(self, payload) -> None:
+        jid, thread_id, question, snap, future = payload
+        w = self.journal_window
+        if jid != self.journal_request or w is None:
+            return
+        try:
+            prep, lines, answer = future.result()
+        except BrainError as exc:
+            return w.show_error(str(exc))
+        except Exception as exc:  # noqa: BLE001
+            log.exception("Unexpected error while answering from the journal")
+            return w.show_error(f"Something went wrong: {exc!r}")
+        targets = resolve_points(prep, snap, lines, answer.points)
+        try:
+            self.log.add(question, answer.text, prep.full, answer.model, thread=thread_id, snap=snap, points=targets)
+        except OSError as exc:
+            log.error("Could not write the journal: %s", exc)
+            return w.show_error(f"Answered, but could not save it: {exc}")
+        w.show_answer(self.log.last_entry)
+
     # setup check ------------------------------------------------------------------------------
 
     def setup_checks(self):
@@ -305,6 +387,9 @@ class Controller(QObject):
                 self.pool.submit(self._warm_voice)
         if "log_dir" in changed:
             self.log = DoubtLog(new.log_dir)
+            if self.journal_window is not None:
+                self.journal_window.journal = Journal(new.log_dir)
+                self.journal_window.thread = None
         if changed & {"log_dir", "log_level"}:
             setup_logging(new.log_dir, new.log_level.upper())
         if changed & HOTKEY_KEYS or self.hotkey is None:
@@ -545,7 +630,11 @@ class Controller(QObject):
 
         self.history = (self.history + [(question, answer.text)])[-HISTORY_TURNS:]
         try:
-            self.log.add(question, answer.text, prep.full, answer.model)
+            self.log.add(
+                question, answer.text, prep.full, answer.model, thread=self.thread_id, snap=snap, points=targets
+            )
+            if not self.thread_id and self.log.last_entry is not None:
+                self.thread_id = self.log.last_entry.id
         except OSError as exc:
             log.error("Could not write the journal: %s", exc)
         if self.cfg.save_cases:
@@ -563,6 +652,7 @@ class Controller(QObject):
         self.request_id += 1
         self._drop_partial()
         self.history.clear()
+        self.thread_id = ""
         self.overlay.clear()
         self.orb.set_busy(False)
 
