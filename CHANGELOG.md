@@ -22,6 +22,14 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 - Windows: the setup check reads microphone consent; the app has its own taskbar icon.
 
 ### Changed
+- Errors offer their fix as a button (Try again, Open Settings, Open setup check) and are worded
+  in plain language; they look different from answers.
+- The answer footer says how long it took; technical details moved to its tooltip. "Show again"
+  brings the markers back. While working, the bubble shows a Stop button and the seconds.
+- Journal and Settings are in the orb's chooser, which also shows your shortcuts.
+- Settings uses plain names for models and thinking depth, explains settings that need it, tucks
+  advanced ones away, enables Save only when something changed, and fits small screens.
+- The setup window says when you're ready and shows how to ask.
 - macOS shortcuts use the system hotkey API: no Accessibility permission, and no crash from
   keyboard input sources being read off the main thread.
 

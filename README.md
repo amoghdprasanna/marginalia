@@ -110,6 +110,8 @@ pytest --cov=marginalia              # with coverage
 ruff check .                         # lint
 ```
 
+- **Design:** [`docs/design.md`](docs/design.md) lists the interface principles every UI change
+  is checked against.
 - **Architecture:** [`docs/architecture.md`](docs/architecture.md) explains the layers, the three
   coordinate spaces and the threading rules. Each design choice has a short record in
   [`docs/adr/`](docs/adr/) with the alternatives that were turned down.

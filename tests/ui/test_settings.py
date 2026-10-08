@@ -210,3 +210,11 @@ def test_checked_boxes_show_a_tick():
     from marginalia.ui.theme import CHECK_ICON, DIALOG_STYLE
 
     assert Path(CHECK_ICON).exists() and CHECK_ICON in DIALOG_STYLE
+
+
+def test_keyboard_focus_stays_visible():
+    """Custom styles drop the native focus ring; ours must put one back for keyboard users."""
+    from marginalia.ui.theme import DIALOG_STYLE
+
+    assert "QPushButton:focus" in DIALOG_STYLE and "QCheckBox:focus" in DIALOG_STYLE
+    assert "QLineEdit:focus" in DIALOG_STYLE

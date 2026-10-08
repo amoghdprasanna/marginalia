@@ -37,10 +37,13 @@ QComboBox QAbstractItemView {{ background: {SLATE_HEX}; selection-background-col
 QPushButton {{ background: rgba(255,255,255,16); border: 1px solid rgba(255,255,255,30); border-radius: 7px;
     padding: 6px 14px; }}
 QPushButton:hover {{ border-color: {AMBER_HEX}; }}
+QPushButton:focus {{ border: 2px solid {AMBER_HEX}; }}
+QCheckBox:focus {{ color: {AMBER_HEX}; }}
 QPushButton:disabled {{ color: {MUTED_HEX}; }}
 QPushButton:default:disabled, QPushButton#primary:disabled {{ background: rgba(255,178,36,70); color: {SLATE_HEX}; }}
 QPushButton#link {{ background: transparent; border: none; color: {AMBER_HEX}; padding: 2px 0; }}
 QPushButton#link:hover {{ text-decoration: underline; }}
+QPushButton#primary:focus {{ border: 2px solid {TEXT_HEX}; }}
 QPushButton#primary {{ background: {AMBER_HEX}; color: {SLATE_HEX}; border: none; font-weight: 600; }}
 QLabel#muted {{ color: {MUTED_HEX}; font-size: 12px; }}
 QLabel#error {{ color: {ERROR_HEX}; }}
