@@ -35,8 +35,8 @@ def test_a_little_hand_shake_is_still_a_click(qtbot, orb):
 def test_dragging_moves_the_orb_and_does_not_ask(qtbot, orb):
     start = orb.pos()
     with qtbot.assertNotEmitted(orb.clicked):
-        drag(orb, QPoint(40, 30))
-    assert orb.pos() == start + QPoint(40, 30)
+        drag(orb, QPoint(-40, 30))
+    assert orb.pos() == start + QPoint(-40, 30)
 
 
 def test_spins_while_busy_and_rests_after(qtbot, orb):
@@ -62,3 +62,17 @@ def test_tooltip_mentions_the_shortcut_only_when_there_is_one(qtbot):
     qtbot.addWidget(without)
     assert "Ctrl+Alt+Space" in with_key.toolTip()
     assert "Shortcut" not in without.toolTip()
+
+
+def test_an_orb_dragged_off_the_screen_comes_back(qtbot, orb):
+    """Bug: the orb could be dropped past the screen edge, and with no hotkey the app was unreachable."""
+    area = orb.screen().availableGeometry()
+    drag(orb, QPoint(area.width() * 3, area.height() * 3))
+    assert area.contains(orb.frameGeometry())
+
+
+def test_an_orb_on_a_screen_that_went_away_comes_back(qtbot, orb):
+    area = orb.screen().availableGeometry()
+    orb.move(area.right() + 5000, area.top())  # where an unplugged monitor used to be
+    orb.rehome()
+    assert area.contains(orb.frameGeometry())

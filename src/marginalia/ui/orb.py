@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..pointing import keep_on_screen
 from .paint import draw_qubit
 from .theme import (
     EDGE,
@@ -45,6 +46,16 @@ class Orb(QWidget):
         self._spin.timeout.connect(self._advance)
         screen = QGuiApplication.primaryScreen().availableGeometry()
         self.move(screen.right() - self.SIZE - 18, screen.center().y())
+        # Unplugging a monitor can leave the orb where no screen is; with no hotkey it is the only way in.
+        QGuiApplication.instance().screenRemoved.connect(lambda _s: QTimer.singleShot(0, self, self.rehome))
+
+    def rehome(self) -> None:
+        """Pull the orb wholly onto the nearest screen if any of it hangs off."""
+        areas = [s.availableGeometry() for s in QGuiApplication.screens()]
+        x, y = keep_on_screen(
+            (self.x(), self.y()), (self.width(), self.height()), [(a.x(), a.y(), a.width(), a.height()) for a in areas]
+        )
+        self.move(x, y)
 
     def set_busy(self, busy: bool) -> None:
         if busy:
@@ -84,6 +95,8 @@ class Orb(QWidget):
     def mouseReleaseEvent(self, e) -> None:  # noqa: N802
         if e.button() == Qt.LeftButton and self._press is not None and not self._dragging:
             self.clicked.emit()
+        if self._dragging:
+            self.rehome()
         self._press = None
 
     def build_menu(self) -> QMenu:

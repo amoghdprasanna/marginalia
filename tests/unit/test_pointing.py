@@ -6,7 +6,7 @@ from helpers import make_snapshot
 from marginalia.brain import Point
 from marginalia.capture import prepare
 from marginalia.ocr import TextLine
-from marginalia.pointing import MERGE_RADIUS, place_box, resolve_points
+from marginalia.pointing import MERGE_RADIUS, keep_on_screen, place_box, resolve_points
 
 
 @pytest.fixture
@@ -98,3 +98,13 @@ def test_box_avoids_a_target_when_there_is_room():
     target = (cursor[0] + 200, cursor[1] + 120)  # where the default spot would put the box
     x, y = place_box(size, SCREEN, cursor, [target])
     assert not inside((x, y), size, target)
+
+
+def test_keep_on_screen_leaves_a_visible_box_alone():
+    assert keep_on_screen((100, 100), (48, 48), [(0, 0, 1440, 900)]) == (100, 100)
+
+
+def test_keep_on_screen_pulls_a_box_back_onto_the_nearest_screen():
+    screens = [(0, 0, 1440, 900), (1440, 0, 1920, 1080)]
+    assert keep_on_screen((5000, 40), (48, 48), screens) == (1440 + 1920 - 48, 40)
+    assert keep_on_screen((-300, -300), (48, 48), screens) == (0, 0)

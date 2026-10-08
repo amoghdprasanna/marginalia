@@ -71,3 +71,19 @@ def place_box(
         if score > best_score:
             best, best_score = (int(x), int(y)), score
     return best
+
+
+def keep_on_screen(
+    pos: tuple[int, int], size: tuple[int, int], screens: list[tuple[int, int, int, int]]
+) -> tuple[int, int]:
+    """Move a w x h box at `pos` the least distance that puts it wholly on one of the screens."""
+    x, y = pos
+    w, h = size
+    best, best_d = (x, y), float("inf")
+    for sx, sy, sw, sh in screens:
+        cx = min(max(x, sx), sx + sw - w)
+        cy = min(max(y, sy), sy + sh - h)
+        d = (cx - x) ** 2 + (cy - y) ** 2
+        if d < best_d:
+            best, best_d = (cx, cy), d
+    return best
