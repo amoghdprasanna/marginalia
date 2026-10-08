@@ -28,6 +28,8 @@ class Orb(QWidget):
     settings_requested = Signal()
     setup_requested = Signal()
     journal_requested = Signal()
+    update_requested = Signal()
+    check_updates_requested = Signal()
     SIZE = 48
 
     def __init__(self, hotkey_text: str | None, voice_hotkey_text: str | None = None) -> None:
@@ -38,6 +40,7 @@ class Orb(QWidget):
         self.setFixedSize(self.SIZE, self.SIZE)
         self.setCursor(Qt.PointingHandCursor)
         self.set_hotkeys(hotkey_text, voice_hotkey_text)
+        self.update_version: str | None = None
         self._press: QPoint | None = None
         self._dragging = False
         self.phase = 0.9
@@ -56,6 +59,10 @@ class Orb(QWidget):
         if voice_hotkey_text:
             tip += f"\nHold {voice_hotkey_text} and speak; let go to ask."
         self.setToolTip(tip + "\nDrag to move, right-click for settings and more.")
+
+    def set_update(self, version: str | None) -> None:
+        """A newer release exists: the menu offers it."""
+        self.update_version = version
 
     def rehome(self) -> None:
         """Pull the orb wholly onto the nearest screen if any of it hangs off."""
@@ -115,6 +122,10 @@ class Orb(QWidget):
         menu.addAction("Journal…", self.journal_requested.emit)
         menu.addAction("Settings…", self.settings_requested.emit)
         menu.addAction("Setup check…", self.setup_requested.emit)
+        if self.update_version:
+            menu.addAction(f"Update to {self.update_version}…", self.update_requested.emit)
+        else:
+            menu.addAction("Check for updates", self.check_updates_requested.emit)
         menu.addSeparator()
         menu.addAction("Quit Marginalia", self.quit_requested.emit)
         return menu

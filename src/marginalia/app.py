@@ -10,15 +10,17 @@ import time
 from collections.abc import Callable
 from concurrent.futures import Executor, ThreadPoolExecutor
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from PySide6.QtCore import QObject, QPoint, QProcess, QRect, QTimer, QUrl, Signal
 from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QApplication
 
+from . import __version__
 from .brain import BrainError, Cancelled, ClaudeBrain, DemoBrain
 from .capture import Snapshot, grab_screen, prepare
-from .config import Config, SettingsStore, load_config
+from .config import Config, SettingsStore, load_config, settings_path
 from .crash import CrashReporter, issue_url
 from .cursor import RestTracker
 from .doubtlog import DoubtLog
@@ -41,6 +43,7 @@ from .ui import (
     SettingsWindow,
     SetupWindow,
 )
+from .updates import Release, due, fetch_latest, is_newer
 from .voice import Recorder, Transcriber
 
 log = logging.getLogger(__name__)
@@ -63,6 +66,7 @@ class Bus(QObject):
     answer_ready = Signal(object)
     answer_partial = Signal(object)
     transcript_ready = Signal(object)
+    update_ready = Signal(object)
     journal_partial = Signal(object)
     journal_ready = Signal(object)
 
@@ -103,6 +107,9 @@ class Services:
     keychain: Keychain = field(default_factory=Keychain)
     factories: Factories = field(default_factory=Factories)
     probes: Any = field(default_factory=default_probes)
+    # App bookkeeping (when updates were last checked...), kept apart from your settings.
+    state: SettingsStore = field(default_factory=lambda: SettingsStore(settings_path().with_name("state.json")))
+    fetch_release: Callable[[], Release | None] = fetch_latest
 
 
 def default_services(cfg: Config) -> Services:
@@ -125,6 +132,8 @@ class Controller(QObject):
         self.brain, self.ocr, self.log, self.pool = sv.brain, sv.ocr, sv.log, sv.pool
         self.transcriber, self.recorder, self.grab = sv.transcriber, sv.recorder, sv.grab
         self.store, self.keychain, self.factories, self.probes = sv.store, sv.keychain, sv.factories, sv.probes
+        self.state, self.fetch_release = sv.state, sv.fetch_release
+        self.available_update: Release | None = None
 
         self.orb = Orb(None)
         self.askbox = AskBox()
@@ -180,6 +189,9 @@ class Controller(QObject):
         self.orb.settings_requested.connect(self.open_settings)
         self.orb.setup_requested.connect(self.open_setup)
         self.orb.journal_requested.connect(self.open_journal)
+        self.orb.update_requested.connect(self.download_update)
+        self.orb.check_updates_requested.connect(lambda: self.check_for_updates(force=True))
+        self.bus.update_ready.connect(self._on_update_checked)
         self.bus.journal_partial.connect(self._on_journal_partial)
         self.bus.journal_ready.connect(self._on_journal_answer)
         self.bus.hotkey.connect(lambda: self.start_ask(at_cursor=True))
@@ -291,7 +303,7 @@ class Controller(QObject):
             handled()
 
         more = f" It happened {len(pending)} times; this is the latest." if len(pending) > 1 else ""
-        self.notice = Notice(
+        self._notice(
             "Marginalia hit an error last time",
             f"{report.get('type')}: {report.get('message')}{more}\n\n"
             "Reporting opens a GitHub issue with the error and recent log lines (no questions or answers), "
@@ -302,6 +314,54 @@ class Controller(QObject):
                 ("Report…", send),
             ],
         )
+
+    # updates ----------------------------------------------------------------------------------
+
+    def check_for_updates(self, force: bool = False) -> None:
+        """Once a day (or now, from the menu), ask GitHub for the latest release (ADR 0021)."""
+        if not force and not (self.cfg.check_updates and due(self.state.load().get("update_checked_at"))):
+            return
+        future = self.pool.submit(self.fetch_release)
+        future.add_done_callback(lambda f: self.bus.update_ready.emit((force, f)))
+
+    def _on_update_checked(self, payload) -> None:
+        force, future = payload
+        try:
+            release = future.result()
+        except Exception:  # noqa: BLE001
+            release = None
+        state = self.state.load()
+        try:
+            self.state.save({"update_checked_at": datetime.now().isoformat(timespec="seconds")})
+        except OSError as exc:
+            log.debug("Could not save app state: %s", exc)
+        if release is None or not is_newer(release.version):
+            if force:
+                text = "You have the latest version." if release else "Couldn't reach GitHub to check."
+                self._notice(f"Marginalia {__version__}", text, [("OK", None)])
+            return
+        self.available_update = release
+        self.orb.set_update(release.version)
+        log.info("Marginalia %s is available (you have %s)", release.version, __version__)
+        if force or state.get("update_notified") != release.version:
+            try:
+                self.state.save({"update_notified": release.version})
+            except OSError:
+                pass
+            notes = release.notes.strip()
+            notes = (notes[:400] + "…") if len(notes) > 400 else notes
+            self._notice(
+                f"Marginalia {release.version} is available",
+                f"You have {__version__}.\n\n{notes}".strip(),
+                [("Later", None), ("Download…", self.download_update)],
+            )
+
+    def download_update(self) -> None:
+        if self.available_update is not None:
+            self.open_url(QUrl(self.available_update.download_url()))
+
+    def _notice(self, title: str, text: str, buttons) -> None:
+        self.notice = Notice(title, text, buttons)
         self.notice.open()
 
     # journal ----------------------------------------------------------------------------------
@@ -768,6 +828,7 @@ def main(argv: list[str] | None = None) -> None:
     controller.start()
     controller.maybe_show_setup()
     controller.offer_crash_reports(reporter)
+    controller.check_for_updates()
     # Workers may still be downloading the speech model or waiting on an abandoned answer; nothing
     # they hold needs saving (the journal is written on this thread), so don't wait for them.
     hard_exit(app.exec())

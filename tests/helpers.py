@@ -258,6 +258,8 @@ def build(
         # A settings change rebuilds services: by default with the same fakes.
         factories=factories or Factories(brain=lambda c: brain, ocr=lambda c: ocr, transcriber=lambda c: None),
         probes=probes or FakeProbes(),
+        state=SettingsStore(cfg.log_dir / "state.json"),
+        fetch_release=lambda: None,
     )
     c = Controller(cfg, services)
     for w in (c.orb, c.askbox, c.bubble, c.overlay, c.chooser, c.listenbox):

@@ -184,6 +184,9 @@ def fake_main(monkeypatch, qapp, tmp_path):
         def offer_crash_reports(self, reporter):
             self.reporter = reporter
 
+        def check_for_updates(self):
+            self.update_checked = True
+
     class FakeReporter:
         def __init__(self, log_dir):
             self.installed = self.collected = False
@@ -309,3 +312,65 @@ def test_not_now_also_stops_asking(qtbot, cfg, crashed):
     qtbot.addWidget(c.notice)
     c.notice.buttons["Not now"].click()
     assert crashed.pending() == [] and not c.notice.isVisible()
+
+
+# updates ---------------------------------------------------------------------------------------
+
+
+def with_release(c, version="9.9.9"):
+    from marginalia.updates import Release
+
+    c.fetch_release = lambda: Release(version, "https://github.com/o/r/releases/tag/v" + version, "Notes.", {})
+
+
+def test_a_newer_release_is_announced_once_and_stays_in_the_menu(qtbot, cfg):
+    c = build(qtbot, cfg)
+    with_release(c)
+    c.check_for_updates()
+    qtbot.addWidget(c.notice)
+    assert c.notice.heading.text() == "Marginalia 9.9.9 is available"
+    labels = [a.text() for a in c.orb.build_menu().actions()]
+    assert "Update to 9.9.9…" in labels
+    c.notice.close()
+    c.notice = None
+    c.state.save({"update_checked_at": "2000-01-01T00:00:00"})
+    c.check_for_updates()
+    assert c.notice is None, "the same version is announced once"
+
+
+def test_checks_at_most_daily_and_never_when_off(qtbot, cfg):
+    calls = []
+    c = build(qtbot, cfg)
+    c.fetch_release = lambda: calls.append(1)
+    c.check_for_updates()
+    c.check_for_updates()
+    assert calls == [1]
+    cfg.check_updates = False
+    c.state.save({"update_checked_at": "2000-01-01T00:00:00"})
+    c.check_for_updates()
+    assert calls == [1]
+
+
+def test_an_update_check_does_not_end_the_first_run(qtbot, cfg):
+    c = build(qtbot, cfg)
+    c.check_for_updates()
+    assert c.store.first_run(), "bookkeeping lives in state.json, not the settings file"
+
+
+def test_checking_by_hand_says_when_up_to_date(qtbot, cfg):
+    c = build(qtbot, cfg)
+    with_release(c, "0.0.1")
+    c.orb.check_updates_requested.emit()
+    qtbot.addWidget(c.notice)
+    assert "latest version" in c.notice.text.text()
+
+
+def test_download_opens_the_release(qtbot, cfg, monkeypatch):
+    opened = []
+    c = build(qtbot, cfg)
+    monkeypatch.setattr(c, "open_url", lambda url: opened.append(url.toString()))
+    with_release(c)
+    c.check_for_updates()
+    qtbot.addWidget(c.notice)
+    c.notice.buttons["Download…"].click()
+    assert opened == ["https://github.com/o/r/releases/tag/v9.9.9"]

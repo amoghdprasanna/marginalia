@@ -17,7 +17,7 @@ class Notice(QWidget):
         self.setWindowTitle("Marginalia")
         self.setStyleSheet(DIALOG_STYLE)
         self.setFixedWidth(460)
-        heading = QLabel(title)
+        self.heading = heading = QLabel(title)
         heading.setStyleSheet("font-size: 15px; font-weight: 600;")
         heading.setWordWrap(True)
         self.text = QLabel(text)

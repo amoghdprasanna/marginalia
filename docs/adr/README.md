@@ -29,3 +29,4 @@ supersedes it, so the history of *why* survives.
 | [0018](0018-setup-check.md) | A setup check with fix-it buttons | Accepted |
 | [0019](0019-journal-index-and-browser.md) | A journal index, and a browser that reopens threads | Accepted |
 | [0020](0020-local-crash-reports-opt-in-sending.md) | Crash reports: always local, sent only through an issue you review | Accepted |
+| [0021](0021-update-check.md) | Updates: a daily check that tells you, not a self-installer (yet) | Accepted |
