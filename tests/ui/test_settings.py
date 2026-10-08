@@ -30,14 +30,14 @@ def window(qtbot, store, keychain):
 
 
 def test_shows_the_current_values(window):
-    assert window.fields["model"].currentText() == "claude-opus-5-5"
-    assert window.fields["effort"].currentText() == "medium"
+    assert window.values()["model"] == "claude-opus-5-5" and "Opus 5.5" in window.fields["model"].currentText()
+    assert window.values()["effort"] == "medium" and window.fields["effort"].currentText().startswith("Balanced")
     assert window.fields["hotkey"].value == "<ctrl>+<alt>+<space>"
     assert window.fields["ocr_enabled"].isChecked()
 
 
 def test_saving_writes_only_what_changed(qtbot, window, store):
-    window.fields["effort"].setCurrentText("low")
+    window.set_value("effort", "low")
     window.fields["ocr_enabled"].setChecked(False)
     with qtbot.waitSignal(window.saved):
         assert window.save()
@@ -90,7 +90,7 @@ def test_two_identical_shortcuts_are_refused(window, store):
 def test_an_unwritable_settings_file_is_reported(window, store, tmp_path):
     store.path = tmp_path / "blocker" / "settings.json"
     (tmp_path / "blocker").write_text("a file where the folder should be")
-    window.fields["effort"].setCurrentText("high")
+    window.set_value("effort", "high")
     assert not window.save()
     assert "Could not save settings" in window.error.text()
 
@@ -156,6 +156,57 @@ def test_command_line_switches_are_locked_and_never_saved(qtbot, store, keychain
     w = SettingsWindow(cfg, store, keychain)
     qtbot.addWidget(w)
     assert not w.fields["ocr_enabled"].isEnabled() and "--no-ocr" in w.fields["ocr_enabled"].toolTip()
-    w.fields["effort"].setCurrentText("high")
+    w.set_value("effort", "high")
     w.save()
     assert store.load()["ocr_enabled"] is True
+
+
+# making it easy ----------------------------------------------------------------------------------
+
+
+def test_save_is_enabled_only_when_something_changed(window):
+    assert not window.save_btn.isEnabled()
+    window.set_value("effort", "high")
+    assert window.save_btn.isEnabled()
+    window.set_value("effort", "medium")
+    assert not window.save_btn.isEnabled(), "changing it back means nothing to save"
+    window.key_edit.setText("sk-ant-new")
+    assert window.save_btn.isEnabled()
+
+
+def test_advanced_settings_are_tucked_away(window):
+    assert not window.advanced.isVisibleTo(window)
+    window.advanced_toggle.click()
+    assert window.advanced.isVisibleTo(window) and window.advanced_toggle.text().startswith("Hide")
+
+
+def test_a_model_set_elsewhere_is_shown_and_kept(qtbot, store, keychain):
+    store.save({"model": "claude-opus-4-8"})
+    w = SettingsWindow(load_config(store=store, keychain=keychain), store, keychain)
+    qtbot.addWidget(w)
+    assert w.values()["model"] == "claude-opus-4-8" and not w.dirty()
+
+
+def test_escape_closes(qtbot, window):
+    window.show()
+    with qtbot.waitSignal(window.closed):
+        QTest.keyClick(window, Qt.Key_Escape)
+
+
+def test_no_key_yet_links_to_where_you_get_one(window):
+    assert "console.anthropic.com" in window.key_status.text()
+
+
+def test_the_window_fits_the_screen_without_clipping(qtbot, window):
+    window.open(window.cfg)
+    window.advanced_toggle.click()
+    assert window.height() <= window.screen().availableGeometry().height()
+    assert window._content.minimumSizeHint().width() <= window.scroll.viewport().width(), "nothing cut off on the right"
+
+
+def test_checked_boxes_show_a_tick():
+    from pathlib import Path
+
+    from marginalia.ui.theme import CHECK_ICON, DIALOG_STYLE
+
+    assert Path(CHECK_ICON).exists() and CHECK_ICON in DIALOG_STYLE

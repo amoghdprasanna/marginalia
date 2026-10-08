@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -22,17 +22,16 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
-from ..config import BY_KEY, EFFORTS, LOG_LEVELS, WHISPER_MODELS, Config, SettingsStore
+from ..config import BY_KEY, LOG_LEVELS, WHISPER_MODELS, Config, SettingsStore
 from ..hotkeys import Combo, format_combo, parse_combo, to_text
 from ..secrets import Keychain, mask
 from .theme import DIALOG_STYLE, bring_to_front
-
-MODELS = ("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1")
 
 # Qt key -> our key name, for keys whose name isn't their ASCII character.
 _QT_KEYS = {
@@ -131,6 +130,24 @@ def _locked(widget: QWidget, why: str) -> None:
     widget.setToolTip(why)
 
 
+# Names people recognise, and what each choice trades (docs/design.md: speak the user's language).
+MODEL_CHOICES = (
+    ("claude-opus-5-5", "Claude Opus 5.5", "Best answers. The default."),
+    ("claude-sonnet-5-5", "Claude Sonnet 5.5", "Faster, about half the price."),
+    ("claude-haiku-5-5", "Claude Haiku 5.5", "Fastest and cheapest; fine for quick definitions."),
+    ("claude-fable-5-1", "Claude Fable 5.1", "Most capable; slower and pricier."),
+)
+EFFORT_CHOICES = (
+    ("low", "Quick", "Answers sooner; thinks less."),
+    ("medium", "Balanced", "The default."),
+    ("high", "Thorough", "Thinks harder; good for derivations."),
+    ("xhigh", "Very thorough", "Slower still."),
+    ("max", "Maximum", "As deep as it goes; slowest and priciest."),
+)
+LOG_CHOICES = tuple((v, v.capitalize(), "") for v in LOG_LEVELS)
+LABEL_WIDTH = 118  # one label column for every group, so the fields line up down the window
+
+
 class SettingsWindow(QWidget):
     """Edits settings; emits `saved` after writing them. The controller applies them."""
 
@@ -143,20 +160,44 @@ class SettingsWindow(QWidget):
         self.setStyleSheet(DIALOG_STYLE)
         self.store, self.keychain = store, keychain
         self.fields: dict[str, QWidget] = {}
+        self._loading = False
         self.error = QLabel()
         self.error.setObjectName("error")
         self.error.setWordWrap(True)
         self.error.hide()
 
+        self.advanced = self._advanced_group()
+        self.advanced.hide()
+        self.advanced_toggle = QPushButton("Show advanced settings")
+        self.advanced_toggle.setObjectName("link")
+        self.advanced_toggle.setCursor(Qt.PointingHandCursor)
+        self.advanced_toggle.clicked.connect(self._toggle_advanced)
+
+        content = QWidget()
+        inner = QVBoxLayout(content)
+        inner.setContentsMargins(18, 16, 18, 4)
+        inner.setSpacing(12)
+        inner.addWidget(self._claude_group())
+        inner.addWidget(self._keys_group())
+        inner.addWidget(self._voice_group())
+        inner.addWidget(self._journal_group())
+        inner.addWidget(self.advanced_toggle, 0, Qt.AlignLeft)
+        inner.addWidget(self.advanced)
+        inner.addStretch(1)
+        # Scrolls on a small screen; the buttons stay put below it, always reachable.
+        self.scroll = QScrollArea()
+        self.scroll.setWidget(content)
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._content = content
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(18, 16, 18, 16)
-        lay.setSpacing(12)
-        lay.addWidget(self._claude_group())
-        lay.addWidget(self._keys_group())
-        lay.addWidget(self._voice_group())
-        lay.addWidget(self._journal_group())
+        lay.setContentsMargins(0, 0, 0, 16)
+        lay.setSpacing(10)
+        lay.addWidget(self.scroll, 1)
+        self.error.setContentsMargins(18, 0, 18, 0)
         lay.addWidget(self.error)
         buttons = QHBoxLayout()
+        buttons.setContentsMargins(18, 0, 18, 0)
         buttons.addStretch(1)
         self.cancel_btn = QPushButton("Cancel")
         self.save_btn = QPushButton("Save")
@@ -167,7 +208,7 @@ class SettingsWindow(QWidget):
         buttons.addWidget(self.cancel_btn)
         buttons.addWidget(self.save_btn)
         lay.addLayout(buttons)
-        self.setFixedWidth(560)
+        self.setFixedWidth(600)
         self.load(cfg)
 
     # building ---------------------------------------------------------------------------------
@@ -175,20 +216,47 @@ class SettingsWindow(QWidget):
     def _form(self, title: str) -> tuple[QGroupBox, QFormLayout]:
         box = QGroupBox(title)
         form = QFormLayout(box)
-        form.setLabelAlignment(Qt.AlignRight)
+        form.setLabelAlignment(Qt.AlignRight | Qt.AlignTop)
         form.setHorizontalSpacing(12)
-        form.setVerticalSpacing(8)
+        form.setVerticalSpacing(10)
         return box, form
 
-    def _combo(self, key: str, items, editable: bool = False) -> QComboBox:
+    def _row(self, form: QFormLayout, label: str, field, help_text: str = "") -> None:
+        """A labelled row, with a line of help under the field when the label alone isn't enough."""
+        lab = QLabel(label)
+        lab.setFixedWidth(LABEL_WIDTH)
+        lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        if not help_text:
+            form.addRow(lab, field)
+            return
+        holder = QWidget()
+        col = QVBoxLayout(holder)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(3)
+        col.addLayout(field) if isinstance(field, QHBoxLayout) else col.addWidget(field)
+        hint = QLabel(help_text)
+        hint.setObjectName("muted")
+        hint.setWordWrap(True)
+        col.addWidget(hint)
+        form.addRow(lab, holder)
+        lab.setAlignment(Qt.AlignRight | Qt.AlignTop)
+        lab.setContentsMargins(0, 6, 0, 0)
+
+    def _choice(self, key: str, choices) -> QComboBox:
+        """A drop-down showing friendly names; the stored value is the item's data."""
         w = QComboBox()
-        w.addItems(list(items))
-        w.setEditable(editable)
+        # Size to the column, not to the longest description (which would widen the whole window).
+        w.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        w.setMinimumContentsLength(16)
+        for value, name, note in choices:
+            w.addItem(f"{name}  ·  {note}" if note else name, value)
+        w.currentIndexChanged.connect(self._changed)
         self.fields[key] = w
         return w
 
     def _check(self, key: str, text: str) -> QCheckBox:
         w = QCheckBox(text)
+        w.toggled.connect(self._changed)
         self.fields[key] = w
         return w
 
@@ -196,50 +264,60 @@ class SettingsWindow(QWidget):
         box, form = self._form("Claude")
         self.key_edit = QLineEdit()
         self.key_edit.setEchoMode(QLineEdit.Password)
-        self.key_edit.setPlaceholderText("Paste a new key to replace it")
+        self.key_edit.setPlaceholderText("Paste a key that starts with sk-ant-")
+        self.key_edit.textChanged.connect(self._changed)
         self.key_status = QLabel()
         self.key_status.setObjectName("muted")
+        self.key_status.setWordWrap(True)
+        self.key_status.setOpenExternalLinks(True)
         self.key_remove = QPushButton("Remove")
         self.key_remove.clicked.connect(self._remove_key)
         row = QHBoxLayout()
         row.addWidget(self.key_edit, 1)
         row.addWidget(self.key_remove)
-        form.addRow("API key", row)
-        form.addRow("", self.key_status)
-        form.addRow("Model", self._combo("model", MODELS, editable=True))
-        form.addRow("Effort", self._combo("effort", EFFORTS))
+        holder = QWidget()
+        col = QVBoxLayout(holder)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(3)
+        col.addLayout(row)
+        col.addWidget(self.key_status)
+        self._row(form, "API key", holder)
+        self._row(form, "Model", self._choice("model", MODEL_CHOICES))
+        self._row(form, "Thinking", self._choice("effort", EFFORT_CHOICES), "How long Claude thinks before it answers.")
         context = QPlainTextEdit()
-        context.setFixedHeight(64)
+        context.setFixedHeight(76)
+        context.textChanged.connect(self._changed)
         self.fields["user_context"] = context
-        form.addRow("About you", context)
-        tokens = QSpinBox()
-        tokens.setRange(1024, 128000)
-        tokens.setSingleStep(1000)
-        self.fields["max_tokens"] = tokens
-        form.addRow("Max tokens", tokens)
-        form.addRow("", self._check("hires", "High-resolution images (only for models on that tier)"))
+        self._row(form, "About you", context, "Claude pitches its answers at this. Your field, your level.")
         return box
 
     def _keys_group(self) -> QGroupBox:
         box, form = self._form("Shortcuts")
-        form.addRow("", self._check("hotkey_enabled", "Use global shortcuts"))
-        ask = HotkeyEdit()
-        voice = HotkeyEdit()
+        self._row(form, "", self._check("hotkey_enabled", "Use shortcuts from any app"))
+        ask, voice = HotkeyEdit(), HotkeyEdit()
+        ask.changed.connect(self._changed)
+        voice.changed.connect(self._changed)
         self.fields["hotkey"], self.fields["voice_hotkey"] = ask, voice
-        form.addRow("Ask by typing", ask)
-        form.addRow("Hold to talk", voice)
+        self._row(form, "Ask by typing", ask)
+        self._row(form, "Hold to talk", voice, "Click a box, then press the keys. Backspace clears it.")
         return box
 
     def _voice_group(self) -> QGroupBox:
         box, form = self._form("Voice and reading")
-        form.addRow("", self._check("voice_enabled", "Ask by voice (local Whisper)"))
-        form.addRow("Speech model", self._combo("whisper_model", WHISPER_MODELS, editable=True))
-        form.addRow("", self._check("ocr_enabled", "Read text on screen with OCR (sharper pointing)"))
+        self._row(form, "", self._check("voice_enabled", "Ask by voice (transcribed on this computer)"))
+        speech = QComboBox()
+        speech.setEditable(True)
+        speech.addItems(WHISPER_MODELS)
+        speech.currentTextChanged.connect(self._changed)
+        self.fields["whisper_model"] = speech
+        self._row(form, "Speech model", speech, "tiny.en is fastest; small.en understands more. Downloaded once.")
+        self._row(form, "", self._check("ocr_enabled", "Read text on screen (sharper pointing at small print)"))
         return box
 
     def _journal_group(self) -> QGroupBox:
-        box, form = self._form("Journal, logs and updates")
+        box, form = self._form("Journal and updates")
         folder = QLineEdit()
+        folder.textChanged.connect(self._changed)
         self.fields["log_dir"] = folder
         browse = QPushButton("Choose…")
         browse.clicked.connect(self._choose_folder)
@@ -247,34 +325,71 @@ class SettingsWindow(QWidget):
         row = QHBoxLayout()
         row.addWidget(folder, 1)
         row.addWidget(browse)
-        form.addRow("Folder", row)
-        form.addRow("Console detail", self._combo("log_level", LOG_LEVELS))
-        form.addRow("", self._check("save_cases", "Also save each question as an eval case"))
-        form.addRow("", self._check("check_updates", "Check for new versions once a day"))
-        form.addRow("", self._check("crash_reports", "Offer to report crashes (you review each report first)"))
+        self._row(form, "Folder", row, "Every question, answer and screenshot is saved here.")
+        self._row(form, "", self._check("check_updates", "Tell me when a new version is out"))
+        self._row(form, "", self._check("crash_reports", "Offer to report crashes (you see each report first)"))
         return box
+
+    def _advanced_group(self) -> QGroupBox:
+        box, form = self._form("Advanced")
+        tokens = QSpinBox()
+        tokens.setRange(1024, 128000)
+        tokens.setSingleStep(1000)
+        tokens.valueChanged.connect(self._changed)
+        self.fields["max_tokens"] = tokens
+        self._row(form, "Max tokens", tokens, "Room for thinking plus the answer. Raise it if answers get cut off.")
+        self._row(form, "", self._check("hires", "High-resolution images (only for models that take them)"))
+        self._row(form, "Console detail", self._choice("log_level", LOG_CHOICES))
+        self._row(form, "", self._check("save_cases", "Save each question as an eval case"))
+        return box
+
+    def _toggle_advanced(self) -> None:
+        show = not self.advanced.isVisible()
+        self.advanced.setVisible(show)
+        self.advanced_toggle.setText("Hide advanced settings" if show else "Show advanced settings")
+        self._fit_to_screen()
+        if show:
+            QTimer.singleShot(0, self, lambda: self.scroll.ensureWidgetVisible(self.advanced))
+
+    def _fit_to_screen(self) -> None:
+        """As tall as the content, but never taller than the screen it's on."""
+        self._content.adjustSize()
+        want = self._content.sizeHint().height() + 70  # the buttons row and margins
+        room = self.screen().availableGeometry().height() - 40
+        self.resize(self.width(), min(want, room))
 
     # values -----------------------------------------------------------------------------------
 
+    def set_value(self, key: str, value) -> None:
+        w = self.fields[key]
+        if isinstance(w, QCheckBox):
+            w.setChecked(bool(value))
+        elif isinstance(w, QComboBox) and not w.isEditable():
+            i = w.findData(value)
+            if i < 0:  # a value set outside the window (an env var, an older version): keep it visible
+                w.addItem(str(value), value)
+                i = w.count() - 1
+            w.setCurrentIndex(i)
+        elif isinstance(w, QComboBox):
+            if w.findText(str(value)) < 0:
+                w.addItem(str(value))
+            w.setCurrentText(str(value))
+        elif isinstance(w, QSpinBox):
+            w.setValue(int(value))
+        elif isinstance(w, QPlainTextEdit):
+            w.setPlainText(str(value))
+        elif isinstance(w, HotkeyEdit):
+            w.set_value(str(value))
+        elif isinstance(w, QLineEdit):
+            w.setText(str(value))
+
     def load(self, cfg: Config) -> None:
-        """Show `cfg`. Fields pinned by an environment variable are locked."""
+        """Show `cfg`. Fields pinned by an environment variable or a switch are locked."""
         self.cfg = cfg
+        self._loading = True
+        self.browse_btn.setEnabled(True)
         for key, w in self.fields.items():
-            value = getattr(cfg, key)
-            if isinstance(w, QCheckBox):
-                w.setChecked(bool(value))
-            elif isinstance(w, QComboBox):
-                if w.findText(str(value)) < 0:
-                    w.addItem(str(value))
-                w.setCurrentText(str(value))
-            elif isinstance(w, QSpinBox):
-                w.setValue(int(value))
-            elif isinstance(w, QPlainTextEdit):
-                w.setPlainText(str(value))
-            elif isinstance(w, HotkeyEdit):
-                w.set_value(str(value))
-            elif isinstance(w, QLineEdit):
-                w.setText(str(value))
+            self.set_value(key, getattr(cfg, key))
             w.setEnabled(True)
             w.setToolTip("")
             source = cfg.sources.get(key)
@@ -286,8 +401,10 @@ class SettingsWindow(QWidget):
             if key == "log_dir" and not w.isEnabled():
                 self.browse_btn.setEnabled(False)
         self.key_edit.clear()
+        self._loading = False
         self._show_key_status()
         self.error.hide()
+        self._changed()
 
     def _show_key_status(self) -> None:
         source = self.cfg.sources.get("api_key")
@@ -298,7 +415,10 @@ class SettingsWindow(QWidget):
         elif self.keychain.problem:
             self.key_status.setText(f"No keychain here ({self.keychain.problem}). Use ANTHROPIC_API_KEY instead.")
         else:
-            self.key_status.setText("No key yet. Get one at console.anthropic.com, then paste it here.")
+            self.key_status.setText(
+                'No key yet. Create one at <a href="https://console.anthropic.com/settings/keys" '
+                'style="color:#FFB224">console.anthropic.com</a>, then paste it here.'
+            )
         self.key_remove.setEnabled(source == "keychain")
 
     def values(self) -> dict[str, Any]:
@@ -307,6 +427,8 @@ class SettingsWindow(QWidget):
         for key, w in self.fields.items():
             if isinstance(w, QCheckBox):
                 out[key] = w.isChecked()
+            elif isinstance(w, QComboBox) and not w.isEditable():
+                out[key] = w.currentData()
             elif isinstance(w, QComboBox):
                 out[key] = w.currentText().strip()
             elif isinstance(w, QSpinBox):
@@ -318,6 +440,16 @@ class SettingsWindow(QWidget):
             elif isinstance(w, QLineEdit):
                 out[key] = Path(w.text().strip()).expanduser() if key == "log_dir" else w.text().strip()
         return out
+
+    def dirty(self) -> bool:
+        """Is there anything to save?"""
+        if self.key_edit.text().strip():
+            return True
+        return any(v != getattr(self.cfg, k) for k, v in self.values().items())
+
+    def _changed(self, *_args) -> None:
+        if not self._loading:
+            self.save_btn.setEnabled(self.dirty())  # a Save that does nothing teaches you to distrust it
 
     def validate(self, values: dict[str, Any]) -> str | None:
         for key in ("hotkey", "voice_hotkey"):
@@ -377,13 +509,19 @@ class SettingsWindow(QWidget):
         if chosen:
             self.fields["log_dir"].setText(chosen)
 
+    def keyPressEvent(self, e) -> None:  # noqa: N802
+        if e.key() == Qt.Key_Escape:
+            self.close()
+        else:
+            super().keyPressEvent(e)
+
     def closeEvent(self, e) -> None:  # noqa: N802
         self.closed.emit()
         super().closeEvent(e)
 
     def open(self, cfg: Config) -> None:
         self.load(cfg)
-        self.adjustSize()
+        self._fit_to_screen()
         screen = self.screen().availableGeometry()
         self.move(screen.center() - self.rect().center())
         bring_to_front(self)

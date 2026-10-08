@@ -56,7 +56,7 @@ def test_saving_in_the_window_applies_at_once(qtbot, cfg, factories, caplog):
     c.open_settings()
     w = c.settings_window
     qtbot.addWidget(w)
-    w.fields["model"].setCurrentText("claude-haiku-5-5")
+    w.set_value("model", "claude-haiku-5-5")
     w.fields["log_dir"].setText(str(cfg.log_dir))
     w.save()
     assert c.cfg.model == "claude-haiku-5-5" and c.brain.text == "answer from claude-haiku-5-5"

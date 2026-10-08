@@ -23,7 +23,7 @@ elif sys.platform.startswith("linux"):
     hiddenimports += ["pynput.keyboard._xorg", "pynput.mouse._xorg"]
 
 # The optional extras ship model files as package data; bundle them only when installed.
-datas = []
+datas = collect_data_files("marginalia")  # the UI's icons
 for pkg in ("rapidocr_onnxruntime", "faster_whisper"):
     try:
         datas += collect_data_files(pkg)

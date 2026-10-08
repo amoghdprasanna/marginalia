@@ -34,6 +34,9 @@ marginalia = "marginalia.app:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"marginalia.ui" = ["assets/*"]
+
 [tool.setuptools.dynamic]
 version = { attr = "marginalia.__version__" }
 
