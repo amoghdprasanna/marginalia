@@ -16,7 +16,10 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 - JSON-lines log file in `<log dir>/logs`.
 - Crash reports are kept locally; optionally, offered as a pre-filled GitHub issue you review.
 - A daily check for new releases (can be turned off).
-- A packaged macOS app (`packaging/`), with signing and notarisation when credentials are set.
+- A packaged macOS app (`packaging/`), with signing and notarisation when credentials are set,
+  and a Windows build.
+- Wayland: screenshots and shortcuts through the desktop portal; windows through XWayland.
+- Windows: the setup check reads microphone consent; the app has its own taskbar icon.
 
 ### Changed
 - macOS shortcuts use the system hotkey API: no Accessibility permission, and no crash from
@@ -31,6 +34,7 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 - A screen-capture error was shown on the previous question's monitor.
 - A bad value in `MARGINALIA_MAX_TOKENS` crashed startup; a typo in `MARGINALIA_EFFORT` failed
   every question.
+- Saving an eval result with non-ASCII text failed on Windows.
 
 ## [0.1.0] - 2026-10-04
 
