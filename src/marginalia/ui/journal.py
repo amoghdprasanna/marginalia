@@ -7,7 +7,16 @@ from __future__ import annotations
 
 from PIL import Image
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QImage, QPainter, QPixmap, QTextBlockFormat, QTextCursor
+from PySide6.QtGui import (
+    QDesktopServices,
+    QImage,
+    QKeySequence,
+    QPainter,
+    QPixmap,
+    QShortcut,
+    QTextBlockFormat,
+    QTextCursor,
+)
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -109,7 +118,10 @@ class JournalWindow(QWidget):
         self._busy = False
 
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Search questions and answers")
+        find = QKeySequence(QKeySequence.Find)
+        self.search.setPlaceholderText(f"Search questions and answers  ({find.toString(QKeySequence.NativeText)})")
+        QShortcut(find, self, activated=lambda: (self.search.setFocus(), self.search.selectAll()))
+        QShortcut(QKeySequence(Qt.Key_Escape), self, activated=self.close)
         self.search.setClearButtonEnabled(True)
         self._debounce = QTimer(self)
         self._debounce.setSingleShot(True)
@@ -136,7 +148,7 @@ class JournalWindow(QWidget):
         self.status = QLabel()
         self.status.setObjectName("muted")
         self.ask = QLineEdit()
-        self.ask.setPlaceholderText("Ask more about this screenshot")
+        self.ask.setPlaceholderText("Ask more about this screenshot (Enter)")
         self.ask.returnPressed.connect(self._send)
         self.send = QPushButton("Ask")
         self.send.setObjectName("primary")
@@ -193,7 +205,14 @@ class JournalWindow(QWidget):
         self.thread = thread
         if thread is None:
             self.shot.show_image(None, [])
-            self.body.setMarkdown("Nothing here yet." if not self.search.text() else "No thread matches.")
+            query = self.search.text().strip()
+            # An empty view says why it's empty and what to do about it.
+            self.body.setMarkdown(
+                f"No question or answer mentions “{query}”. Try fewer or different words."
+                if query
+                else "**Nothing here yet.**\n\nClick the orb and ask about something on your screen. "
+                "Every question and answer lands here with its screenshot, so you can find it and ask more later."
+            )
             self._set_enabled(False)
             return
         last = thread.last

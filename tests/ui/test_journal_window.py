@@ -43,7 +43,7 @@ def test_search_filters(qtbot, window):
     assert "1 of 2" in window.count.text()
     window.search.setText("zzz")
     qtbot.waitUntil(lambda: window.list.count() == 0)
-    assert "No thread matches" in window.body.toPlainText() and not window.ask.isEnabled()
+    assert "mentions “zzz”" in window.body.toPlainText() and not window.ask.isEnabled()
 
 
 def test_asking_emits_the_thread_and_question(qtbot, window):
@@ -81,6 +81,7 @@ def test_an_empty_journal(qtbot, tmp_path):
     qtbot.addWidget(w)
     w.refresh()
     assert w.list.count() == 0 and "Nothing here yet" in w.body.toPlainText()
+    assert "Click the orb" in w.body.toPlainText(), "an empty view says what to do"
 
 
 def test_double_click_opens_the_full_screenshot(qtbot, window, monkeypatch):
@@ -95,3 +96,14 @@ def test_open_backfills_and_shows(qtbot, window):
     assert window.isVisible()
     window.list.setCurrentRow(0)
     assert window.list.currentItem().data(Qt.UserRole).id == window.thread.id
+
+
+def test_find_focuses_search_and_escape_closes(qtbot, window):
+    from PySide6.QtGui import QKeySequence, QShortcut
+
+    window.show()
+    shortcuts = {sc.key().toString(): sc for sc in window.findChildren(QShortcut)}
+    shortcuts[QKeySequence(QKeySequence.Find).toString()].activated.emit()
+    assert window.search.selectedText() == window.search.text()
+    shortcuts[QKeySequence(Qt.Key_Escape).toString()].activated.emit()
+    assert not window.isVisible()
