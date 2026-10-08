@@ -47,3 +47,22 @@ def test_closing_says_done(qtbot):
     w.show()
     with qtbot.waitSignal(w.done):
         w.close()
+
+
+def test_when_ready_it_says_so_and_teaches_how_to_ask(qtbot):
+    w = SetupWindow()
+    qtbot.addWidget(w)
+    ok = [Check("api_key", "Claude API key", OK, "Set."), Check("screen", "Screen Recording", OK, "Fine.")]
+    w.show_checks(ok, "iTerm", "Ctrl+Option+Space", "Ctrl+Option+V")
+    assert w.title.text() == "You're all set" and w.close_btn.text() == "Start using Marginalia"
+    text = w.howto.text()
+    assert "Click the orb" in text and "Ctrl+Option+Space" in text and "Hold Ctrl+Option+V" in text
+    assert not w.intro.isVisibleTo(w), "no terminal advice when nothing needs it"
+
+
+def test_how_to_ask_leaves_out_shortcuts_that_are_off(qtbot):
+    w = SetupWindow()
+    qtbot.addWidget(w)
+    w.show_checks(CHECKS, "iTerm", None, None)
+    assert "Click the orb" in w.howto.text() and "Hold" not in w.howto.text()
+    assert w.title.text() == "A few things before you start" and w.close_btn.text() == "Done"

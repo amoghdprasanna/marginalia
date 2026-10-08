@@ -19,14 +19,26 @@ class Dot(QWidget):
     def __init__(self, status: str) -> None:
         super().__init__()
         self.status = status
-        self.setFixedSize(12, 12)
+        self.setFixedSize(12, 18)
 
     def paintEvent(self, _e) -> None:  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setPen(Qt.NoPen)
         p.setBrush(COLORS.get(self.status, QColor(MUTED_HEX)))
-        p.drawEllipse(1, 1, 10, 10)
+        p.drawEllipse(1, 5, 10, 10)  # centred on the title's first line
+
+
+def how_to_ask(ask_key: str | None, voice_key: str | None) -> str:
+    """The three ways in, with this user's actual keys: taught once, where they'll see it."""
+    ways = ["<b>Click the orb</b> at the edge of your screen to ask about where your mouse last rested."]
+    if ask_key:
+        ways.append(f"<b>{ask_key}</b> asks about exactly where your mouse is, from any app.")
+    if voice_key:
+        ways.append(f"<b>Hold {voice_key}</b> and speak; let go to send.")
+    ways.append("Answers point at the screen. Ask follow-ups in the bubble; <b>Esc</b> ends the conversation.")
+    items = "".join(f"<li style='margin-bottom:4px'>{w}</li>" for w in ways)
+    return f"<div style='font-weight:600; margin-bottom:6px'>How to ask</div><ul style='margin-left:-24px'>{items}</ul>"
 
 
 class SetupWindow(QWidget):
@@ -45,6 +57,14 @@ class SetupWindow(QWidget):
         self.intro = QLabel()
         self.intro.setObjectName("muted")
         self.intro.setWordWrap(True)
+        self.howto = QLabel()
+        self.howto.setWordWrap(True)
+        self.howto.setTextFormat(Qt.RichText)
+        self.howto.setObjectName("howto")
+        self.howto.setStyleSheet(
+            "#howto { background: rgba(255,255,255,10); border: 1px solid rgba(255,255,255,24);"
+            " border-radius: 10px; padding: 10px 12px; }"
+        )
         self.grid = QGridLayout()
         self.grid.setHorizontalSpacing(10)
         self.grid.setVerticalSpacing(12)
@@ -66,11 +86,14 @@ class SetupWindow(QWidget):
         lay.addWidget(self.title)
         lay.addWidget(self.intro)
         lay.addLayout(self.grid)
+        lay.addWidget(self.howto)
         lay.addLayout(buttons)
         self.checks: list[Check] = []
         self.buttons: dict[str, QPushButton] = {}
 
-    def show_checks(self, checks: list[Check], host: str) -> None:
+    def show_checks(
+        self, checks: list[Check], host: str, ask_key: str | None = None, voice_key: str | None = None
+    ) -> None:
         self.checks = checks
         while self.grid.count():
             item = self.grid.takeAt(0)
@@ -84,6 +107,7 @@ class SetupWindow(QWidget):
             detail.setObjectName("muted")
             detail.setWordWrap(True)
             text = QVBoxLayout()
+            text.setContentsMargins(0, 0, 0, 0)  # so the dot lines up with the title
             text.setSpacing(2)
             text.addWidget(title)
             text.addWidget(detail)
@@ -97,12 +121,21 @@ class SetupWindow(QWidget):
                 self.buttons[check.key] = btn
                 self.grid.addWidget(btn, row, 2, Qt.AlignTop)
         self.grid.setColumnStretch(1, 1)
-        self.intro.setText(
-            f"macOS asks about {host}, the app Marginalia runs in. After allowing Screen Recording, "
-            f"quit and reopen {host}."
-            if host != "Marginalia"
-            else "After allowing Screen Recording, restart Marginalia."
-        )
+        ready = not any(c.required and c.status != OK for c in checks)
+        self.title.setText("You're all set" if ready else "A few things before you start")
+        self.close_btn.setText("Start using Marginalia" if ready else "Done")
+        screen_missing = any(c.key == "screen" and c.status != OK for c in checks)
+        if screen_missing and host != "Marginalia":
+            self.intro.setText(
+                f"macOS asks about {host}, the app Marginalia runs in. After allowing Screen Recording, "
+                f"quit and reopen {host}."
+            )
+        elif screen_missing:
+            self.intro.setText("After allowing Screen Recording, restart Marginalia.")
+        else:
+            self.intro.setText("")
+        self.intro.setVisible(bool(self.intro.text()))
+        self.howto.setText(how_to_ask(ask_key, voice_key))
         # From a terminal, restarting Marginalia doesn't help: the terminal itself must restart.
         self.restart.setVisible(host == "Marginalia" and any(c.key == "screen" and c.status != OK for c in checks))
         self.adjustSize()

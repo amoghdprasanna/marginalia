@@ -251,13 +251,21 @@ class Controller(QObject):
             self.hotkey.stop()
             self.hotkey = None
 
-    def _show_hotkeys(self) -> None:
+    def _shortcut_labels(self) -> tuple[str | None, str | None]:
+        """The shortcuts as people read them; the voice one only when voice works."""
         on = self.cfg.hotkey_enabled
         ask = format_combo(self.cfg.hotkey) if on and self.cfg.hotkey else None
         voice = format_combo(self.cfg.voice_hotkey) if on and self.cfg.voice_hotkey else None
-        self.orb.set_hotkeys(ask, voice)
         voice_ok = self.transcriber is not None and self.transcriber.available
-        self.chooser.set_shortcuts(ask, voice if voice_ok else None)
+        return ask, voice if voice_ok else None
+
+    def _show_hotkeys(self) -> None:
+        on = self.cfg.hotkey_enabled
+        self.orb.set_hotkeys(
+            format_combo(self.cfg.hotkey) if on and self.cfg.hotkey else None,
+            format_combo(self.cfg.voice_hotkey) if on and self.cfg.voice_hotkey else None,
+        )
+        self.chooser.set_shortcuts(*self._shortcut_labels())
 
     def _show_voice_availability(self) -> None:
         if self.transcriber is None:
@@ -283,8 +291,8 @@ class Controller(QObject):
         self.settings_window.open(self.cfg)
 
     def _refresh_setup(self) -> None:
-        if self.setup_window is not None and self.setup_window.isVisible():
-            self.setup_window.show_checks(self.setup_checks(), host_app())
+        if self.setup_window is not None and (self.setup_window.isVisible() or self.sender() is self.setup_window):
+            self.setup_window.show_checks(self.setup_checks(), host_app(), *self._shortcut_labels())
 
     # crash reports ----------------------------------------------------------------------------
 
@@ -455,10 +463,10 @@ class Controller(QObject):
             # Kept on self: Qt holds a slot's object weakly, so a local Fixer would be collected.
             self._fixer = Fixer(self.probes, self.open_settings)
             w.fix_requested.connect(self._fixer.fix)
-            w.recheck_requested.connect(lambda: w.show_checks(self.setup_checks(), host_app()))
+            w.recheck_requested.connect(self._refresh_setup)
             w.restart_requested.connect(restart)
             w.done.connect(self._setup_done)
-        self.setup_window.show_checks(checks or self.setup_checks(), host_app())
+        self.setup_window.show_checks(checks or self.setup_checks(), host_app(), *self._shortcut_labels())
         self.setup_window.open()
 
     def _setup_done(self) -> None:
