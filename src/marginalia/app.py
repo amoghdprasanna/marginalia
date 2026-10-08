@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from PySide6.QtCore import QObject, QPoint, QRect, QTimer, Signal
-from PySide6.QtGui import QCursor
+from PySide6.QtGui import QCursor, QGuiApplication
 from PySide6.QtWidgets import QApplication
 
 from .brain import BrainError, Cancelled, ClaudeBrain, DemoBrain
@@ -228,6 +228,7 @@ class Controller(QObject):
         except Exception as exc:  # noqa: BLE001
             self.orb.show()
             self._capturing = False
+            self.snapshot = None  # never answer a later question about the previous screen
             self.bubble.show_error("Screen capture", str(exc))
             self._show_bubble_near(pos, [])
             return
@@ -400,15 +401,22 @@ class Controller(QObject):
         self.overlay.clear()
         self.orb.set_busy(False)
 
+    def _screen_near(self, pos: QPoint) -> QRect:
+        """The screen the current question is about; without a screenshot, the one under `pos`."""
+        if self.snapshot is not None:
+            return QRect(*self.snapshot.screen_geo)
+        screen = QGuiApplication.screenAt(pos) or self.orb.screen()
+        return screen.geometry()
+
     def _keep_bubble_on_screen(self) -> None:
         """A streaming bubble grows downwards; slide it up rather than let it run off the screen."""
-        screen = QRect(*self.snapshot.screen_geo) if self.snapshot else self.orb.screen().geometry()
+        screen = self._screen_near(self.bubble.frameGeometry().center())
         g = self.bubble.frameGeometry()
         if g.bottom() > screen.bottom() - 12:
             self.bubble.move(g.x(), max(screen.top() + 12, screen.bottom() - 12 - g.height()))
 
     def _show_bubble_near(self, cursor: QPoint, targets: list[QPoint]) -> None:
-        screen = QRect(*self.snapshot.screen_geo) if self.snapshot else self.orb.screen().geometry()
+        screen = self._screen_near(cursor)
         self.bubble.adjustSize()
         x, y = place_box(
             (self.bubble.width(), self.bubble.height()),

@@ -245,3 +245,22 @@ def _esc():
     from PySide6.QtGui import QKeyEvent
 
     return QKeyEvent(QEvent.KeyPress, Qt.Key_Escape, Qt.NoModifier)
+
+
+def test_capture_failure_is_explained_on_the_screen_you_asked_about(qtbot, cfg):
+    """Bug: the error bubble was placed using the previous question's screen, which may be another monitor."""
+    shots = [make_snapshot(origin=(5000, 0), cursor=(5100, 100))]  # last time: a monitor far to the right
+
+    def grab(x, y):
+        if shots:
+            return shots.pop()
+        raise RuntimeError("The screenshot came back blank.")
+
+    c = build(qtbot, cfg, grab=grab)
+    ask_typed(qtbot, c, "on the other monitor")
+    c.rest.rest = (100, 100)
+    c.start_ask(at_cursor=False)
+    qtbot.waitUntil(lambda: "blank" in c.bubble.body.toPlainText())
+    here = c.orb.screen().geometry()
+    assert here.contains(c.bubble.frameGeometry().center())
+    assert c.snapshot is None, "a failed capture must not leave the old screenshot to ask about"
