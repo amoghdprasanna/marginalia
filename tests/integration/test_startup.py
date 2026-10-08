@@ -146,7 +146,7 @@ def test_stop_cancels_an_answer_in_flight(qtbot, cfg):
 def test_voice_buttons_reflect_whether_voice_works(qtbot, cfg):
     c = build(qtbot, cfg)
     assert not c.chooser.voice_btn.isEnabled()
-    assert "disabled in settings" in c.chooser.voice_btn.toolTip()
+    assert "turn on voice in Settings" in c.chooser.voice_btn.toolTip()
     assert not c.askbox.mic.isVisibleTo(c.askbox)
 
 

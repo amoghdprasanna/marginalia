@@ -45,3 +45,26 @@ def test_chooser_opens_on_the_screen_side_of_the_orb(chooser):
     w = ModeChooser()
     w.open_beside(QRect(10, 400, 48, 48), SCREEN)
     assert w.geometry().left() > 58
+
+
+def test_journal_and_settings_are_one_click_from_the_orb(qtbot, chooser):
+    with qtbot.waitSignal(chooser.journal_requested):
+        chooser.journal_btn.click()
+    assert not chooser.isVisible()
+    chooser.open_beside(QRect(1380, 400, 48, 48), SCREEN)
+    with qtbot.waitSignal(chooser.settings_requested):
+        qtbot.keyClick(chooser, Qt.Key_Comma)
+
+
+def test_the_shortcuts_are_shown_so_they_get_learned(chooser):
+    chooser.set_shortcuts("Ctrl+Option+Space", "Ctrl+Option+V")
+    assert "Ctrl+Option+Space" in chooser.tip.text() and "hold" in chooser.tip.text()
+    chooser.set_shortcuts(None, None)
+    assert not chooser.tip.isVisibleTo(chooser)
+
+
+def test_why_speak_is_off_is_said_out_loud(chooser):
+    chooser.set_voice_available(False, "faster-whisper is not installed")
+    assert chooser.voice_note.isVisibleTo(chooser) and "faster-whisper" in chooser.voice_note.text()
+    chooser.set_voice_available(True)
+    assert not chooser.voice_note.isVisibleTo(chooser)

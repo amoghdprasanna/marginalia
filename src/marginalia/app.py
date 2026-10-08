@@ -176,6 +176,8 @@ class Controller(QObject):
         self.orb.clicked.connect(self._choose_mode)
         self.orb.type_requested.connect(lambda: self.start_ask(at_cursor=False))
         self.orb.voice_requested.connect(lambda: self.start_voice(at_cursor=False))
+        self.chooser.journal_requested.connect(self.open_journal)
+        self.chooser.settings_requested.connect(self.open_settings)
         self.chooser.chosen.connect(
             lambda mode: self.start_voice(at_cursor=False) if mode == "voice" else self.start_ask(at_cursor=False)
         )
@@ -251,14 +253,15 @@ class Controller(QObject):
 
     def _show_hotkeys(self) -> None:
         on = self.cfg.hotkey_enabled
-        self.orb.set_hotkeys(
-            format_combo(self.cfg.hotkey) if on and self.cfg.hotkey else None,
-            format_combo(self.cfg.voice_hotkey) if on and self.cfg.voice_hotkey else None,
-        )
+        ask = format_combo(self.cfg.hotkey) if on and self.cfg.hotkey else None
+        voice = format_combo(self.cfg.voice_hotkey) if on and self.cfg.voice_hotkey else None
+        self.orb.set_hotkeys(ask, voice)
+        voice_ok = self.transcriber is not None and self.transcriber.available
+        self.chooser.set_shortcuts(ask, voice if voice_ok else None)
 
     def _show_voice_availability(self) -> None:
         if self.transcriber is None:
-            self.chooser.set_voice_available(False, "disabled in settings")
+            self.chooser.set_voice_available(False, "turn on voice in Settings")
         elif not self.transcriber.available:
             self.chooser.set_voice_available(False, self.transcriber.problem)
         else:
