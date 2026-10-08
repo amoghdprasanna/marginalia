@@ -9,7 +9,7 @@ log = logging.getLogger("marginalia.test")
 
 
 def lines(path):
-    return [json.loads(line) for line in path.read_text().splitlines()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
 def test_file_gets_json_lines_with_extra_fields(tmp_path):

@@ -85,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--notes", action="store_true", help="print the changelog section for VERSION")
     group.add_argument("--check", action="store_true", help="verify a tag against __version__ and the changelog")
     args = ap.parse_args(argv)
-    init_text, changelog = INIT.read_text(), CHANGELOG.read_text()
+    init_text, changelog = INIT.read_text(encoding="utf-8"), CHANGELOG.read_text(encoding="utf-8")
 
     if args.notes:
         body = section(changelog, args.version.removeprefix("v"))
@@ -105,11 +105,11 @@ def main(argv: list[str] | None = None) -> int:
         if parse(new) <= parse(old):
             print(f"error: {new} is not newer than {old}", file=sys.stderr)
             return 1
-        CHANGELOG.write_text(release_changelog(changelog, old, new, date.today()))
+        CHANGELOG.write_text(release_changelog(changelog, old, new, date.today()), encoding="utf-8")
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    INIT.write_text(bump_init(init_text, new))
+    INIT.write_text(bump_init(init_text, new), encoding="utf-8")
     print(f"Version {old} -> {new}. Review the diff, then:")
     print(f'  git commit -am "chore: release {new}" && git tag v{new} && git push origin main v{new}')
     return 0

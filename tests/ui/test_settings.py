@@ -59,7 +59,7 @@ def test_a_new_api_key_goes_to_the_keychain(window, keychain, store):
     window.key_edit.setText("  sk-ant-api03-newkeynewkeynewkey  ")
     assert window.save()
     assert keychain.get() == "sk-ant-api03-newkeynewkeynewkey"
-    assert "sk-ant" not in store.path.read_text(), "the key never lands in the settings file"
+    assert "sk-ant" not in store.path.read_text(encoding="utf-8"), "the key never lands in the settings file"
 
 
 def test_the_key_status_never_shows_the_whole_key(qtbot, store, keychain):

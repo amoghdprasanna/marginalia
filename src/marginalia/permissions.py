@@ -103,8 +103,45 @@ class MacProbes(NoProbes):
             log.debug("Microphone request failed: %s", exc)
 
 
+def _read_registry(hive: str, path: str, name: str) -> str | None:
+    import winreg
+
+    root = {"HKCU": winreg.HKEY_CURRENT_USER, "HKLM": winreg.HKEY_LOCAL_MACHINE}[hive]
+    try:
+        with winreg.OpenKey(root, path) as key:
+            return str(winreg.QueryValueEx(key, name)[0])
+    except OSError:
+        return None
+
+
+class WindowsProbes(NoProbes):
+    """Windows keeps microphone consent in the registry: a machine-wide switch, a per-user switch,
+    and one for desktop (non-Store) apps like us. Any "Deny" blocks us."""
+
+    MIC = r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone"
+
+    def __init__(self, read=_read_registry) -> None:
+        self.read = read
+
+    def microphone(self) -> str:
+        values = [
+            self.read("HKLM", self.MIC, "Value"),
+            self.read("HKCU", self.MIC, "Value"),
+            self.read("HKCU", self.MIC + "\\NonPackaged", "Value"),
+        ]
+        if "Deny" in values:
+            return "denied"
+        if values[1] is None and values[2] is None:
+            return "unknown"
+        return "authorized"
+
+
 def default_probes():
-    return MacProbes() if sys.platform == "darwin" else NoProbes()
+    if sys.platform == "darwin":
+        return MacProbes()
+    if sys.platform == "win32":
+        return WindowsProbes()
+    return NoProbes()
 
 
 def host_app() -> str:

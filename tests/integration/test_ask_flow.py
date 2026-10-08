@@ -16,7 +16,7 @@ def test_typed_question_gets_an_answer_and_is_journaled(qtbot, cfg):
     assert brain.asked == [("what is d?", [])]
     assert "code distance" in c.bubble.body.toPlainText() and c.bubble.isVisible()
     assert c.history == [("what is d?", "It is the code distance.")]
-    assert "what is d?" in next((cfg.log_dir / "doubts").glob("*.md")).read_text()
+    assert "what is d?" in next((cfg.log_dir / "doubts").glob("*.md")).read_text(encoding="utf-8")
 
 
 def test_screen_is_grabbed_where_the_mouse_rested(qtbot, cfg):

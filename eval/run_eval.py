@@ -76,7 +76,7 @@ def score(case: dict, text: str, points: list[tuple[float, float, str]]) -> dict
 
 
 def run_case(folder: Path, brain, ocr, hires: bool) -> dict:
-    case = json.loads((folder / "case.json").read_text())
+    case = json.loads((folder / "case.json").read_text(encoding="utf-8"))
     img = Image.open(folder / case["image"]).convert("RGB")
     w, h = case["screen"]
     snap = Snapshot(img, (0, 0, w, h), tuple(case["cursor"]))
@@ -188,7 +188,7 @@ def main() -> None:
     out_dir.mkdir(exist_ok=True)
     name = f"{time.strftime('%Y%m%d-%H%M%S')}-{'demo' if cfg.demo else cfg.model}-{cfg.effort}.json"
     run = {"model": cfg.model, "effort": cfg.effort, "ocr": bool(ocr), "summary": summary, "results": results}
-    (out_dir / name).write_text(json.dumps(run, indent=2, ensure_ascii=False))
+    (out_dir / name).write_text(json.dumps(run, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Details: {out_dir / name}")
 
 

@@ -65,7 +65,7 @@ def test_the_real_changelog_and_version_agree():
     from release import CHANGELOG
     from release import INIT as INIT_PATH
 
-    text = CHANGELOG.read_text()
-    version = current_version(INIT_PATH.read_text())
+    text = CHANGELOG.read_text(encoding="utf-8")
+    version = current_version(INIT_PATH.read_text(encoding="utf-8"))
     assert section(text, version), f"CHANGELOG.md needs a section for {version}"
     assert section(text, "Unreleased") is not None

@@ -43,6 +43,7 @@ from .ui import (
     SettingsWindow,
     SetupWindow,
 )
+from .ui.paint import app_icon
 from .updates import Release, due, fetch_latest, is_newer
 from .voice import Recorder, Transcriber
 
@@ -815,8 +816,16 @@ def main(argv: list[str] | None = None) -> None:
     reporter = CrashReporter(cfg.log_dir)
     reporter.install()
     reporter.collect_fatal()
+    if sys.platform == "win32":
+        try:  # group our windows under our own taskbar icon, not python.exe's
+            import ctypes
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Marginalia.Marginalia")
+        except Exception:  # noqa: BLE001
+            pass
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName("Marginalia")
+    app.setWindowIcon(app_icon())
     app.setQuitOnLastWindowClosed(False)
     signal.signal(signal.SIGINT, signal.SIG_DFL)  # Ctrl+C in the terminal quits
 

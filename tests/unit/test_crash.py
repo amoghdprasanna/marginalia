@@ -58,7 +58,7 @@ def test_a_fatal_dump_from_last_run_is_collected_once(tmp_path):
     r.dir.mkdir(parents=True)
     r.fatal_path.write_text("Fatal Python error: Segmentation fault\n\nCurrent thread 0x1 (most recent call first):\n")
     path = r.collect_fatal()
-    report = json.loads(path.read_text())
+    report = json.loads(path.read_text(encoding="utf-8"))
     assert report["type"] == "Fatal error" and "Segmentation fault" in report["message"]
     assert r.collect_fatal() is None, "the dump is cleared once collected"
 

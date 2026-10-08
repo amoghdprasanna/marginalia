@@ -110,3 +110,36 @@ def test_mac_probes_answer_without_raising():
     p = permissions.MacProbes()
     assert p.screen_recording() in (True, False, None)
     assert p.microphone() in ("authorized", "denied", "not_determined", "restricted", "unknown")
+
+
+# Windows ---------------------------------------------------------------------------------------
+
+
+def registry(values):
+    return lambda hive, path, name: values.get((hive, path.rsplit("\\", 1)[-1]))
+
+
+@pytest.mark.parametrize(
+    ("values", "status"),
+    [
+        ({("HKCU", "microphone"): "Allow", ("HKCU", "NonPackaged"): "Allow"}, "authorized"),
+        ({("HKCU", "microphone"): "Allow", ("HKCU", "NonPackaged"): "Deny"}, "denied"),  # desktop apps off
+        ({("HKLM", "microphone"): "Deny", ("HKCU", "microphone"): "Allow"}, "denied"),  # off for the machine
+        ({}, "unknown"),
+    ],
+)
+def test_windows_microphone_consent(values, status):
+    assert permissions.WindowsProbes(registry(values)).microphone() == status
+
+
+def test_windows_registry_path_points_at_the_microphone_store():
+    seen = []
+    permissions.WindowsProbes(lambda h, p, n: seen.append(p)).microphone()
+    assert seen[0].endswith(r"ConsentStore\microphone") and seen[2].endswith(r"microphone\NonPackaged")
+
+
+def test_default_probes_per_platform(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert isinstance(permissions.default_probes(), permissions.WindowsProbes)
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert type(permissions.default_probes()) is permissions.NoProbes
