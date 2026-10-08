@@ -54,16 +54,19 @@ class ListenBox(Panel):
         self.level = 0.0
         self.phase = 0.9
         self._listening = False
+        self.hold = False
         self._session = 0  # bumped by open_at, so a timer from an earlier question can tell it is stale
         self.clock = QElapsedTimer()
         self.tick = QTimer(self)
         self.tick.setInterval(33)
         self.tick.timeout.connect(self._on_tick)
 
-    def open_at(self, cursor: QPoint, screen: QRect, level_fn) -> None:
+    def open_at(self, cursor: QPoint, screen: QRect, level_fn, hold: bool = False) -> None:
+        """Start listening. With `hold`, a pause doesn't end it: releasing the voice key does."""
         self.level_fn = level_fn
         self._listening = True
         self._session += 1
+        self.hold = hold
         self.detector.reset()
         self.status.setText("Listening…")
         self.timer_lab.setText("0:00")
@@ -72,7 +75,7 @@ class ListenBox(Panel):
         self.wave.reset()
         self.wave.show()
         self.send_btn.show()
-        set_hints(self.hint, ("pause", "sends"), ("Enter", "send now"), ("Esc", "cancel"))
+        self._set_listen_hints()
         self.adjustSize()
         x = min(max(cursor.x() + 18, screen.left() + 12), screen.right() - self.width() - 12)
         y = cursor.y() + 24
@@ -82,6 +85,22 @@ class ListenBox(Panel):
         self.clock.restart()
         self.tick.start()
         bring_to_front(self)
+
+    def _set_listen_hints(self) -> None:
+        if self.hold:
+            set_hints(self.hint, ("release", "sends"), ("Esc", "cancel"))
+        else:
+            set_hints(self.hint, ("pause", "sends"), ("Enter", "send now"), ("Esc", "cancel"))
+
+    def release_hold(self) -> None:
+        """The voice key was only tapped: from now on a pause ends the question."""
+        if self.hold:
+            self.hold = False
+            self._set_listen_hints()
+
+    def finish(self) -> None:
+        """Send what was said so far (the voice key was let go)."""
+        self._send()
 
     def show_transcribing(self) -> None:
         self._listening = False
@@ -123,7 +142,8 @@ class ListenBox(Panel):
         self.wave.push(self.level)
         t = self.clock.elapsed() / 1000
         self.timer_lab.setText(f"{int(t) // 60}:{int(t) % 60:02d}")
-        if self.detector.feed(t, raw):
+        done = self.detector.feed(t, raw)
+        if done and (not self.hold or t >= self.detector.max_s):  # holding: only the time limit ends it
             self._send()
         self.update()
 

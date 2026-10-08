@@ -1,64 +1,55 @@
 """Starting up: the global hotkey, the ready message, warming the speech model, and the command line."""
 
 import sys
-from types import ModuleType, SimpleNamespace
 
 import pytest
 from helpers import FakeBrain, FakeOCR, FakeWhisper, ManualExecutor, build, make_snapshot
 from PySide6.QtWidgets import QApplication
 
 from marginalia import app as app_module
-from marginalia.app import default_services, start_hotkey
+from marginalia.app import default_services
 from marginalia.brain import ClaudeBrain, DemoBrain
 from marginalia.voice import Transcriber
 
-# the global hotkey -----------------------------------------------------------------------------
+# the global hotkeys ----------------------------------------------------------------------------
 
 
-class FakeHotKeys:
-    """Stands in for pynput.keyboard.GlobalHotKeys."""
+class FakeHotkeys:
+    """What hotkeys.start_hotkeys returns: something with stop()."""
 
-    instances: list = []
+    def __init__(self, bindings):
+        self.bindings, self.stopped = bindings, False
 
-    def __init__(self, mapping):
-        self.mapping, self.daemon, self.started = mapping, False, False
-        FakeHotKeys.instances.append(self)
-
-    def start(self):
-        self.started = True
+    def stop(self):
+        self.stopped = True
 
 
 @pytest.fixture
-def fake_pynput(monkeypatch):
-    FakeHotKeys.instances = []
-    pynput = ModuleType("pynput")
-    pynput.keyboard = SimpleNamespace(GlobalHotKeys=FakeHotKeys)
-    monkeypatch.setitem(sys.modules, "pynput", pynput)
-    monkeypatch.delenv("XDG_SESSION_TYPE", raising=False)
-    return FakeHotKeys
+def fake_hotkeys(monkeypatch):
+    made = []
+    monkeypatch.setattr(app_module, "start_hotkeys", lambda b: made.append(FakeHotkeys(b)) or made[-1])
+    return made
 
 
-def test_hotkey_is_registered_on_a_daemon_thread(fake_pynput):
-    callback = object()
-    listener = start_hotkey("<ctrl>+<alt>+<space>", callback)
-    assert listener is fake_pynput.instances[0]
-    assert listener.mapping == {"<ctrl>+<alt>+<space>": callback}
-    assert listener.started and listener.daemon, "a daemon thread must not keep the app alive on quit"
+def test_start_binds_the_ask_and_hold_to_talk_keys(started, cfg, fake_hotkeys):
+    cfg.hotkey_enabled = True
+    c = started()
+    c.start()
+    [hk] = fake_hotkeys
+    assert [b[0] for b in hk.bindings] == [cfg.hotkey, cfg.voice_hotkey]
+    assert hk.bindings[0][2] is None, "the ask key acts on press only"
+    assert hk.bindings[1][2] is not None, "the voice key also needs its release"
 
 
-def test_hotkey_is_skipped_on_wayland_with_a_reason(fake_pynput, monkeypatch, caplog):
-    monkeypatch.setattr(sys, "platform", "linux")
-    monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
-    assert start_hotkey("<ctrl>+<alt>+<space>", lambda: None) is None
-    assert fake_pynput.instances == []
-    assert "Wayland" in caplog.text
+def test_an_empty_voice_hotkey_binds_only_the_ask_key(started, cfg, fake_hotkeys):
+    cfg.hotkey_enabled, cfg.voice_hotkey = True, ""
+    started().start()
+    assert len(fake_hotkeys[0].bindings) == 1
 
 
-def test_hotkey_failure_falls_back_to_the_orb(monkeypatch, caplog):
-    monkeypatch.setitem(sys.modules, "pynput", None)  # import fails, as with a blocked keyboard hook
-    monkeypatch.delenv("XDG_SESSION_TYPE", raising=False)
-    assert start_hotkey("<ctrl>+<alt>+<space>", lambda: None) is None
-    assert "Use the orb" in caplog.text
+def test_no_hotkey_binds_nothing(started, cfg, fake_hotkeys):
+    started().start()
+    assert fake_hotkeys == []
 
 
 def test_hotkey_asks_about_exactly_where_the_mouse_is(qtbot, cfg):
@@ -130,16 +121,13 @@ def test_missing_extras_are_explained_at_start(started, caplog):
     assert "OCR not installed" in out
 
 
-def test_stop_releases_the_hotkey_timer_and_microphone(started, cfg, fake_pynput):
+def test_stop_releases_the_hotkey_timer_and_microphone(started, cfg, fake_hotkeys):
     cfg.hotkey_enabled = True
     c = started()
     c.start()
-    hook = c.hotkey
-    stopped = []
-    hook.stop = lambda: stopped.append(True)
     c.recorder.start()
     c.stop()
-    assert stopped and c.hotkey is None
+    assert fake_hotkeys[0].stopped and c.hotkey is None
     assert not c._poll.isActive()
     assert not c.recorder.recording
 

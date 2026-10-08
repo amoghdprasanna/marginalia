@@ -63,3 +63,24 @@ def test_an_old_problem_does_not_hide_a_newer_question(qtbot, listen):
 def test_a_problem_still_closes_itself(qtbot, listen):
     listen.show_problem("Didn't catch that.")
     qtbot.waitUntil(lambda: not listen.isVisible(), timeout=4000)
+
+
+def test_holding_ignores_pauses_until_released(qtbot):
+    w = ListenBox(SilenceDetector(silence_s=0.0, calibrate_s=0.0, max_s=100))
+    qtbot.addWidget(w)
+    w.detector.heard_speech = True  # spoke, then went quiet
+    with qtbot.assertNotEmitted(w.stop_requested, wait=200):
+        w.open_at(QPoint(300, 300), SCREEN, lambda: 0.0, hold=True)
+        w.detector.heard_speech = True
+    assert "release" in w.hint.text()
+    with qtbot.waitSignal(w.stop_requested, timeout=1000):
+        w.release_hold()
+        w.detector.heard_speech = True
+    assert "pause" in w.hint.text()
+
+
+def test_finish_sends_once(qtbot, listen):
+    with qtbot.waitSignal(listen.stop_requested):
+        listen.finish()
+    with qtbot.assertNotEmitted(listen.stop_requested):
+        listen.finish()

@@ -27,7 +27,7 @@ class Orb(QWidget):
     quit_requested = Signal()
     SIZE = 48
 
-    def __init__(self, hotkey_text: str | None) -> None:
+    def __init__(self, hotkey_text: str | None, voice_hotkey_text: str | None = None) -> None:
         super().__init__(None, FLOATING | Qt.WindowDoesNotAcceptFocus)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
@@ -37,6 +37,8 @@ class Orb(QWidget):
         tip = "Ask about what's on screen, by typing or by voice. It looks where your mouse last rested."
         if hotkey_text:
             tip += f"\nShortcut: {hotkey_text} asks about exactly where the mouse is."
+        if voice_hotkey_text:
+            tip += f"\nHold {voice_hotkey_text} and speak; let go to ask."
         self.setToolTip(tip + "\nDrag to move, right-click to quit.")
         self._press: QPoint | None = None
         self._dragging = False

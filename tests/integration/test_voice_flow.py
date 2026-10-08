@@ -84,3 +84,52 @@ def test_cancelling_a_spoken_follow_up_ends_the_thread_it_hid(qtbot, cfg):
     qtbot.waitUntil(c.listenbox.isVisible)
     c.listenbox.cancelled.emit()
     assert c.history == []
+
+
+# hold to talk ----------------------------------------------------------------------------------
+
+
+def test_holding_the_voice_key_listens_until_release(qtbot, cfg, monkeypatch):
+    import marginalia.app as app_module
+
+    clock = [100.0]
+    monkeypatch.setattr(app_module.time, "monotonic", lambda: clock[0])
+    brain = FakeBrain()
+    c = build(qtbot, cfg, brain=brain, voice_text="what is this term")
+    c.bus.voice_down.emit()
+    qtbot.waitUntil(c.listenbox.isVisible)
+    assert c.listenbox.hold, "a pause must not end a held question"
+    c.streams[0].push(np.full(16000, 0.1, dtype=np.float32))
+    clock[0] += 2.0
+    c.bus.voice_up.emit()
+    assert brain.asked[0][0] == "what is this term"
+
+
+def test_tapping_the_voice_key_listens_until_a_pause(qtbot, cfg, monkeypatch):
+    import marginalia.app as app_module
+
+    clock = [100.0]
+    monkeypatch.setattr(app_module.time, "monotonic", lambda: clock[0])
+    brain = FakeBrain()
+    c = build(qtbot, cfg, brain=brain, voice_text="x")
+    c.bus.voice_down.emit()
+    qtbot.waitUntil(c.listenbox.isVisible)
+    clock[0] += 0.1
+    c.bus.voice_up.emit()
+    assert c.listenbox.isVisible() and not c.listenbox.hold
+    assert brain.asked == [] and c.recorder.recording
+
+
+def test_letting_go_during_the_capture_delay_counts_as_a_tap(qtbot, cfg):
+    c = build(qtbot, cfg, voice_text="x")
+    c.bus.voice_down.emit()
+    c.bus.voice_up.emit()  # released before listening began
+    qtbot.waitUntil(c.listenbox.isVisible)
+    assert not c.listenbox.hold
+
+
+def test_the_voice_key_types_when_voice_is_off(qtbot, cfg):
+    c = build(qtbot, cfg)
+    c.bus.voice_down.emit()
+    qtbot.waitUntil(c.askbox.isVisible)
+    c.bus.voice_up.emit()  # harmless

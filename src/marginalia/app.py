@@ -21,6 +21,7 @@ from .capture import Snapshot, grab_screen, prepare
 from .config import Config, load_config
 from .cursor import RestTracker
 from .doubtlog import DoubtLog
+from .hotkeys import format_combo, start_hotkeys
 from .logs import setup_logging
 from .ocr import OCR
 from .pointing import place_box, resolve_points
@@ -35,35 +36,18 @@ HISTORY_TURNS = 4
 WORKERS = 6
 HIDE_DELAY_MS = 140  # let our own windows disappear before the screenshot
 PARTIAL_MS = 50  # redraw a streaming answer at most this often
+TAP_S = 0.35  # a voice-key press shorter than this is a tap: listen until a pause instead of until release
 
 
 class Bus(QObject):
     """Signals emitted from worker threads and delivered on the Qt main thread."""
 
     hotkey = Signal()
+    voice_down = Signal()  # the hold-to-talk key went down...
+    voice_up = Signal()  # ...and came back up
     answer_ready = Signal(object)
     answer_partial = Signal(object)
     transcript_ready = Signal(object)
-
-
-def pretty_hotkey(combo: str) -> str:
-    return "+".join(part.strip("<>").capitalize() for part in combo.split("+"))
-
-
-def start_hotkey(combo: str, callback):
-    if sys.platform.startswith("linux") and os.environ.get("XDG_SESSION_TYPE") == "wayland":
-        log.warning("Wayland session: global hotkeys are blocked here. Use the orb, or log in with X11.")
-        return None
-    try:
-        from pynput import keyboard
-
-        listener = keyboard.GlobalHotKeys({combo: callback})
-        listener.daemon = True
-        listener.start()
-        return listener
-    except Exception as exc:  # noqa: BLE001
-        log.warning("Hotkey unavailable (%s). Use the orb instead.", exc)
-        return None
 
 
 @dataclass
@@ -97,7 +81,10 @@ class Controller(QObject):
         self.brain, self.ocr, self.log, self.pool = sv.brain, sv.ocr, sv.log, sv.pool
         self.transcriber, self.recorder, self.grab = sv.transcriber, sv.recorder, sv.grab
 
-        self.orb = Orb(pretty_hotkey(cfg.hotkey) if cfg.hotkey_enabled else None)
+        self.orb = Orb(
+            format_combo(cfg.hotkey) if cfg.hotkey_enabled else None,
+            format_combo(cfg.voice_hotkey) if cfg.hotkey_enabled and cfg.voice_hotkey else None,
+        )
         self.askbox = AskBox()
         self.bubble = AnswerBubble()
         self.overlay = PointerOverlay()
@@ -148,6 +135,10 @@ class Controller(QObject):
         self.bus.transcript_ready.connect(self._on_transcript)
         self.orb.quit_requested.connect(QApplication.quit)
         self.bus.hotkey.connect(lambda: self.start_ask(at_cursor=True))
+        self.bus.voice_down.connect(self._voice_key_down)
+        self.bus.voice_up.connect(self._voice_key_up)
+        self._holding = False
+        self._hold_t0 = 0.0
         self.bus.answer_ready.connect(self._on_answer)
         self.bus.answer_partial.connect(self._on_partial)
         self.askbox.submitted.connect(self.ask)
@@ -159,11 +150,14 @@ class Controller(QObject):
         self.orb.show()
         self._poll.start()
         if self.cfg.hotkey_enabled:
-            self.hotkey = start_hotkey(self.cfg.hotkey, self.bus.hotkey.emit)
+            bindings = [(self.cfg.hotkey, self.bus.hotkey.emit, None)]
+            if self.cfg.voice_hotkey:
+                bindings.append((self.cfg.voice_hotkey, self.bus.voice_down.emit, self.bus.voice_up.emit))
+            self.hotkey = start_hotkeys(bindings)
         mode = "demo mode" if self.cfg.demo else self.cfg.model
         ocr = "on" if self.ocr and self.ocr.available else "off"
         voice = "on" if self.transcriber and self.transcriber.available else "off"
-        keys = pretty_hotkey(self.cfg.hotkey) if self.hotkey else "orb only"
+        keys = format_combo(self.cfg.hotkey) if self.hotkey else "orb only"
         log.info("Ready (%s, OCR %s, voice %s, trigger: %s). Journal: %s", mode, ocr, voice, keys, self.log.dir)
         if self.transcriber is not None and not self.transcriber.available:
             log.warning("Voice not installed (%s)", self.transcriber.problem)
@@ -251,6 +245,20 @@ class Controller(QObject):
         pos = QCursor.pos() if at_cursor else self.last_rest
         self._capture(pos, then=lambda: self._begin_listening(pos))
 
+    def _voice_key_down(self) -> None:
+        """Hold to talk: ask about where the mouse is, and listen while the key is held."""
+        self._holding, self._hold_t0 = True, time.monotonic()
+        self.start_voice(at_cursor=True)
+
+    def _voice_key_up(self) -> None:
+        if not self._holding:
+            return
+        self._holding = False
+        if time.monotonic() - self._hold_t0 < TAP_S:
+            self.listenbox.release_hold()  # a tap: keep listening until a pause, like the orb
+        else:
+            self.listenbox.finish()  # let go: that was the question
+
     def _askbox_to_voice(self) -> None:
         if self.snapshot is not None:  # the screen was already grabbed for this question
             self._begin_listening(QPoint(*self.snapshot.cursor))
@@ -264,7 +272,8 @@ class Controller(QObject):
             self.listenbox.open_at(pos, screen, lambda: 0.0)
             self.listenbox.show_problem(f"Microphone unavailable: {exc}"[:90])
             return
-        self.listenbox.open_at(pos, screen, lambda: self.recorder.level)
+        # Still holding the voice key (it may have been let go during the capture delay): until release.
+        self.listenbox.open_at(pos, screen, lambda: self.recorder.level, hold=self._holding)
 
     def _stop_recorder(self):
         try:

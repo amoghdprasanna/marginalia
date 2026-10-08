@@ -3,14 +3,10 @@
 from helpers import FakeBrain, FakeOCR, ManualExecutor, ask_typed, build, make_snapshot
 from PySide6.QtCore import QPoint
 
-from marginalia.app import HISTORY_TURNS, pretty_hotkey
+from marginalia.app import HISTORY_TURNS
 from marginalia.brain import BrainError
 from marginalia.doubtlog import DoubtLog
 from marginalia.ocr import TextLine
-
-
-def test_pretty_hotkey():
-    assert pretty_hotkey("<ctrl>+<alt>+<space>") == "Ctrl+Alt+Space"
 
 
 def test_typed_question_gets_an_answer_and_is_journaled(qtbot, cfg):
