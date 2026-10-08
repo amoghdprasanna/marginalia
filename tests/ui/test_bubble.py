@@ -130,3 +130,58 @@ def test_bubble_does_not_drag_from_its_body(bubble):
     QTest.mousePress(bubble, Qt.LeftButton, Qt.NoModifier, QPoint(100, y))
     QTest.mouseMove(bubble, QPoint(160, y + 40))
     assert bubble.pos() == start
+
+
+# telling you what is happening and what to do next ------------------------------------------
+
+
+def test_working_shows_a_stop_and_then_the_seconds(bubble, monkeypatch):
+    bubble.show_thinking("q")
+    assert bubble.stop_btn.isVisibleTo(bubble), "a visible way out while you wait"
+    assert not bubble.copy_btn.isVisibleTo(bubble)
+    monkeypatch.setattr(bubble, "_clock", type("C", (), {"elapsed": lambda self: 7400})())
+    bubble._tick_dots()
+    assert bubble.status.text().startswith("Thinking") and bubble.status.text().endswith("7 s")
+
+
+def test_stop_ends_the_thread(qtbot, bubble):
+    bubble.show_thinking("q")
+    with qtbot.waitSignal(bubble.closed):
+        bubble.stop_btn.click()
+
+
+def test_answer_footer_is_short_with_details_on_hover(bubble):
+    bubble.show_answer("q", "a", "Answered in 4.2 s", "claude-opus-5-5, done after 4.2 s", points=2)
+    assert bubble.meta.text() == "Answered in 4.2 s" and "claude-opus-5-5" in bubble.meta.toolTip()
+    assert not bubble.stop_btn.isVisibleTo(bubble)
+
+
+def test_markers_can_be_shown_again(qtbot, bubble):
+    bubble.show_answer("q", "a", "m", points=2)
+    assert bubble.replay_btn.isVisibleTo(bubble) and "2 places" in bubble.replay_btn.text()
+    with qtbot.waitSignal(bubble.replay_requested):
+        bubble.replay_btn.click()
+    bubble.show_answer("q", "a", "m", points=0)
+    assert not bubble.replay_btn.isVisibleTo(bubble), "nothing was pointed at, nothing to replay"
+
+
+def test_an_error_offers_its_fix_first_and_hides_the_follow_up(bubble):
+    ran = []
+    bubble.show_error("q", "Too many requests.", [("Try again", lambda: ran.append("retry")), ("Later", print)])
+    assert list(bubble.action_buttons) == ["Try again", "Later"]
+    assert bubble.action_buttons["Try again"].objectName() == "primary"
+    assert not bubble.follow_wrap.isVisibleTo(bubble) and not bubble.footer.isVisibleTo(bubble)
+    bubble.action_buttons["Try again"].click()
+    assert ran == ["retry"]
+
+
+def test_an_error_without_a_fix_lets_you_rephrase(bubble):
+    bubble.show_error("q", "Claude declined to answer this one.")
+    assert bubble.follow_wrap.isVisibleTo(bubble) and not bubble.actions.isVisibleTo(bubble)
+
+
+def test_an_answer_after_an_error_clears_the_error_state(bubble):
+    bubble.show_error("q", "Failed.", [("Try again", print)])
+    bubble.show_answer("q", "Fine now.", "m")
+    assert not bubble._failed and not bubble.actions.isVisibleTo(bubble)
+    bubble.grab()  # paints the normal mark again

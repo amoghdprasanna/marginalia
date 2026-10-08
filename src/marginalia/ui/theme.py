@@ -16,6 +16,7 @@ AMBER = QColor(255, 178, 36)
 HALO = QColor(10, 12, 22, 120)
 PILL = QColor(27, 32, 49, 228)
 TEXT_HEX, MUTED_HEX, AMBER_HEX, SLATE_HEX = "#ECEFF7", "#9BA3BC", "#FFB224", "#1B2031"
+ERROR_HEX = "#FF8A80"  # only for "this went wrong"; amber stays the colour of the answer's markers
 
 # Ordinary windows (Settings, Setup, Journal): the same slate and amber, with native layout.
 DIALOG_STYLE = f"""
@@ -36,7 +37,7 @@ QPushButton:hover {{ border-color: {AMBER_HEX}; }}
 QPushButton:disabled {{ color: {MUTED_HEX}; }}
 QPushButton#primary {{ background: {AMBER_HEX}; color: {SLATE_HEX}; border: none; font-weight: 600; }}
 QLabel#muted {{ color: {MUTED_HEX}; font-size: 12px; }}
-QLabel#error {{ color: #FF8A80; }}
+QLabel#error {{ color: {ERROR_HEX}; }}
 QCheckBox::indicator {{ width: 15px; height: 15px; border: 1px solid rgba(255,255,255,90); border-radius: 4px;
     background: rgba(255,255,255,10); }}
 QCheckBox::indicator:checked {{ background: {AMBER_HEX}; border-color: {AMBER_HEX}; }}

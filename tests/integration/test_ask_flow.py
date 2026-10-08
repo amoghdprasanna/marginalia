@@ -124,7 +124,7 @@ def test_ocr_lines_reach_the_model_and_the_footer(qtbot, cfg):
     ask_typed(qtbot, c, "why odd?")
     assert ocr.reads == 1, "OCR runs once per screenshot, while you type"
     assert brain.lines_seen == [lines]
-    assert "2 OCR lines" in c.bubble.meta.text()
+    assert "2 OCR lines read" in c.bubble.meta.toolTip(), "details live in the tooltip, not the footer"
 
 
 def test_a_failing_ocr_does_not_cost_the_answer(qtbot, cfg):
@@ -273,3 +273,48 @@ def test_answers_in_one_thread_share_a_journal_thread(qtbot, cfg):
     ask_typed(qtbot, c, "fresh")
     threads = Journal(cfg.log_dir).threads()
     assert [[e.question for e in t.entries] for t in threads] == [["fresh"], ["q1", "q2"]]
+
+
+# recovering from errors ------------------------------------------------------------------------
+
+
+def test_try_again_after_a_passing_error_gets_the_answer(qtbot, cfg):
+    brain = FakeBrain(error=BrainError("Too many requests right now.", "retry"))
+    c = build(qtbot, cfg, brain=brain)
+    ask_typed(qtbot, c, "what is d?")
+    assert "Too many requests" in c.bubble.body.toPlainText()
+    brain.error = None
+    c.bubble.action_buttons["Try again"].click()
+    assert "code distance" in c.bubble.body.toPlainText()
+    assert brain.asked[-1][0] == "what is d?", "the same question, about the same screen"
+
+
+def test_a_settings_problem_opens_settings(qtbot, cfg):
+    c = build(qtbot, cfg, brain=FakeBrain(error=BrainError("Your API key was rejected.", "settings")))
+    ask_typed(qtbot, c, "q")
+    c.bubble.action_buttons["Open Settings"].click()
+    qtbot.addWidget(c.settings_window)
+    assert c.settings_window.isVisible()
+
+
+def test_a_capture_failure_offers_the_setup_check(qtbot, cfg):
+    def broken(x, y):
+        raise RuntimeError("The screenshot came back blank.")
+
+    c = build(qtbot, cfg, grab=broken)
+    c.start_ask(at_cursor=False)
+    qtbot.waitUntil(c.bubble.isVisible)
+    assert c.bubble.title.text() == "Couldn't see your screen"
+    c.bubble.action_buttons["Open setup check"].click()
+    qtbot.addWidget(c.setup_window)
+    assert c.setup_window.isVisible()
+
+
+def test_show_again_flies_the_markers_again(qtbot, cfg):
+    from marginalia.brain import Point
+
+    c = build(qtbot, cfg, brain=FakeBrain(points=[Point("full", 100, 100, None, "eq 4")]))
+    ask_typed(qtbot, c, "q")
+    c.overlay.clear()
+    c.bubble.replay_btn.click()
+    assert c.overlay.isVisible() and [label for _, label in c.overlay.targets] == ["eq 4"]

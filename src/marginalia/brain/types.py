@@ -5,7 +5,15 @@ from dataclasses import dataclass, field
 
 
 class BrainError(Exception):
-    """An error with a message that is safe and useful to show in the bubble."""
+    """An error with a message that is safe and useful to show in the bubble.
+
+    `action` says how to recover, so the bubble can offer it as a button: "retry" (a passing
+    problem), "settings" (something only Settings can fix), or None (rephrase, or nothing to do).
+    """
+
+    def __init__(self, message: str, action: str | None = None) -> None:
+        super().__init__(message)
+        self.action = action
 
 
 class Cancelled(Exception):  # noqa: N818 - it is a signal, not an error

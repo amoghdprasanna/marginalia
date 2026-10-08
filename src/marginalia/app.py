@@ -206,6 +206,8 @@ class Controller(QObject):
         self.askbox.submitted.connect(self.ask)
         self.bubble.closed.connect(self._end_thread)
         self.bubble.followup.connect(self._followup)
+        self.bubble.replay_requested.connect(self.replay_markers)
+        self._last_pointing: tuple[QRect, QPoint, list] | None = None
         self.hotkey = None
 
     def start(self) -> None:
@@ -551,7 +553,12 @@ class Controller(QObject):
             self.orb.show()
             self._capturing = False
             self.snapshot = None  # never answer a later question about the previous screen
-            self.bubble.show_error("Screen capture", str(exc))
+            log.warning("Screen capture failed: %s", exc)
+            self.bubble.show_error(
+                "Couldn't see your screen",
+                str(exc),
+                [("Open setup check", self.open_setup), ("Try again", lambda: self.start_ask(at_cursor=False))],
+            )
             self._show_bubble_near(pos, [])
             return
         self.orb.show()
@@ -695,12 +702,16 @@ class Controller(QObject):
             prep, lines, answer = future.result()
         except BrainError as exc:
             log.warning("Answer failed: %s", exc)
-            self.bubble.show_error(question, str(exc))
+            self.bubble.show_error(question, str(exc), self._recovery(exc.action, question))
             self._show_bubble_near(cursor, [])
             return
         except Exception as exc:  # noqa: BLE001
             log.exception("Unexpected error while answering")
-            self.bubble.show_error(question, f"Something went wrong: {exc!r}")
+            self.bubble.show_error(
+                question,
+                f"Something went wrong ({type(exc).__name__}). It's in the log; trying again usually works.",
+                self._recovery("retry", question),
+            )
             self._show_bubble_near(cursor, [])
             return
 
@@ -720,13 +731,18 @@ class Controller(QObject):
         )
 
         targets = resolve_points(prep, snap, lines, answer.points)
+        self._last_pointing = (QRect(*snap.screen_geo), cursor, targets)
         self.overlay.point_to(QRect(*snap.screen_geo), cursor, targets)
-        meta = f"{answer.model}, {answer.elapsed:.1f}s"
+        # The footer says what matters to a reader; the numbers matter to a tinkerer, so they're a hover away.
+        details = [answer.model]
         if answer.first_text is not None:
-            meta = f"{answer.model}, first words {answer.first_text:.1f}s, done {answer.elapsed:.1f}s"
+            details.append(f"first words after {answer.first_text:.1f} s")
+        details.append(f"done after {answer.elapsed:.1f} s")
         if lines:
-            meta += f", {len(lines)} OCR lines"
-        self.bubble.show_answer(question, answer.text, meta)
+            details.append(f"{len(lines)} OCR lines read")
+        self.bubble.show_answer(
+            question, answer.text, f"Answered in {answer.elapsed:.1f} s", ", ".join(details), len(targets)
+        )
         keep_clear = []
         for x, y, _ in targets:  # the ring and the label that floats above-right of it
             keep_clear += [QPoint(int(x), int(y)), QPoint(int(x) + 90, int(y) - 34), QPoint(int(x) + 180, int(y) - 34)]
@@ -747,6 +763,18 @@ class Controller(QObject):
             except OSError as exc:
                 log.error("Could not save the eval case: %s", exc)
 
+    def _recovery(self, action: str | None, question: str):
+        """The buttons an error offers: its likely fix first."""
+        if action == "retry":
+            return [("Try again", lambda: self.ask(question))]
+        if action == "settings":
+            return [("Open Settings", self.open_settings)]
+        return []  # nothing to press: the follow-up field stays, to ask it another way
+
+    def replay_markers(self) -> None:
+        if self._last_pointing is not None:
+            self.overlay.point_to(*self._last_pointing)
+
     def _followup(self, question: str) -> None:
         # Re-capture first: the lecture or page may have moved on since the last question.
         pos = self.last_rest
@@ -757,6 +785,7 @@ class Controller(QObject):
         self._drop_partial()
         self.history.clear()
         self.thread_id = ""
+        self._last_pointing = None
         self.overlay.clear()
         self.orb.set_busy(False)
 

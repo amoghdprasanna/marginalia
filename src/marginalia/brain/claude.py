@@ -80,8 +80,8 @@ class ClaudeBrain:
 
         if self.client is None:
             raise BrainError(
-                "No API key found. Put ANTHROPIC_API_KEY=... in a .env file in the folder you start Marginalia from, "
-                "or start with --demo to try the interface without one."
+                "Marginalia needs an Anthropic API key to answer. Add one in Settings; it is kept in your keychain.",
+                "settings",
             )
         request = self.build_request(prep, lines, question, history)
         t0 = time.monotonic()
@@ -103,30 +103,35 @@ class ClaudeBrain:
             msg = str(exc)
             if "image" in msg and ("exceed" in msg or "too large" in msg):
                 raise BrainError(
-                    "The model rejected the screenshot size. If MARGINALIA_HIRES=1 is set, this "
-                    "model is on the standard image tier; set it to 0."
+                    "This model can't take screenshots that large. Turn off High-resolution images in Settings.",
+                    "settings",
                 ) from exc
-            raise BrainError(f"The API rejected the request: {msg[:300]}") from exc
+            raise BrainError(f"Claude couldn't process this request ({msg[:200]}).") from exc
         except anthropic.AuthenticationError as exc:
-            raise BrainError("The API key was rejected. Check ANTHROPIC_API_KEY in your .env file.") from exc
+            raise BrainError("Your API key was rejected. Check it in Settings.", "settings") from exc
         except anthropic.NotFoundError as exc:
-            raise BrainError(f"Model '{self.model}' was not found. Set MARGINALIA_MODEL in .env.") from exc
+            message = f"The model '{self.model}' isn't available to your key. Pick another in Settings."
+            raise BrainError(message, "settings") from exc
         except anthropic.RateLimitError as exc:
-            raise BrainError("Rate limited by the API. Wait a few seconds and ask again.") from exc
+            raise BrainError("Too many requests right now. Wait a few seconds, then try again.", "retry") from exc
         except anthropic.APIStatusError as exc:
-            raise BrainError(f"API error {exc.status_code}: {str(exc)[:300]}") from exc
+            if exc.status_code >= 500:
+                message = f"Claude is having trouble right now (error {exc.status_code}). Try again in a moment."
+                raise BrainError(message, "retry") from exc
+            raise BrainError(f"Claude returned an error ({exc.status_code}): {str(exc)[:200]}") from exc
         except anthropic.APIConnectionError as exc:
-            raise BrainError("Could not reach the API. Check your internet connection.") from exc
+            message = "Couldn't reach Claude. Check your internet connection, then try again."
+            raise BrainError(message, "retry") from exc
         except anthropic.APIError as exc:  # an error event in the middle of the stream
-            raise BrainError(f"The answer stream broke off: {str(exc)[:300]}") from exc
+            raise BrainError("The answer was interrupted. Try again.", "retry") from exc
 
         if resp.stop_reason == "refusal":
-            raise BrainError("Claude declined to answer this one. Try rephrasing the question.")
+            raise BrainError("Claude declined to answer this one. Try asking it a different way.")
         # With a mid-answer fallback the reply spans several text blocks; together they are one reply.
         raw = "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text")
         answer = parse_reply(raw, getattr(resp, "model", self.model), time.monotonic() - t0)
         answer.usage = read_usage(resp)
         answer.first_text = first_text
         if resp.stop_reason == "max_tokens":
-            answer.text += "\n\n*(Cut off at the length limit. Raise MARGINALIA_MAX_TOKENS for longer answers.)*"
+            answer.text += "\n\n*(Cut off at the length limit. Raise Max tokens in Settings for longer answers.)*"
         return answer

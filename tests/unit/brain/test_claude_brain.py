@@ -54,31 +54,35 @@ def test_refusal_becomes_a_friendly_error(cfg, prep):
 
 def test_truncated_answer_says_so(cfg, prep):
     client, _ = fake_client(stop_reason="max_tokens")
-    assert "length limit" in ClaudeBrain(cfg, client=client).ask(prep, [], "q", []).text
+    text = ClaudeBrain(cfg, client=client).ask(prep, [], "q", []).text
+    assert "length limit" in text and "Settings" in text, "says where to fix it, not which env var"
 
 
-def test_missing_key_explains_how_to_fix(cfg, prep):
+def test_missing_key_points_to_settings(cfg, prep):
     cfg.api_key = None
-    with pytest.raises(BrainError, match="ANTHROPIC_API_KEY"):
+    with pytest.raises(BrainError, match="Settings") as err:
         ClaudeBrain(cfg).ask(prep, [], "q", [])
+    assert err.value.action == "settings"
 
 
 @pytest.mark.parametrize(
-    ("error", "expected"),
+    ("error", "expected", "action"),
     [
-        (_status(anthropic.AuthenticationError, 401), "key was rejected"),
-        (_status(anthropic.NotFoundError, 404), "was not found"),
-        (_status(anthropic.RateLimitError, 429), "Rate limited"),
-        (_status(anthropic.BadRequestError, 400, "image exceeds max size"), "screenshot size"),
-        (_status(anthropic.BadRequestError, 400, "messages: bad"), "rejected the request"),
-        (_status(anthropic.InternalServerError, 500), "API error 500"),
-        (anthropic.APIConnectionError(request=_REQ), "internet connection"),
+        (_status(anthropic.AuthenticationError, 401), "key was rejected", "settings"),
+        (_status(anthropic.NotFoundError, 404), "isn't available", "settings"),
+        (_status(anthropic.RateLimitError, 429), "Too many requests", "retry"),
+        (_status(anthropic.BadRequestError, 400, "image exceeds max size"), "High-resolution", "settings"),
+        (_status(anthropic.BadRequestError, 400, "messages: bad"), "couldn't process", None),
+        (_status(anthropic.InternalServerError, 500), "having trouble", "retry"),
+        (anthropic.APIConnectionError(request=_REQ), "internet connection", "retry"),
     ],
 )
-def test_api_errors_become_actionable_messages(cfg, prep, error, expected):
+def test_api_errors_say_what_to_do_next(cfg, prep, error, expected, action):
     client, _ = fake_client(error=error)
-    with pytest.raises(BrainError, match=expected):
+    with pytest.raises(BrainError, match=expected) as err:
         ClaudeBrain(cfg, client=client).ask(prep, [], "q", [])
+    assert err.value.action == action
+    assert "MARGINALIA_" not in str(err.value) and ".env" not in str(err.value), "plain language, no env vars"
 
 
 def test_usage_is_reported_for_cost_tracking(cfg, prep):
@@ -135,6 +139,6 @@ def test_a_key_builds_a_real_client_without_calling_the_network(cfg):
 def test_an_error_in_the_middle_of_the_stream_is_explained(cfg, prep):
     client, messages = fake_client(text=envelope("word " * 20))
     messages.mid_error = anthropic.APIError("overloaded", _REQ, body=None)
-    with pytest.raises(BrainError, match="broke off"):
+    with pytest.raises(BrainError, match="interrupted"):
         ClaudeBrain(cfg, client=client).ask(prep, [], "q", [])
     assert messages.streams[0].closed
