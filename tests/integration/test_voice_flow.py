@@ -73,3 +73,14 @@ def test_switching_from_typing_to_voice_reuses_the_screenshot(qtbot, cfg):
     qtbot.waitUntil(c.askbox.isVisible)
     c.askbox._to_voice()
     assert c.listenbox.isVisible() and len(grabs) == 1
+
+
+def test_cancelling_a_spoken_follow_up_ends_the_thread_it_hid(qtbot, cfg):
+    brain = FakeBrain()
+    c = build(qtbot, cfg, brain=brain, voice_text="and this?")
+    c.snapshot = make_snapshot()
+    c.ask("first")
+    c.bubble.voice_followup.emit()
+    qtbot.waitUntil(c.listenbox.isVisible)
+    c.listenbox.cancelled.emit()
+    assert c.history == []

@@ -135,6 +135,9 @@ class Controller(QObject):
         self.bubble.voice_followup.connect(lambda: self.start_voice(at_cursor=False))
         self.listenbox.stop_requested.connect(self._finish_listening)
         self.listenbox.cancelled.connect(self._cancel_listening)
+        # A new question hid the bubble when it captured. Cancelling it leaves nothing on screen,
+        # so the thread ends too; otherwise the next question would carry answers you can't see.
+        self.askbox.cancelled.connect(self._end_thread)
         self.bus.transcript_ready.connect(self._on_transcript)
         self.orb.quit_requested.connect(QApplication.quit)
         self.bus.hotkey.connect(lambda: self.start_ask(at_cursor=True))
@@ -209,6 +212,7 @@ class Controller(QObject):
             return
         self._capturing = True
         self.request_id += 1  # anything still in flight is now stale
+        self.orb.set_busy(False)  # ...so nobody is waiting on it any more
         self._stop_recorder()
         for w in (self.overlay, self.askbox, self.bubble, self.chooser, self.listenbox, self.orb):
             w.hide()
@@ -271,6 +275,7 @@ class Controller(QObject):
     def _cancel_listening(self) -> None:
         self.listen_id += 1
         self._stop_recorder()
+        self._end_thread()
 
     def _on_transcript(self, payload) -> None:
         lid, future = payload

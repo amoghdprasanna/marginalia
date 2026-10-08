@@ -208,3 +208,40 @@ def test_follow_up_recaptures_the_screen_first(qtbot, cfg):
     c._followup("q2")
     qtbot.waitUntil(lambda: len(brain.asked) == 2)
     assert len(grabs) == 2
+
+
+def test_cancelling_a_new_question_ends_the_thread_it_hid(qtbot, cfg):
+    """Bug: a new question hides the open bubble; cancelling it left the thread alive but unseen.
+
+    The next question then silently carried the old answers as history.
+    """
+    brain = FakeBrain()
+    c = build(qtbot, cfg, brain=brain)
+    ask_typed(qtbot, c, "first")
+    c.start_ask(at_cursor=False)
+    qtbot.waitUntil(c.askbox.isVisible)
+    assert not c.bubble.isVisible(), "capturing hides the bubble"
+    c.askbox.keyPressEvent(_esc())
+    ask_typed(qtbot, c, "unrelated")
+    assert brain.asked[-1] == ("unrelated", [])
+
+
+def test_abandoning_a_streaming_answer_stops_the_orb_spinning(qtbot, cfg):
+    """Bug: an answer made stale by a new capture never reset the orb, so it spun forever."""
+    pool = ManualExecutor()
+    c = build(qtbot, cfg, pool=pool)
+    c.snapshot = make_snapshot()
+    c.ask("slow one")
+    assert c.orb._spin.isActive()
+    c.start_ask(at_cursor=False)
+    qtbot.waitUntil(c.askbox.isVisible)
+    c.askbox.keyPressEvent(_esc())
+    pool.run_all()  # the abandoned answer arrives late and is dropped
+    assert not c.orb._spin.isActive()
+
+
+def _esc():
+    from PySide6.QtCore import QEvent, Qt
+    from PySide6.QtGui import QKeyEvent
+
+    return QKeyEvent(QEvent.KeyPress, Qt.Key_Escape, Qt.NoModifier)
