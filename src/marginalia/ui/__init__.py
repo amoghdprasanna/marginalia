@@ -13,6 +13,7 @@ from .orb import Orb
 from .overlay import PointerOverlay
 from .paint import draw_icon, draw_qubit
 from .settings import SettingsWindow
+from .setup import SetupWindow
 
 __all__ = [
     "AnswerBubble",
@@ -22,6 +23,7 @@ __all__ = [
     "Orb",
     "PointerOverlay",
     "SettingsWindow",
+    "SetupWindow",
     "draw_icon",
     "draw_qubit",
 ]

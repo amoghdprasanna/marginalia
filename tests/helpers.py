@@ -210,10 +210,37 @@ class FakeKeyring:
         del self.data[(service, account)]
 
 
+class FakeProbes:
+    """Stands in for permissions.MacProbes: fixed answers, and a record of what was asked for."""
+
+    def __init__(self, screen=True, mic="authorized") -> None:
+        self.screen, self.mic = screen, mic
+        self.requested: list[str] = []
+        self.opened: list[str] = []
+
+    def screen_recording(self):
+        return self.screen
+
+    def microphone(self):
+        return self.mic
+
+    def request_screen_recording(self):
+        self.requested.append("screen")
+
+    def request_microphone(self):
+        self.requested.append("microphone")
+
+    def open_settings(self, pane):
+        self.opened.append(pane)
+        return True
+
+
 # controller harness ---------------------------------------------------------------------
 
 
-def build(qtbot, cfg, *, brain=None, pool=None, voice_text=None, grab=None, ocr=None, log=None, factories=None):
+def build(
+    qtbot, cfg, *, brain=None, pool=None, voice_text=None, grab=None, ocr=None, log=None, factories=None, probes=None
+):
     streams = []
     brain = brain or FakeBrain()
     services = Services(
@@ -230,6 +257,7 @@ def build(qtbot, cfg, *, brain=None, pool=None, voice_text=None, grab=None, ocr=
         keychain=Keychain(FakeKeyring()),
         # A settings change rebuilds services: by default with the same fakes.
         factories=factories or Factories(brain=lambda c: brain, ocr=lambda c: ocr, transcriber=lambda c: None),
+        probes=probes or FakeProbes(),
     )
     c = Controller(cfg, services)
     for w in (c.orb, c.askbox, c.bubble, c.overlay, c.chooser, c.listenbox):

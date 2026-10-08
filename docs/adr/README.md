@@ -26,3 +26,4 @@ supersedes it, so the history of *why* survives.
 | [0015](0015-settings-file-under-env.md) | A settings file, layered under environment variables | Accepted |
 | [0016](0016-api-key-in-keychain.md) | The API key lives in the OS credential store | Accepted |
 | [0017](0017-native-hotkeys-hold-to-talk.md) | Native hotkeys on macOS, and a hold-to-talk voice key | Accepted |
+| [0018](0018-setup-check.md) | A setup check with fix-it buttons | Accepted |

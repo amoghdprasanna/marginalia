@@ -26,6 +26,7 @@ class Orb(QWidget):
     type_requested = Signal()
     quit_requested = Signal()
     settings_requested = Signal()
+    setup_requested = Signal()
     SIZE = 48
 
     def __init__(self, hotkey_text: str | None, voice_hotkey_text: str | None = None) -> None:
@@ -111,6 +112,7 @@ class Orb(QWidget):
         menu.addAction("Ask by voice", self.voice_requested.emit)
         menu.addSeparator()
         menu.addAction("Settings…", self.settings_requested.emit)
+        menu.addAction("Setup check…", self.setup_requested.emit)
         menu.addSeparator()
         menu.addAction("Quit Marginalia", self.quit_requested.emit)
         return menu

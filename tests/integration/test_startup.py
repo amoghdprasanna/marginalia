@@ -178,6 +178,9 @@ def fake_main(monkeypatch, qapp, tmp_path):
         def stop(self):
             self.stopped = True
 
+        def maybe_show_setup(self):
+            self.setup_checked = True
+
     monkeypatch.setattr(app_module, "Controller", FakeController)
     monkeypatch.setattr(QApplication, "exec", lambda *a: 7)
     monkeypatch.setattr(app_module.signal, "signal", lambda *a: None)
@@ -201,7 +204,7 @@ def test_missing_api_key_is_pointed_out(fake_main, monkeypatch, caplog):
     monkeypatch.delenv("MARGINALIA_DEMO", raising=False)
     with pytest.raises(SystemExit):
         app_module.main([])
-    assert "No ANTHROPIC_API_KEY found" in caplog.text
+    assert "No API key found" in caplog.text
 
 
 def test_quitting_does_not_wait_for_busy_workers(fake_main, monkeypatch):

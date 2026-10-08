@@ -118,3 +118,52 @@ def test_orb_menu_opens_settings(qtbot, cfg):
     qtbot.addWidget(c.settings_window)
     assert c.settings_window.isVisible()
     QApplication.processEvents()
+
+
+# the setup check -------------------------------------------------------------------------------
+
+
+def test_first_run_shows_the_setup_check_once(qtbot, cfg):
+    c = build(qtbot, cfg)
+    c.maybe_show_setup()
+    qtbot.addWidget(c.setup_window)
+    assert c.setup_window.isVisible()
+    c.setup_window.close()
+    assert not c.store.first_run()
+    c.setup_window = None
+    c.maybe_show_setup()
+    assert c.setup_window is None, "all good and seen before: not shown again"
+
+
+def test_a_missing_permission_shows_it_even_later(qtbot, cfg, monkeypatch):
+    from helpers import FakeProbes
+
+    monkeypatch.setattr("sys.platform", "darwin")
+    c = build(qtbot, cfg, probes=FakeProbes(screen=False))
+    c.store.save({})  # not the first run
+    c.maybe_show_setup()
+    qtbot.addWidget(c.setup_window)
+    assert "screen" in c.setup_window.buttons
+
+
+def test_fixing_the_api_key_opens_settings_and_saving_rechecks(qtbot, cfg):
+    cfg.api_key = None
+    c = build(qtbot, cfg)
+    c.open_setup()
+    qtbot.addWidget(c.setup_window)
+    c.setup_window.buttons["api_key"].click()
+    qtbot.addWidget(c.settings_window)
+    assert c.settings_window.isVisible()
+    c.settings_window.key_edit.setText("sk-ant-api03-pasted-in-settings-window")
+    c.settings_window.fields["log_dir"].setText(str(cfg.log_dir))
+    c.settings_window.save()
+    assert c.cfg.api_key == "sk-ant-api03-pasted-in-settings-window"
+    assert "api_key" not in c.setup_window.buttons, "the setup check refreshed after saving"
+
+
+def test_orb_menu_has_the_setup_check(qtbot, cfg):
+    c = build(qtbot, cfg)
+    actions = {a.text(): a for a in c.orb.build_menu().actions() if a.text()}
+    actions["Setup check…"].trigger()
+    qtbot.addWidget(c.setup_window)
+    assert c.setup_window.isVisible()

@@ -12,7 +12,7 @@ from concurrent.futures import Executor, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
 
-from PySide6.QtCore import QObject, QPoint, QRect, QTimer, Signal
+from PySide6.QtCore import QObject, QPoint, QProcess, QRect, QTimer, Signal
 from PySide6.QtGui import QCursor, QGuiApplication
 from PySide6.QtWidgets import QApplication
 
@@ -24,9 +24,10 @@ from .doubtlog import DoubtLog
 from .hotkeys import format_combo, start_hotkeys
 from .logs import setup_logging
 from .ocr import OCR
+from .permissions import Fixer, default_probes, host_app, needs_attention, run_checks
 from .pointing import place_box, resolve_points
 from .secrets import Keychain
-from .ui import AnswerBubble, AskBox, ListenBox, ModeChooser, Orb, PointerOverlay, SettingsWindow
+from .ui import AnswerBubble, AskBox, ListenBox, ModeChooser, Orb, PointerOverlay, SettingsWindow, SetupWindow
 from .voice import Recorder, Transcriber
 
 log = logging.getLogger(__name__)
@@ -86,6 +87,7 @@ class Services:
     store: SettingsStore = field(default_factory=SettingsStore)
     keychain: Keychain = field(default_factory=Keychain)
     factories: Factories = field(default_factory=Factories)
+    probes: Any = field(default_factory=default_probes)
 
 
 def default_services(cfg: Config) -> Services:
@@ -107,7 +109,7 @@ class Controller(QObject):
         sv = services or default_services(cfg)
         self.brain, self.ocr, self.log, self.pool = sv.brain, sv.ocr, sv.log, sv.pool
         self.transcriber, self.recorder, self.grab = sv.transcriber, sv.recorder, sv.grab
-        self.store, self.keychain, self.factories = sv.store, sv.keychain, sv.factories
+        self.store, self.keychain, self.factories, self.probes = sv.store, sv.keychain, sv.factories, sv.probes
 
         self.orb = Orb(None)
         self.askbox = AskBox()
@@ -116,6 +118,7 @@ class Controller(QObject):
         self.chooser = ModeChooser()
         self.listenbox = ListenBox()
         self.settings_window: SettingsWindow | None = None
+        self.setup_window: SetupWindow | None = None
         self._show_hotkeys()
         self._show_voice_availability()
         self.listen_id = 0
@@ -156,6 +159,7 @@ class Controller(QObject):
         self.bus.transcript_ready.connect(self._on_transcript)
         self.orb.quit_requested.connect(QApplication.quit)
         self.orb.settings_requested.connect(self.open_settings)
+        self.orb.setup_requested.connect(self.open_setup)
         self.bus.hotkey.connect(lambda: self.start_ask(at_cursor=True))
         self.bus.voice_down.connect(self._voice_key_down)
         self.bus.voice_up.connect(self._voice_key_up)
@@ -231,10 +235,47 @@ class Controller(QObject):
         if self.settings_window is None:
             self.settings_window = SettingsWindow(self.cfg, self.store, self.keychain)
             self.settings_window.saved.connect(self.reload_settings)
+            self.settings_window.saved.connect(self._refresh_setup)
             self.settings_window.closed.connect(self._start_hotkeys)
         # A registered hotkey is swallowed before the window sees it, so you couldn't record it again.
         self._stop_hotkeys()
         self.settings_window.open(self.cfg)
+
+    def _refresh_setup(self) -> None:
+        if self.setup_window is not None and self.setup_window.isVisible():
+            self.setup_window.show_checks(self.setup_checks(), host_app())
+
+    # setup check ------------------------------------------------------------------------------
+
+    def setup_checks(self):
+        problem = self.transcriber.problem if self.transcriber is not None and not self.transcriber.available else None
+        ocr = (self.ocr is not None and self.ocr.available) if self.cfg.ocr_enabled else None
+        return run_checks(self.cfg, self.probes, voice_problem=problem, ocr_available=ocr)
+
+    def maybe_show_setup(self) -> None:
+        """At launch: the setup check on first run, or when something required is missing."""
+        checks = self.setup_checks()
+        if self.store.first_run() or needs_attention(checks):
+            self.open_setup(checks)
+
+    def open_setup(self, checks=None) -> None:
+        if self.setup_window is None:
+            w = self.setup_window = SetupWindow()
+            # Kept on self: Qt holds a slot's object weakly, so a local Fixer would be collected.
+            self._fixer = Fixer(self.probes, self.open_settings)
+            w.fix_requested.connect(self._fixer.fix)
+            w.recheck_requested.connect(lambda: w.show_checks(self.setup_checks(), host_app()))
+            w.restart_requested.connect(restart)
+            w.done.connect(self._setup_done)
+        self.setup_window.show_checks(checks or self.setup_checks(), host_app())
+        self.setup_window.open()
+
+    def _setup_done(self) -> None:
+        if self.store.first_run():
+            try:
+                self.store.save({})  # seen once; from now on only shown when something is missing
+            except OSError as exc:
+                log.warning("Could not save settings: %s", exc)
 
     def reload_settings(self) -> None:
         """Read every layer again (keeping command-line switches) and apply what changed."""
@@ -553,6 +594,15 @@ class Controller(QObject):
         self.bubble.raise_()
 
 
+def restart() -> None:
+    """Start a fresh copy of the app, then quit this one (a new Screen Recording grant needs it)."""
+    if getattr(sys, "frozen", False):
+        QProcess.startDetached(sys.executable, sys.argv[1:])
+    else:
+        QProcess.startDetached(sys.executable, ["-m", "marginalia", *sys.argv[1:]])
+    QApplication.quit()
+
+
 def hard_exit(code: int) -> None:
     """End the process now. sys.exit would first wait for every busy worker thread."""
     logging.shutdown()
@@ -578,11 +628,12 @@ def main(argv: list[str] | None = None) -> None:
     signal.signal(signal.SIGINT, signal.SIG_DFL)  # Ctrl+C in the terminal quits
 
     if not cfg.demo and not cfg.api_key:
-        log.warning("No ANTHROPIC_API_KEY found. Add it to .env, or run with --demo.")
+        log.warning("No API key found. Paste one in Settings (right-click the orb), or run with --demo.")
 
     controller = Controller(cfg)
     app.aboutToQuit.connect(controller.stop)
     controller.start()
+    controller.maybe_show_setup()
     # Workers may still be downloading the speech model or waiting on an abandoned answer; nothing
     # they hold needs saving (the journal is written on this thread), so don't wait for them.
     hard_exit(app.exec())
