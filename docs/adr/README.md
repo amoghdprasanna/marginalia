@@ -23,3 +23,5 @@ supersedes it, so the history of *why* survives.
 | [0012](0012-stream-the-answer.md) | Stream the answer into the bubble | Accepted |
 | [0013](0013-default-to-opus-5-5.md) | Default model: Claude Opus 5.5 | Accepted |
 | [0014](0014-logging.md) | Log with `logging`: console lines, JSON lines in a file | Accepted |
+| [0015](0015-settings-file-under-env.md) | A settings file, layered under environment variables | Accepted |
+| [0016](0016-api-key-in-keychain.md) | The API key lives in the OS credential store | Accepted |

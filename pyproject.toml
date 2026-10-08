@@ -15,6 +15,7 @@ dependencies = [
     "pynput>=1.7.7",
     "python-dotenv>=1.0",
     "numpy>=1.26",
+    "keyring>=25",
 ]
 
 [project.optional-dependencies]

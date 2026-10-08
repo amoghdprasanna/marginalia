@@ -38,6 +38,19 @@ def cfg(tmp_path) -> Config:
 
 
 @pytest.fixture(autouse=True)
+def _private_settings_and_keychain(monkeypatch, tmp_path):
+    """Never read or write the real settings file or the real keychain from a test."""
+    from helpers import FakeKeyring
+
+    import marginalia.secrets
+
+    monkeypatch.setenv("MARGINALIA_SETTINGS_FILE", str(tmp_path / "settings" / "settings.json"))
+    keyring = FakeKeyring()
+    monkeypatch.setattr(marginalia.secrets, "_default_backend", lambda: keyring)
+    return keyring
+
+
+@pytest.fixture(autouse=True)
 def _log_everything(caplog):
     """App messages are logged, not printed; let every test see them in caplog.text.
 

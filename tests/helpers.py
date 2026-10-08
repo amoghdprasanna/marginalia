@@ -185,6 +185,29 @@ def fake_client(text: str = '{"answer": "hi", "points": []}', stop_reason: str =
     return SimpleNamespace(beta=SimpleNamespace(messages=messages)), messages
 
 
+class FakeKeyring:
+    """In-memory stand-in for the keyring module (get/set/delete_password)."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.data: dict[tuple[str, str], str] = {}
+        self.error = error
+
+    def get_password(self, service, account):
+        if self.error is not None:
+            raise self.error
+        return self.data.get((service, account))
+
+    def set_password(self, service, account, value):
+        if self.error is not None:
+            raise self.error
+        self.data[(service, account)] = value
+
+    def delete_password(self, service, account):
+        if self.error is not None or (service, account) not in self.data:
+            raise self.error or KeyError(account)
+        del self.data[(service, account)]
+
+
 # controller harness ---------------------------------------------------------------------
 
 
