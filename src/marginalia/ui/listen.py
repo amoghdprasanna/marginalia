@@ -25,7 +25,6 @@ class ListenBox(Panel):
     stop_requested = Signal()
     cancelled = Signal()
 
-
     def __init__(self, detector: SilenceDetector | None = None) -> None:
         super().__init__()
         self.detector = detector or SilenceDetector()
@@ -55,6 +54,7 @@ class ListenBox(Panel):
         self.level = 0.0
         self.phase = 0.9
         self._listening = False
+        self._session = 0  # bumped by open_at, so a timer from an earlier question can tell it is stale
         self.clock = QElapsedTimer()
         self.tick = QTimer(self)
         self.tick.setInterval(33)
@@ -63,6 +63,7 @@ class ListenBox(Panel):
     def open_at(self, cursor: QPoint, screen: QRect, level_fn) -> None:
         self.level_fn = level_fn
         self._listening = True
+        self._session += 1
         self.detector.reset()
         self.status.setText("Listening…")
         self.timer_lab.setText("0:00")
@@ -102,8 +103,10 @@ class ListenBox(Panel):
         set_hints(self.hint, ("Orb", "try again"), ("Esc", "close"))
         self.adjustSize()
         self.update()
-        # `self` as context: Qt cancels the timer if this widget is destroyed first.
-        QTimer.singleShot(2600, self, lambda: None if self._listening else self.hide())
+        # `self` as context: Qt cancels the timer if this widget is destroyed first. The session
+        # check keeps it from hiding a question asked again since (it may be transcribing by then).
+        session = self._session
+        QTimer.singleShot(2600, self, lambda: self.hide() if session == self._session else None)
 
     def close_quietly(self) -> None:
         self._listening = False
