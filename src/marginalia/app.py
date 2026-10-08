@@ -12,13 +12,14 @@ from concurrent.futures import Executor, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
 
-from PySide6.QtCore import QObject, QPoint, QProcess, QRect, QTimer, Signal
-from PySide6.QtGui import QCursor, QGuiApplication
+from PySide6.QtCore import QObject, QPoint, QProcess, QRect, QTimer, QUrl, Signal
+from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QApplication
 
 from .brain import BrainError, Cancelled, ClaudeBrain, DemoBrain
 from .capture import Snapshot, grab_screen, prepare
 from .config import Config, SettingsStore, load_config
+from .crash import CrashReporter, issue_url
 from .cursor import RestTracker
 from .doubtlog import DoubtLog
 from .hotkeys import format_combo, start_hotkeys
@@ -34,6 +35,7 @@ from .ui import (
     JournalWindow,
     ListenBox,
     ModeChooser,
+    Notice,
     Orb,
     PointerOverlay,
     SettingsWindow,
@@ -133,6 +135,7 @@ class Controller(QObject):
         self.settings_window: SettingsWindow | None = None
         self.setup_window: SetupWindow | None = None
         self.journal_window: JournalWindow | None = None
+        self.notice: Notice | None = None
         self.journal_request = 0
         self._show_hotkeys()
         self._show_voice_availability()
@@ -263,6 +266,43 @@ class Controller(QObject):
     def _refresh_setup(self) -> None:
         if self.setup_window is not None and self.setup_window.isVisible():
             self.setup_window.show_checks(self.setup_checks(), host_app())
+
+    # crash reports ----------------------------------------------------------------------------
+
+    @staticmethod
+    def open_url(url: QUrl) -> bool:
+        return QDesktopServices.openUrl(url)
+
+    def offer_crash_reports(self, reporter: CrashReporter) -> None:
+        """If you opted in and the last run hit an error, offer to report it (ADR 0020)."""
+        if not self.cfg.crash_reports:
+            return
+        pending = reporter.pending()
+        if not pending:
+            return
+        _, report = pending[-1]
+
+        def handled() -> None:
+            for path, _r in pending:
+                reporter.mark_handled(path)
+
+        def send() -> None:
+            self.open_url(QUrl(issue_url(report)))
+            handled()
+
+        more = f" It happened {len(pending)} times; this is the latest." if len(pending) > 1 else ""
+        self.notice = Notice(
+            "Marginalia hit an error last time",
+            f"{report.get('type')}: {report.get('message')}{more}\n\n"
+            "Reporting opens a GitHub issue with the error and recent log lines (no questions or answers), "
+            "which you can read and edit before sending. Nothing is sent otherwise.",
+            [
+                ("Show the report", lambda: self.open_url(QUrl.fromLocalFile(str(reporter.dir)))),
+                ("Not now", handled),
+                ("Report…", send),
+            ],
+        )
+        self.notice.open()
 
     # journal ----------------------------------------------------------------------------------
 
@@ -712,6 +752,9 @@ def main(argv: list[str] | None = None) -> None:
     setup_logging()  # console only, so problems reading the config are reported
     cfg = load_config(demo=args.demo, no_hotkey=args.no_hotkey, no_ocr=args.no_ocr, no_voice=args.no_voice)
     setup_logging(cfg.log_dir, cfg.log_level.upper())
+    reporter = CrashReporter(cfg.log_dir)
+    reporter.install()
+    reporter.collect_fatal()
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName("Marginalia")
     app.setQuitOnLastWindowClosed(False)
@@ -724,6 +767,7 @@ def main(argv: list[str] | None = None) -> None:
     app.aboutToQuit.connect(controller.stop)
     controller.start()
     controller.maybe_show_setup()
+    controller.offer_crash_reports(reporter)
     # Workers may still be downloading the speech model or waiting on an abandoned answer; nothing
     # they hold needs saving (the journal is written on this thread), so don't wait for them.
     hard_exit(app.exec())

@@ -10,6 +10,7 @@ from .bubble import AnswerBubble
 from .chooser import ModeChooser
 from .journal import JournalWindow
 from .listen import ListenBox
+from .notice import Notice
 from .orb import Orb
 from .overlay import PointerOverlay
 from .paint import draw_icon, draw_qubit
@@ -22,6 +23,7 @@ __all__ = [
     "JournalWindow",
     "ListenBox",
     "ModeChooser",
+    "Notice",
     "Orb",
     "PointerOverlay",
     "SettingsWindow",

@@ -235,7 +235,7 @@ class SettingsWindow(QWidget):
         return box
 
     def _journal_group(self) -> QGroupBox:
-        box, form = self._form("Journal and logs")
+        box, form = self._form("Journal, logs and updates")
         folder = QLineEdit()
         self.fields["log_dir"] = folder
         browse = QPushButton("Choose…")
@@ -247,6 +247,8 @@ class SettingsWindow(QWidget):
         form.addRow("Folder", row)
         form.addRow("Console detail", self._combo("log_level", LOG_LEVELS))
         form.addRow("", self._check("save_cases", "Also save each question as an eval case"))
+        form.addRow("", self._check("check_updates", "Check for new versions once a day"))
+        form.addRow("", self._check("crash_reports", "Offer to report crashes (you review each report first)"))
         return box
 
     # values -----------------------------------------------------------------------------------

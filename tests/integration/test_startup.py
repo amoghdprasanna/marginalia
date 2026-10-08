@@ -181,7 +181,21 @@ def fake_main(monkeypatch, qapp, tmp_path):
         def maybe_show_setup(self):
             self.setup_checked = True
 
+        def offer_crash_reports(self, reporter):
+            self.reporter = reporter
+
+    class FakeReporter:
+        def __init__(self, log_dir):
+            self.installed = self.collected = False
+
+        def install(self):  # the real one would hook the test runner's excepthook
+            self.installed = True
+
+        def collect_fatal(self):
+            self.collected = True
+
     monkeypatch.setattr(app_module, "Controller", FakeController)
+    monkeypatch.setattr(app_module, "CrashReporter", FakeReporter)
     monkeypatch.setattr(QApplication, "exec", lambda *a: 7)
     monkeypatch.setattr(app_module.signal, "signal", lambda *a: None)
     monkeypatch.setattr(app_module, "hard_exit", lambda code: sys.exit(code))
@@ -244,3 +258,54 @@ def test_main_keeps_a_json_log_in_the_log_folder(fake_main, tmp_path):
     with pytest.raises(SystemExit):
         app_module.main(["--demo"])
     assert (tmp_path / "logs" / "marginalia.jsonl").exists()
+
+
+def test_main_installs_crash_reporting_and_offers_old_reports(fake_main):
+    with pytest.raises(SystemExit):
+        app_module.main(["--demo"])
+    [c] = fake_main
+    assert c.reporter.installed and c.reporter.collected
+
+
+# crash reports ---------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def crashed(tmp_path):
+    from marginalia.crash import CrashReporter
+
+    r = CrashReporter(tmp_path)
+    r.dir.mkdir(parents=True)
+    r._write({"type": "ValueError", "message": "singular", "traceback": "...", "handled": False})
+    return r
+
+
+def test_crash_reports_are_offered_only_when_opted_in(qtbot, cfg, crashed):
+    c = build(qtbot, cfg)
+    c.offer_crash_reports(crashed)
+    assert c.notice is None, "off by default: nothing is offered"
+    cfg.crash_reports = True
+    c.offer_crash_reports(crashed)
+    qtbot.addWidget(c.notice)
+    assert "singular" in c.notice.text.text()
+
+
+def test_reporting_opens_a_prefilled_issue_and_stops_asking(qtbot, cfg, crashed, monkeypatch):
+    opened = []
+    cfg.crash_reports = True
+    c = build(qtbot, cfg)
+    monkeypatch.setattr(c, "open_url", lambda url: opened.append(url.toString()))
+    c.offer_crash_reports(crashed)
+    qtbot.addWidget(c.notice)
+    c.notice.buttons["Report…"].click()
+    assert opened and "issues/new" in opened[0] and "singular" in opened[0]
+    assert crashed.pending() == []
+
+
+def test_not_now_also_stops_asking(qtbot, cfg, crashed):
+    cfg.crash_reports = True
+    c = build(qtbot, cfg)
+    c.offer_crash_reports(crashed)
+    qtbot.addWidget(c.notice)
+    c.notice.buttons["Not now"].click()
+    assert crashed.pending() == [] and not c.notice.isVisible()

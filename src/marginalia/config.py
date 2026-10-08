@@ -71,6 +71,10 @@ SETTINGS: tuple[Setting, ...] = (
     # Console detail. The log file (<log dir>/logs/marginalia.jsonl) always keeps everything.
     Setting("log_level", "MARGINALIA_LOG_LEVEL", str, "info", LOG_LEVELS),
     Setting("demo", "MARGINALIA_DEMO", bool, False),
+    # Off by default: reports are always kept locally; this only offers to send them (ADR 0020).
+    Setting("crash_reports", "MARGINALIA_CRASH_REPORTS", bool, False),
+    # Once a day, ask GitHub whether there is a newer release (ADR 0021).
+    Setting("check_updates", "MARGINALIA_CHECK_UPDATES", bool, True),
 )
 BY_KEY = {s.key: s for s in SETTINGS}
 
@@ -93,6 +97,8 @@ class Config:
     save_cases: bool = False
     log_level: str = "info"
     voice_hotkey: str = "<ctrl>+<alt>+v"
+    crash_reports: bool = False
+    check_updates: bool = True
     # Where each value came from: "default", "settings", "env" or "command line" (plus "keychain"
     # for the API key). Lets the Settings window lock fields that an environment variable pins.
     sources: dict[str, str] = field(default_factory=dict)
