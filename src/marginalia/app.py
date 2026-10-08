@@ -19,7 +19,7 @@ from PySide6.QtWidgets import QApplication
 
 from . import __version__
 from .brain import BrainError, Cancelled, ClaudeBrain, DemoBrain
-from .capture import Snapshot, grab_screen, prepare
+from .capture import Snapshot, default_grab, prepare
 from .config import Config, SettingsStore, load_config, settings_path
 from .crash import CrashReporter, issue_url
 from .cursor import RestTracker
@@ -102,7 +102,7 @@ class Services:
     ocr: OCR | None = None
     transcriber: Transcriber | None = None
     recorder: Recorder = field(default_factory=Recorder)
-    grab: Callable[[int, int], Snapshot] = grab_screen
+    grab: Callable[[int, int], Snapshot] = field(default_factory=default_grab)
     pool: Executor = field(default_factory=lambda: ThreadPoolExecutor(max_workers=WORKERS))
     store: SettingsStore = field(default_factory=SettingsStore)
     keychain: Keychain = field(default_factory=Keychain)
@@ -785,6 +785,18 @@ class Controller(QObject):
         self.bubble.raise_()
 
 
+def use_xwayland(env=os.environ) -> bool:
+    """On Wayland, run Qt through XWayland so the orb, bubble and markers can be placed (ADR 0024).
+
+    Native Wayland ignores window positions, which an overlay can't live without. Screenshots and
+    shortcuts still go through the portal. Set QT_QPA_PLATFORM yourself to choose otherwise.
+    """
+    if env.get("XDG_SESSION_TYPE") == "wayland" and env.get("DISPLAY") and not env.get("QT_QPA_PLATFORM"):
+        env["QT_QPA_PLATFORM"] = "xcb"
+        return True
+    return False
+
+
 def restart() -> None:
     """Start a fresh copy of the app, then quit this one (a new Screen Recording grant needs it)."""
     if getattr(sys, "frozen", False):
@@ -816,6 +828,8 @@ def main(argv: list[str] | None = None) -> None:
     reporter = CrashReporter(cfg.log_dir)
     reporter.install()
     reporter.collect_fatal()
+    if sys.platform.startswith("linux") and use_xwayland():
+        log.info("Wayland session: windows run through XWayland; screenshots and shortcuts use the portal.")
     if sys.platform == "win32":
         try:  # group our windows under our own taskbar icon, not python.exe's
             import ctypes

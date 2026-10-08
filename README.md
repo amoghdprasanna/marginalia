@@ -49,7 +49,7 @@ still works and takes precedence; see `.env.example`.)
 |---|---|
 | **macOS** | The setup check asks for *Screen Recording* and (for voice) *Microphone*. Run from a terminal, macOS asks about the terminal app, and it must be restarted after you allow Screen Recording. Shortcuts need no Accessibility permission (they use the system hotkey API). |
 | **Windows** | Works as is. If your antivirus flags the keyboard hook, use `--no-hotkey`. |
-| **Linux** | Use an **X11** session for now. Wayland blocks global hotkeys, screen grabs and free window placement; it needs portal-based capture, planned for later. |
+| **Linux** | X11 works fully. On **Wayland**, screenshots and shortcuts go through the desktop portal (shortcuts need KDE Plasma, GNOME 48+ or another desktop with the GlobalShortcuts portal; the desktop may ask you to confirm the keys), and windows run through XWayland. The mouse position is only approximate there, so prefer clicking the orb after pointing. |
 
 ## How it works
 

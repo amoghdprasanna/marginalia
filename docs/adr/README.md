@@ -32,3 +32,4 @@ supersedes it, so the history of *why* survives.
 | [0021](0021-update-check.md) | Updates: a daily check that tells you, not a self-installer (yet) | Accepted |
 | [0022](0022-release-process.md) | Release process: SemVer, a changelog, and tag-triggered builds | Accepted |
 | [0023](0023-pyinstaller-app.md) | The desktop app: PyInstaller, signed and notarised when credentials exist | Accepted |
+| [0024](0024-wayland-through-the-portal.md) | Wayland: screenshots and shortcuts through the desktop portal, windows through XWayland | Accepted |

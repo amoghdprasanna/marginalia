@@ -311,6 +311,10 @@ def wayland() -> bool:
 def default_backend():
     if sys.platform == "darwin":
         return CarbonBackend()
+    if wayland():
+        from .wayland import PortalHotkeys
+
+        return PortalHotkeys()
     return PynputBackend()
 
 
@@ -321,9 +325,6 @@ def start_hotkeys(bindings: list[tuple[str, Callback, Callback | None]], backend
     work here; the reason is logged and the orb still works. A combo that doesn't parse is skipped
     with a warning, so one typo doesn't cost the other hotkey.
     """
-    if wayland():
-        log.warning("Wayland session: global hotkeys are blocked here. Use the orb, or log in with X11.")
-        return None
     parsed = []
     for text, on_press, on_release in bindings:
         try:
@@ -338,6 +339,7 @@ def start_hotkeys(bindings: list[tuple[str, Callback, Callback | None]], backend
             backend.register(combo, on_press, on_release)
         backend.start()
         return backend
-    except Exception as exc:  # noqa: BLE001  (no pynput, a blocked keyboard hook, a taken combo)
-        log.warning("Hotkey unavailable (%s). Use the orb instead.", exc)
+    except Exception as exc:  # noqa: BLE001  (no pynput, a blocked keyboard hook, a taken combo, no portal)
+        why = " Wayland needs a desktop with the GlobalShortcuts portal (KDE, GNOME 48+)." if wayland() else ""
+        log.warning("Hotkey unavailable (%s).%s Use the orb instead.", exc, why)
         return None

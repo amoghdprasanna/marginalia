@@ -189,7 +189,8 @@ def run_checks(cfg: Config, probes, voice_problem: str | None = None, ocr_availa
                 "screen",
                 "Screen capture",
                 UNKNOWN,
-                "Wayland: capture goes through the desktop portal, which may ask each time. X11 works best for now.",
+                "Wayland: screenshots go through the desktop portal, which may ask you to allow it. "
+                "Shortcuts need a desktop with the GlobalShortcuts portal (KDE, GNOME 48+).",
             )
         )
 

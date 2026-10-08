@@ -16,6 +16,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "numpy>=1.26",
     "keyring>=25",
+    "jeepney>=0.8; sys_platform == 'linux'",  # D-Bus for the Wayland portal (ADR 0024)
 ]
 
 [project.optional-dependencies]

@@ -174,3 +174,29 @@ def grab_screen(x: int, y: int) -> Snapshot:
             "or Python in System Settings > Privacy & Security, then restart it."
         )
     return Snapshot(img, (g.x(), g.y(), g.width(), g.height()), (int(x), int(y)))
+
+
+def grab_screen_portal(x: int, y: int, portal_factory=None) -> Snapshot:
+    """Wayland: the screen containing (x, y), through the desktop's Screenshot portal (ADR 0024)."""
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QGuiApplication
+
+    from .wayland import JeepneyPortal, crop_box, portal_screenshot
+
+    screen = QGuiApplication.screenAt(QPoint(int(x), int(y))) or QGuiApplication.primaryScreen()
+    g, vg = screen.geometry(), screen.virtualGeometry()
+    portal = (portal_factory or JeepneyPortal)()
+    try:
+        whole = portal_screenshot(portal)
+    finally:
+        portal.close()
+    geo = (g.x(), g.y(), g.width(), g.height())
+    img = whole.crop(crop_box(whole.size, geo, (vg.x(), vg.y(), vg.width(), vg.height())))
+    return Snapshot(img, geo, (int(x), int(y)))
+
+
+def default_grab():
+    """The screen grabber for this session: Qt's, or the portal's on Wayland."""
+    from .hotkeys import wayland
+
+    return grab_screen_portal if wayland() else grab_screen

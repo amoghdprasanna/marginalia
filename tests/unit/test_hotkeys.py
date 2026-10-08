@@ -184,11 +184,14 @@ def test_start_falls_back_to_the_orb_when_the_backend_fails(caplog, monkeypatch)
     assert "Use the orb" in caplog.text
 
 
-def test_wayland_skips_hotkeys_with_a_reason(caplog, monkeypatch):
+def test_wayland_uses_the_portal_and_explains_when_it_is_missing(caplog, monkeypatch):
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
-    assert start_hotkeys([("<ctrl>+<space>", print, None)], lambda: pytest.fail("not built")) is None
-    assert "Wayland" in caplog.text
+    from marginalia.wayland import PortalHotkeys
+
+    assert isinstance(REAL_DEFAULT_BACKEND(), PortalHotkeys)
+    assert start_hotkeys([("<ctrl>+<space>", print, None)], lambda: FakeBackend(OSError("no portal"))) is None
+    assert "GlobalShortcuts portal" in caplog.text
 
 
 def test_nothing_to_bind_starts_nothing(monkeypatch):
