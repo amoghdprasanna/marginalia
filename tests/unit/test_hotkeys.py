@@ -20,6 +20,8 @@ from marginalia.hotkeys import (
     to_text,
 )
 
+REAL_DEFAULT_BACKEND = hotkeys.default_backend  # conftest swaps in an inert one for every test
+
 # combos ----------------------------------------------------------------------------------------
 
 
@@ -198,9 +200,9 @@ def test_default_backend_per_platform(monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(hotkeys, "PynputBackend", lambda: "pynput")
     monkeypatch.setattr(hotkeys, "CarbonBackend", lambda: "carbon")
-    assert hotkeys.default_backend() == "pynput"
+    assert REAL_DEFAULT_BACKEND() == "pynput"
     monkeypatch.setattr(sys, "platform", "darwin")
-    assert hotkeys.default_backend() == "carbon"
+    assert REAL_DEFAULT_BACKEND() == "carbon"
 
 
 # Carbon ----------------------------------------------------------------------------------------

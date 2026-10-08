@@ -10,10 +10,12 @@ from types import SimpleNamespace
 import numpy as np
 from PIL import Image
 
-from marginalia.app import Controller, Services
+from marginalia.app import Controller, Factories, Services
 from marginalia.brain import Answer, Point
 from marginalia.capture import Snapshot
+from marginalia.config import SettingsStore
 from marginalia.doubtlog import DoubtLog
+from marginalia.secrets import Keychain
 from marginalia.voice import Recorder, Transcriber
 
 
@@ -211,10 +213,11 @@ class FakeKeyring:
 # controller harness ---------------------------------------------------------------------
 
 
-def build(qtbot, cfg, *, brain=None, pool=None, voice_text=None, grab=None, ocr=None, log=None):
+def build(qtbot, cfg, *, brain=None, pool=None, voice_text=None, grab=None, ocr=None, log=None, factories=None):
     streams = []
+    brain = brain or FakeBrain()
     services = Services(
-        brain=brain or FakeBrain(),
+        brain=brain,
         log=log or DoubtLog(cfg.log_dir),
         ocr=ocr,
         transcriber=None
@@ -223,6 +226,10 @@ def build(qtbot, cfg, *, brain=None, pool=None, voice_text=None, grab=None, ocr=
         recorder=Recorder(stream_factory=lambda cb: streams.append(FakeStream(cb)) or streams[-1]),
         grab=grab or (lambda x, y: make_snapshot(cursor=(x, y))),
         pool=pool or ImmediateExecutor(),
+        store=SettingsStore(cfg.log_dir / "settings.json"),
+        keychain=Keychain(FakeKeyring()),
+        # A settings change rebuilds services: by default with the same fakes.
+        factories=factories or Factories(brain=lambda c: brain, ocr=lambda c: ocr, transcriber=lambda c: None),
     )
     c = Controller(cfg, services)
     for w in (c.orb, c.askbox, c.bubble, c.overlay, c.chooser, c.listenbox):

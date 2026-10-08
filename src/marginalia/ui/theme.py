@@ -17,6 +17,36 @@ HALO = QColor(10, 12, 22, 120)
 PILL = QColor(27, 32, 49, 228)
 TEXT_HEX, MUTED_HEX, AMBER_HEX, SLATE_HEX = "#ECEFF7", "#9BA3BC", "#FFB224", "#1B2031"
 
+# Ordinary windows (Settings, Setup, Journal): the same slate and amber, with native layout.
+DIALOG_STYLE = f"""
+QWidget {{ background: {SLATE_HEX}; color: {TEXT_HEX}; font-size: 13px; }}
+QGroupBox {{ border: 1px solid rgba(255,255,255,30); border-radius: 10px; margin-top: 14px;
+    padding: 12px 10px 8px; }}
+QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 4px; color: {MUTED_HEX}; font-weight: 600; }}
+QLineEdit, QPlainTextEdit, QComboBox, QSpinBox, QListWidget, QTextBrowser {{
+    background: rgba(255,255,255,12); border: 1px solid rgba(255,255,255,30); border-radius: 7px;
+    padding: 5px 8px; selection-background-color: {AMBER_HEX}; selection-color: {SLATE_HEX}; }}
+QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus {{ border-color: {AMBER_HEX}; }}
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QCheckBox:disabled,
+QPlainTextEdit:disabled {{ color: {MUTED_HEX}; }}
+QComboBox QAbstractItemView {{ background: {SLATE_HEX}; selection-background-color: rgba(255,178,36,60); }}
+QPushButton {{ background: rgba(255,255,255,16); border: 1px solid rgba(255,255,255,30); border-radius: 7px;
+    padding: 6px 14px; }}
+QPushButton:hover {{ border-color: {AMBER_HEX}; }}
+QPushButton:disabled {{ color: {MUTED_HEX}; }}
+QPushButton#primary {{ background: {AMBER_HEX}; color: {SLATE_HEX}; border: none; font-weight: 600; }}
+QLabel#muted {{ color: {MUTED_HEX}; font-size: 12px; }}
+QLabel#error {{ color: #FF8A80; }}
+QCheckBox::indicator {{ width: 15px; height: 15px; border: 1px solid rgba(255,255,255,90); border-radius: 4px;
+    background: rgba(255,255,255,10); }}
+QCheckBox::indicator:checked {{ background: {AMBER_HEX}; border-color: {AMBER_HEX}; }}
+QScrollBar:vertical {{ background: transparent; width: 8px; margin: 0; }}
+QScrollBar::handle:vertical {{ background: rgba(255,255,255,60); border-radius: 4px; min-height: 24px; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+QListWidget::item {{ padding: 6px 4px; }}
+QListWidget::item:selected {{ background: rgba(255,178,36,50); color: {TEXT_HEX}; }}
+"""
+
 FLOATING = Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
 
 

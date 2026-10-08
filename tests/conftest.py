@@ -37,6 +37,17 @@ def cfg(tmp_path) -> Config:
     )
 
 
+class _InertHotkeys:
+    def register(self, combo, on_press, on_release=None):
+        pass
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+
 @pytest.fixture(autouse=True)
 def _private_settings_and_keychain(monkeypatch, tmp_path):
     """Never read or write the real settings file or the real keychain from a test."""
@@ -45,6 +56,10 @@ def _private_settings_and_keychain(monkeypatch, tmp_path):
     import marginalia.secrets
 
     monkeypatch.setenv("MARGINALIA_SETTINGS_FILE", str(tmp_path / "settings" / "settings.json"))
+    # Nor register real global hotkeys: a test that turns them on gets a backend that does nothing.
+    import marginalia.hotkeys
+
+    monkeypatch.setattr(marginalia.hotkeys, "default_backend", _InertHotkeys)
     keyring = FakeKeyring()
     monkeypatch.setattr(marginalia.secrets, "_default_backend", lambda: keyring)
     return keyring

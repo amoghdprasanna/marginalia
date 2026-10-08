@@ -190,6 +190,11 @@ def _fourcc(s: str) -> int:
     return int.from_bytes(s.encode("ascii"), "big")
 
 
+# Carbon keeps the raw pointer to our callback. If a backend were garbage-collected without stop(),
+# freeing its ctypes thunk would leave Carbon calling freed memory; so thunks live as long as the process.
+_KEEP_ALIVE: list = []
+
+
 class CarbonBackend:
     """RegisterEventHotKey: the system delivers press and release to our main thread.
 
@@ -232,7 +237,7 @@ class CarbonBackend:
         self._pending: list[tuple[int, Combo]] = []
         self._refs: list = []
         self._handler_ref = None
-        self._proc = None  # keep the ctypes callback alive as long as Carbon may call it
+        self._proc = None
 
     def register(self, combo: Combo, on_press: Callback, on_release: Callback | None = None) -> None:
         if combo.key not in MAC_KEYCODES:
@@ -266,8 +271,10 @@ class CarbonBackend:
             self._EventTypeSpec(_fourcc("keyb"), self.PRESSED), self._EventTypeSpec(_fourcc("keyb"), self.RELEASED)
         )
         self._proc = self._HANDLER(self._on_event)
+        _KEEP_ALIVE.append(self._proc)
         ref = ct.c_void_p()
-        err = c.InstallEventHandler(target, ct.cast(self._proc, ct.c_void_p), 2, specs, None, ct.byref(ref))
+        user_data = ct.c_void_p(len(_KEEP_ALIVE))  # distinct per install, so two never look identical
+        err = c.InstallEventHandler(target, ct.cast(self._proc, ct.c_void_p), 2, specs, user_data, ct.byref(ref))
         if err != 0:
             raise OSError(f"InstallEventHandler failed ({err})")
         self._handler_ref = ref
@@ -307,7 +314,7 @@ def default_backend():
     return PynputBackend()
 
 
-def start_hotkeys(bindings: list[tuple[str, Callback, Callback | None]], backend_factory=default_backend):
+def start_hotkeys(bindings: list[tuple[str, Callback, Callback | None]], backend_factory=None):
     """Register every (combo text, on_press, on_release) and start listening.
 
     Returns the running backend (call .stop() to release it), or None when global hotkeys can't
@@ -326,7 +333,7 @@ def start_hotkeys(bindings: list[tuple[str, Callback, Callback | None]], backend
     if not parsed:
         return None
     try:
-        backend = backend_factory()
+        backend = (backend_factory or default_backend)()
         for combo, on_press, on_release in parsed:
             backend.register(combo, on_press, on_release)
         backend.start()

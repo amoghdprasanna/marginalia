@@ -25,6 +25,7 @@ class Orb(QWidget):
     voice_requested = Signal()
     type_requested = Signal()
     quit_requested = Signal()
+    settings_requested = Signal()
     SIZE = 48
 
     def __init__(self, hotkey_text: str | None, voice_hotkey_text: str | None = None) -> None:
@@ -34,12 +35,7 @@ class Orb(QWidget):
         keep_visible(self)
         self.setFixedSize(self.SIZE, self.SIZE)
         self.setCursor(Qt.PointingHandCursor)
-        tip = "Ask about what's on screen, by typing or by voice. It looks where your mouse last rested."
-        if hotkey_text:
-            tip += f"\nShortcut: {hotkey_text} asks about exactly where the mouse is."
-        if voice_hotkey_text:
-            tip += f"\nHold {voice_hotkey_text} and speak; let go to ask."
-        self.setToolTip(tip + "\nDrag to move, right-click to quit.")
+        self.set_hotkeys(hotkey_text, voice_hotkey_text)
         self._press: QPoint | None = None
         self._dragging = False
         self.phase = 0.9
@@ -50,6 +46,14 @@ class Orb(QWidget):
         self.move(screen.right() - self.SIZE - 18, screen.center().y())
         # Unplugging a monitor can leave the orb where no screen is; with no hotkey it is the only way in.
         QGuiApplication.instance().screenRemoved.connect(lambda _s: QTimer.singleShot(0, self, self.rehome))
+
+    def set_hotkeys(self, hotkey_text: str | None, voice_hotkey_text: str | None = None) -> None:
+        tip = "Ask about what's on screen, by typing or by voice. It looks where your mouse last rested."
+        if hotkey_text:
+            tip += f"\nShortcut: {hotkey_text} asks about exactly where the mouse is."
+        if voice_hotkey_text:
+            tip += f"\nHold {voice_hotkey_text} and speak; let go to ask."
+        self.setToolTip(tip + "\nDrag to move, right-click for settings and more.")
 
     def rehome(self) -> None:
         """Pull the orb wholly onto the nearest screen if any of it hangs off."""
@@ -105,6 +109,8 @@ class Orb(QWidget):
         menu = QMenu(self)
         menu.addAction("Ask by typing", self.type_requested.emit)
         menu.addAction("Ask by voice", self.voice_requested.emit)
+        menu.addSeparator()
+        menu.addAction("Settings…", self.settings_requested.emit)
         menu.addSeparator()
         menu.addAction("Quit Marginalia", self.quit_requested.emit)
         return menu

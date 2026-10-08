@@ -18,14 +18,15 @@ from PySide6.QtWidgets import QApplication
 
 from .brain import BrainError, Cancelled, ClaudeBrain, DemoBrain
 from .capture import Snapshot, grab_screen, prepare
-from .config import Config, load_config
+from .config import Config, SettingsStore, load_config
 from .cursor import RestTracker
 from .doubtlog import DoubtLog
 from .hotkeys import format_combo, start_hotkeys
 from .logs import setup_logging
 from .ocr import OCR
 from .pointing import place_box, resolve_points
-from .ui import AnswerBubble, AskBox, ListenBox, ModeChooser, Orb, PointerOverlay
+from .secrets import Keychain
+from .ui import AnswerBubble, AskBox, ListenBox, ModeChooser, Orb, PointerOverlay, SettingsWindow
 from .voice import Recorder, Transcriber
 
 log = logging.getLogger(__name__)
@@ -50,6 +51,27 @@ class Bus(QObject):
     transcript_ready = Signal(object)
 
 
+def make_brain(cfg: Config):
+    return DemoBrain() if cfg.demo else ClaudeBrain(cfg)
+
+
+def make_ocr(cfg: Config) -> OCR | None:
+    return OCR() if cfg.ocr_enabled else None
+
+
+def make_transcriber(cfg: Config) -> Transcriber | None:
+    return Transcriber(cfg.whisper_model) if cfg.voice_enabled else None
+
+
+@dataclass
+class Factories:
+    """How to build the services a settings change can replace. Tests pass fakes."""
+
+    brain: Callable[[Config], Any] = make_brain
+    ocr: Callable[[Config], OCR | None] = make_ocr
+    transcriber: Callable[[Config], Transcriber | None] = make_transcriber
+
+
 @dataclass
 class Services:
     """Everything the controller talks to that is slow, external or hardware. Tests swap these out."""
@@ -61,15 +83,20 @@ class Services:
     recorder: Recorder = field(default_factory=Recorder)
     grab: Callable[[int, int], Snapshot] = grab_screen
     pool: Executor = field(default_factory=lambda: ThreadPoolExecutor(max_workers=WORKERS))
+    store: SettingsStore = field(default_factory=SettingsStore)
+    keychain: Keychain = field(default_factory=Keychain)
+    factories: Factories = field(default_factory=Factories)
 
 
 def default_services(cfg: Config) -> Services:
     return Services(
-        brain=DemoBrain() if cfg.demo else ClaudeBrain(cfg),
-        log=DoubtLog(cfg.log_dir),
-        ocr=OCR() if cfg.ocr_enabled else None,
-        transcriber=Transcriber(cfg.whisper_model) if cfg.voice_enabled else None,
+        brain=make_brain(cfg), log=DoubtLog(cfg.log_dir), ocr=make_ocr(cfg), transcriber=make_transcriber(cfg)
     )
+
+
+# Settings that, when changed, need a new brain (the others are read per question or elsewhere).
+BRAIN_KEYS = {"model", "effort", "api_key", "user_context", "max_tokens", "hires", "demo"}
+HOTKEY_KEYS = {"hotkey", "voice_hotkey", "hotkey_enabled"}
 
 
 class Controller(QObject):
@@ -80,23 +107,17 @@ class Controller(QObject):
         sv = services or default_services(cfg)
         self.brain, self.ocr, self.log, self.pool = sv.brain, sv.ocr, sv.log, sv.pool
         self.transcriber, self.recorder, self.grab = sv.transcriber, sv.recorder, sv.grab
+        self.store, self.keychain, self.factories = sv.store, sv.keychain, sv.factories
 
-        self.orb = Orb(
-            format_combo(cfg.hotkey) if cfg.hotkey_enabled else None,
-            format_combo(cfg.voice_hotkey) if cfg.hotkey_enabled and cfg.voice_hotkey else None,
-        )
+        self.orb = Orb(None)
         self.askbox = AskBox()
         self.bubble = AnswerBubble()
         self.overlay = PointerOverlay()
         self.chooser = ModeChooser()
         self.listenbox = ListenBox()
-        if self.transcriber is None:
-            self.chooser.set_voice_available(False, "disabled in settings")
-        elif not self.transcriber.available:
-            self.chooser.set_voice_available(False, self.transcriber.problem)
-        voice_ok = self.transcriber is not None and self.transcriber.available
-        self.askbox.set_voice_available(voice_ok)
-        self.bubble.set_voice_available(voice_ok)
+        self.settings_window: SettingsWindow | None = None
+        self._show_hotkeys()
+        self._show_voice_availability()
         self.listen_id = 0
         self._panels = (self.orb, self.askbox, self.bubble, self.chooser, self.listenbox)
 
@@ -134,6 +155,7 @@ class Controller(QObject):
         self.askbox.cancelled.connect(self._end_thread)
         self.bus.transcript_ready.connect(self._on_transcript)
         self.orb.quit_requested.connect(QApplication.quit)
+        self.orb.settings_requested.connect(self.open_settings)
         self.bus.hotkey.connect(lambda: self.start_ask(at_cursor=True))
         self.bus.voice_down.connect(self._voice_key_down)
         self.bus.voice_up.connect(self._voice_key_up)
@@ -149,11 +171,7 @@ class Controller(QObject):
     def start(self) -> None:
         self.orb.show()
         self._poll.start()
-        if self.cfg.hotkey_enabled:
-            bindings = [(self.cfg.hotkey, self.bus.hotkey.emit, None)]
-            if self.cfg.voice_hotkey:
-                bindings.append((self.cfg.voice_hotkey, self.bus.voice_down.emit, self.bus.voice_up.emit))
-            self.hotkey = start_hotkeys(bindings)
+        self._start_hotkeys()
         mode = "demo mode" if self.cfg.demo else self.cfg.model
         ocr = "on" if self.ocr and self.ocr.available else "off"
         voice = "on" if self.transcriber and self.transcriber.available else "off"
@@ -171,11 +189,87 @@ class Controller(QObject):
         self._poll.stop()
         self._drop_partial()
         self.request_id += 1  # an answer still streaming is cancelled at its next chunk
+        self._stop_hotkeys()
+        self._stop_recorder()
+        self.pool.shutdown(wait=False, cancel_futures=True)
+
+    def _start_hotkeys(self) -> None:
+        self._stop_hotkeys()
+        if not self.cfg.hotkey_enabled:
+            return
+        bindings = [(self.cfg.hotkey, self.bus.hotkey.emit, None)]
+        if self.cfg.voice_hotkey:
+            bindings.append((self.cfg.voice_hotkey, self.bus.voice_down.emit, self.bus.voice_up.emit))
+        self.hotkey = start_hotkeys(bindings)
+
+    def _stop_hotkeys(self) -> None:
         if self.hotkey is not None:
             self.hotkey.stop()
             self.hotkey = None
-        self._stop_recorder()
-        self.pool.shutdown(wait=False, cancel_futures=True)
+
+    def _show_hotkeys(self) -> None:
+        on = self.cfg.hotkey_enabled
+        self.orb.set_hotkeys(
+            format_combo(self.cfg.hotkey) if on and self.cfg.hotkey else None,
+            format_combo(self.cfg.voice_hotkey) if on and self.cfg.voice_hotkey else None,
+        )
+
+    def _show_voice_availability(self) -> None:
+        if self.transcriber is None:
+            self.chooser.set_voice_available(False, "disabled in settings")
+        elif not self.transcriber.available:
+            self.chooser.set_voice_available(False, self.transcriber.problem)
+        else:
+            self.chooser.set_voice_available(True)
+        voice_ok = self.transcriber is not None and self.transcriber.available
+        self.askbox.set_voice_available(voice_ok)
+        self.bubble.set_voice_available(voice_ok)
+
+    # settings ---------------------------------------------------------------------------------
+
+    def open_settings(self) -> None:
+        if self.settings_window is None:
+            self.settings_window = SettingsWindow(self.cfg, self.store, self.keychain)
+            self.settings_window.saved.connect(self.reload_settings)
+            self.settings_window.closed.connect(self._start_hotkeys)
+        # A registered hotkey is swallowed before the window sees it, so you couldn't record it again.
+        self._stop_hotkeys()
+        self.settings_window.open(self.cfg)
+
+    def reload_settings(self) -> None:
+        """Read every layer again (keeping command-line switches) and apply what changed."""
+        cli = {k for k, v in self.cfg.sources.items() if v == "command line"}
+        new = load_config(
+            demo="demo" in cli,
+            no_hotkey="hotkey_enabled" in cli,
+            no_ocr="ocr_enabled" in cli,
+            no_voice="voice_enabled" in cli,
+            store=self.store,
+            keychain=self.keychain,
+        )
+        self.apply_config(new)
+
+    def apply_config(self, new: Config) -> None:
+        """Switch to `new`, rebuilding only the services whose settings changed."""
+        old, self.cfg = self.cfg, new
+        changed = {k for k in vars(new) if k != "sources" and getattr(old, k) != getattr(new, k)}
+        if changed & BRAIN_KEYS:
+            self.brain = self.factories.brain(new)
+        if "ocr_enabled" in changed:
+            self.ocr = self.factories.ocr(new)
+        if changed & {"voice_enabled", "whisper_model"}:
+            self.transcriber = self.factories.transcriber(new)
+            self._show_voice_availability()
+            if self.transcriber is not None and self.transcriber.available:
+                self.pool.submit(self._warm_voice)
+        if "log_dir" in changed:
+            self.log = DoubtLog(new.log_dir)
+        if changed & {"log_dir", "log_level"}:
+            setup_logging(new.log_dir, new.log_level.upper())
+        if changed & HOTKEY_KEYS or self.hotkey is None:
+            self._start_hotkeys()
+        self._show_hotkeys()
+        log.info("Settings applied%s", f": {', '.join(sorted(changed))}" if changed else " (nothing changed)")
 
     def _warm_voice(self) -> None:
         try:

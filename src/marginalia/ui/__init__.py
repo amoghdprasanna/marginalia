@@ -12,5 +12,16 @@ from .listen import ListenBox
 from .orb import Orb
 from .overlay import PointerOverlay
 from .paint import draw_icon, draw_qubit
+from .settings import SettingsWindow
 
-__all__ = ["AnswerBubble", "AskBox", "ListenBox", "ModeChooser", "Orb", "PointerOverlay", "draw_icon", "draw_qubit"]
+__all__ = [
+    "AnswerBubble",
+    "AskBox",
+    "ListenBox",
+    "ModeChooser",
+    "Orb",
+    "PointerOverlay",
+    "SettingsWindow",
+    "draw_icon",
+    "draw_qubit",
+]
