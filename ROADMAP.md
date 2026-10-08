@@ -39,14 +39,18 @@ Goal: a tool you open every day without the terminal.
 - [x] Separate voice hotkey (hold to talk); native hotkeys on macOS, no Accessibility needed (ADR 0017)
 - [x] Journal browser: search past questions, reopen a thread with its screenshot (ADR 0019)
 
-## Stage 4: Distribution
+## Stage 4: Distribution ✅ (signing waits on you)
 Goal: someone else can install it.
-- [ ] Signed, notarised macOS `.app` (Briefcase or PyInstaller)
-- [ ] Auto-update
+- [x] macOS `.app` and `.dmg` with PyInstaller; signs, notarises and staples when credentials exist (ADR 0023)
+- [ ] **You:** an Apple Developer ID and the six repository secrets in `docs/releasing.md`;
+      until then builds are ad-hoc signed and only open on the Mac that built them
+- [x] Update check: once a day, announce a newer release, download from the menu (ADR 0021);
+      in-place self-update (Sparkle) once builds are signed
 - [x] Structured logs: `logging` instead of `print`, JSON lines in `<log dir>/logs` (ADR 0014)
-- [ ] Opt-in crash reporting
-- [ ] Release process: versioning, changelog, tagged builds from CI
+- [x] Crash reports kept locally; opt-in reporting as a GitHub issue you review (ADR 0020)
+- [x] Release process: SemVer, `CHANGELOG.md`, `scripts/release.py`, tag-triggered builds (ADR 0022)
 
-## Stage 5: Platforms
-- [ ] Windows polish and CI
-- [ ] Wayland: portal-based capture and hotkeys
+## Stage 5: Platforms ✅ (needs a hands-on check)
+- [x] Windows: CI, microphone consent check, taskbar icon, UTF-8 file handling, `.zip` build
+- [x] Wayland: Screenshot and GlobalShortcuts portals, windows through XWayland (ADR 0024)
+- [ ] **You (or a tester):** first real run on Windows, GNOME and KDE Wayland; tests use fakes there

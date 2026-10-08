@@ -1,4 +1,4 @@
-# Marginalia (prototype)
+# Marginalia
 
 A study companion that floats over your screen. Press a shortcut (or click the orb), ask about
 whatever you're reading or watching, and it answers in a small bubble while amber markers fly to
@@ -120,4 +120,10 @@ ruff check .                         # lint
   streaming, startup). The folder sets the marker. Slow or external things are injected through
   `app.Services` and replaced by the fakes in `tests/helpers.py`. Test names state the behaviour
   ("a failing OCR does not cost the answer"). A bug fix starts with a failing test that names the bug.
-- **Plan:** [`ROADMAP.md`](ROADMAP.md).
+- **Plan:** [`ROADMAP.md`](ROADMAP.md). **Changes:** [`CHANGELOG.md`](CHANGELOG.md); add a line
+  under Unreleased with every user-visible change.
+- **Releases and the app:** `pip install -e ".[package]"` then `python packaging/build.py` builds
+  `dist/Marginalia.app` and a `.dmg` (Windows: a `.zip`). Releasing is `scripts/release.py` plus a
+  tag; see [`docs/releasing.md`](docs/releasing.md), including signing and notarisation.
+- **Logs and crashes:** `<log dir>/logs/marginalia.jsonl` (JSON lines; metrics, never your
+  questions) and `<log dir>/crashes/`.
