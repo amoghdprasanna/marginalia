@@ -7,3 +7,5 @@ eval/results/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+dist/
+packaging/build/

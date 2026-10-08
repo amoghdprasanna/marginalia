@@ -30,3 +30,5 @@ supersedes it, so the history of *why* survives.
 | [0019](0019-journal-index-and-browser.md) | A journal index, and a browser that reopens threads | Accepted |
 | [0020](0020-local-crash-reports-opt-in-sending.md) | Crash reports: always local, sent only through an issue you review | Accepted |
 | [0021](0021-update-check.md) | Updates: a daily check that tells you, not a self-installer (yet) | Accepted |
+| [0022](0022-release-process.md) | Release process: SemVer, a changelog, and tag-triggered builds | Accepted |
+| [0023](0023-pyinstaller-app.md) | The desktop app: PyInstaller, signed and notarised when credentials exist | Accepted |
