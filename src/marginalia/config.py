@@ -21,6 +21,30 @@ DEFAULT_CONTEXT = (
 )
 
 
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+
+
+def _warn(message: str) -> None:
+    print(f"[marginalia] {message}")
+
+
+def _number(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    try:
+        return default if value is None else int(value)
+    except ValueError:
+        _warn(f"{name}={value!r} is not a whole number; using {default}.")
+        return default
+
+
+def _choice(name: str, default: str, allowed: tuple[str, ...]) -> str:
+    value = os.environ.get(name, default).strip().lower()
+    if value not in allowed:
+        _warn(f"{name}={value!r} is not one of {', '.join(allowed)}; using {default}.")
+        return default
+    return value
+
+
 def _flag(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
     if value is None:
@@ -59,9 +83,9 @@ def load_config(demo: bool = False, no_hotkey: bool = False, no_ocr: bool = Fals
         demo=demo or _flag("MARGINALIA_DEMO"),
         user_context=os.environ.get("MARGINALIA_USER_CONTEXT", DEFAULT_CONTEXT),
         # Thinking shares this budget on current models, so keep it generous; answers stay short anyway.
-        max_tokens=int(os.environ.get("MARGINALIA_MAX_TOKENS", "16000")),
+        max_tokens=_number("MARGINALIA_MAX_TOKENS", 16000),
         # low | medium | high | xhigh | max. Trades answer depth against wait time.
-        effort=os.environ.get("MARGINALIA_EFFORT", "medium"),
+        effort=_choice("MARGINALIA_EFFORT", "medium", EFFORTS),
         voice_enabled=(not no_voice) and _flag("MARGINALIA_VOICE", True),
         # Whisper size: tiny.en, base.en, small.en (sharper, slower). Downloaded once on first use.
         whisper_model=os.environ.get("MARGINALIA_WHISPER_MODEL", "base.en"),

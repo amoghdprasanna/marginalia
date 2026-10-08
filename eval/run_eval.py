@@ -33,7 +33,7 @@ from PIL import Image
 
 from marginalia.brain import ClaudeBrain, DemoBrain, Usage
 from marginalia.capture import Snapshot, prepare
-from marginalia.config import load_config
+from marginalia.config import EFFORTS, load_config
 from marginalia.ocr import OCR
 from marginalia.pointing import resolve_points
 
@@ -152,7 +152,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("cases", nargs="?", default=str(Path(__file__).parent / "cases"))
     ap.add_argument("--model", help="override MARGINALIA_MODEL for this run")
-    ap.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max"], help="override MARGINALIA_EFFORT")
+    ap.add_argument("--effort", choices=EFFORTS, help="override MARGINALIA_EFFORT")
     ap.add_argument("--repeat", type=int, default=1, help="run each case N times (answers vary run to run)")
     ap.add_argument("--no-ocr", action="store_true")
     ap.add_argument("--demo", action="store_true", help="check the harness itself without an API key")
