@@ -28,19 +28,23 @@ Goal: answers you trust, faster.
 - [ ] Baseline run on those cases; record the numbers in an ADR
 - [ ] Effort sweep (`low`/`medium`/`high`) and a `claude-sonnet-5-5` comparison; pick defaults by the numbers
 
-## Stage 3: Everyday product
+## Stage 3: Everyday product ✅
 Goal: a tool you open every day without the terminal.
-- [ ] Settings window (model, effort, hotkeys, voice model) instead of `.env`
-- [ ] API key in the macOS Keychain, not a plain-text file
-- [ ] First-run permission checks with fix-it buttons (Screen Recording, Accessibility, Microphone)
-- [ ] Separate voice hotkey (hold to talk)
-- [ ] Journal browser: search past questions, reopen a thread with its screenshot
+- [x] Fixed first: a stale listen timer hid newer questions; cancelling a question left a hidden
+      thread and a spinning orb; quit waited on busy workers; the orb could be lost off-screen;
+      capture errors showed on the wrong screen; bad settings values crashed or failed every question
+- [x] Settings window (model, effort, hotkeys, voice model) over a settings file; env still wins (ADR 0015)
+- [x] API key in the system keychain, not a plain-text file (ADR 0016)
+- [x] First-run setup check with fix-it buttons (Screen Recording, Microphone, API key) (ADR 0018)
+- [x] Separate voice hotkey (hold to talk); native hotkeys on macOS, no Accessibility needed (ADR 0017)
+- [x] Journal browser: search past questions, reopen a thread with its screenshot (ADR 0019)
 
 ## Stage 4: Distribution
 Goal: someone else can install it.
 - [ ] Signed, notarised macOS `.app` (Briefcase or PyInstaller)
 - [ ] Auto-update
-- [ ] Opt-in crash reporting and structured logs (`logging` instead of `print`)
+- [x] Structured logs: `logging` instead of `print`, JSON lines in `<log dir>/logs` (ADR 0014)
+- [ ] Opt-in crash reporting
 - [ ] Release process: versioning, changelog, tagged builds from CI
 
 ## Stage 5: Platforms

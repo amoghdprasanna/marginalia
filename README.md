@@ -14,28 +14,40 @@ python -m venv .venv
 source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -e .                     # the core app
 pip install -e ".[ocr,voice]"        # optional: sharper pointing, ask by voice
-cp .env.example .env                 # then paste your Anthropic API key into .env
 
 marginalia --demo                    # try the interface with canned answers, no key needed
 marginalia                           # the real thing (also: python -m marginalia)
 ```
 
+On first launch a **setup check** lists what Marginalia needs (API key, Screen Recording,
+microphone) with a button to fix each. Paste your API key in **Settings**; it is kept in your
+system keychain, not in a file. (An `ANTHROPIC_API_KEY` in the environment or a `.env` file
+still works and takes precedence; see `.env.example`.)
+
 ## Use it
 
-- **Ctrl+Alt+Space** asks about exactly where your mouse is. Type the question, press Enter.
+- **Ctrl+Alt+Space** (Ctrl+Option+Space on a Mac) asks about exactly where your mouse is. Type
+  the question, press Enter.
+- **Hold Ctrl+Alt+V** and speak; let go to ask. A quick tap listens until you pause instead.
 - **The orb** (right edge of the screen) asks about wherever your mouse last rested. Click it and
   pick **Type** or **Speak**. Speaking ends on a short pause (or Enter/click); Esc cancels.
-  Drag the orb anywhere; right-click it to quit.
+  Drag the orb anywhere. Right-click it for the **Journal**, **Settings**, the **Setup check**
+  and Quit.
 - **Follow-ups** in the bubble re-capture the screen first, so they work while a lecture plays.
 - **The answer streams in** as it is written; the markers fly once it is complete.
 - **Esc or the close button** ends the thread, clears the markers and stops an answer mid-stream.
-- Every question, answer and screenshot is saved to `~/Marginalia/doubts/<date>.md`.
+- Every question, answer and screenshot is saved to `~/Marginalia/doubts/<date>.md`. The
+  **Journal** window searches them, shows each thread with its screenshot and markers, and takes
+  follow-ups about that saved screenshot.
+- **Settings** covers model, effort, shortcuts (click a field and press the keys), voice, OCR
+  and the journal folder. Changes apply at once. A field set by an environment variable is
+  locked and says which one.
 
 ## Platform notes
 
 | | |
 |---|---|
-| **macOS** | Grant *Screen Recording*, *Accessibility* and (for voice) *Microphone* to your terminal (or Python) in System Settings > Privacy & Security, then restart the terminal. A blank screenshot means Screen Recording is missing. If the hotkey crashes or does nothing, run with `--no-hotkey` and use the orb. |
+| **macOS** | The setup check asks for *Screen Recording* and (for voice) *Microphone*. Run from a terminal, macOS asks about the terminal app, and it must be restarted after you allow Screen Recording. Shortcuts need no Accessibility permission (they use the system hotkey API). |
 | **Windows** | Works as is. If your antivirus flags the keyboard hook, use `--no-hotkey`. |
 | **Linux** | Use an **X11** session for now. Wayland blocks global hotkeys, screen grabs and free window placement; it needs portal-based capture, planned for later. |
 
@@ -59,10 +71,16 @@ shortcut / orb
 | `src/marginalia/ocr.py` | Optional RapidOCR text lines with boxes |
 | `src/marginalia/brain/` | Prompt, API call, reply parsing, demo mode |
 | `src/marginalia/pointing.py` | Point resolution and snapping, bubble placement |
-| `src/marginalia/ui/` | Orb, type/speak chooser, ask and listen boxes, answer bubble, pointer overlay |
+| `src/marginalia/ui/` | Orb, chooser, ask and listen boxes, bubble, pointer overlay; Settings, Setup and Journal windows |
 | `src/marginalia/voice.py` | Optional mic recording and local Whisper transcription |
 | `src/marginalia/cursor.py` | Where the mouse last rested (what the orb asks about) |
-| `src/marginalia/app.py` | Wiring, injectable services, threads, hotkey, follow-ups, journal |
+| `src/marginalia/config.py` | Settings: defaults, settings file, environment, command line |
+| `src/marginalia/secrets.py` | The API key in the system keychain |
+| `src/marginalia/hotkeys.py` | Global shortcuts with press and release (Carbon on macOS, pynput elsewhere) |
+| `src/marginalia/permissions.py` | The setup check: what the system allows, and how to fix it |
+| `src/marginalia/journal.py` | Reading the journal back: threads, search, reopening a screenshot |
+| `src/marginalia/logs.py` | Console lines and a JSON-lines log file |
+| `src/marginalia/app.py` | Wiring, injectable services, threads, follow-ups, live settings changes |
 | `eval/run_eval.py` | Accuracy harness: pointing hit rate and answer checks |
 
 ## Measure quality, speed and cost
@@ -85,10 +103,10 @@ into `eval/cases/`. Aim for 30+ real cases before changing prompts or models.
 
 ```bash
 pip install -e ".[ocr,voice,dev]"
-pytest                               # ~230 tests, offscreen, no network or mic needed
+pytest                               # ~370 tests, offscreen, no network, mic, keychain or hotkeys
 pytest -m unit                       # just the pure-logic tests (a few seconds)
 pytest -m "ui or integration"        # widgets, and the controller end to end
-pytest --cov=marginalia              # with coverage (~96%)
+pytest --cov=marginalia              # with coverage
 ruff check .                         # lint
 ```
 

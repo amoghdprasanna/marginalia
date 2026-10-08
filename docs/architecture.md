@@ -42,7 +42,8 @@ sequenceDiagram
 src/marginalia/      the app (installed with pip install -e .; see ADR 0010)
   brain/             prompt, parsing, the API call, demo mode
   ui/                theme and painting, shared widgets, one module per window
-  *.py               capture, ocr, pointing, cursor, voice, doubtlog, config, app (wiring)
+  *.py               capture, ocr, pointing, cursor, voice, doubtlog, journal, config, secrets,
+                     hotkeys, permissions, logs, app (wiring)
 tests/               unit and pytest-qt tests; fakes in helpers.py
 eval/                answer-quality harness and labelled cases (costs real API calls)
 docs/                this file, ADRs, README images
@@ -55,8 +56,8 @@ That is what lets ~230 tests run in seconds with no display, no microphone and n
 
 | Layer | Modules | Knows about Qt? | Tested by |
 |---|---|---|---|
-| Pure core | `capture` (math), `brain.prompt`, `brain.parsing`, `pointing`, `cursor`, `voice.SilenceDetector`, `config`, `doubtlog` | No | `tests/unit/` |
-| Adapters | `capture.grab_screen`, `ocr.OCR`, `voice.Recorder`/`Transcriber`, `brain.claude.ClaudeBrain` | Only `grab_screen` | `tests/unit/`, fakes injected through factories |
+| Pure core | `capture` (math), `brain.prompt`, `brain.parsing`, `pointing`, `cursor`, `voice.SilenceDetector`, `config`, `doubtlog`, `journal`, `hotkeys.ChordTracker`, `permissions.run_checks` | No | `tests/unit/` |
+| Adapters | `capture.grab_screen`, `ocr.OCR`, `voice.Recorder`/`Transcriber`, `brain.claude.ClaudeBrain`, `secrets.Keychain`, `hotkeys` backends, `permissions.MacProbes` | Only `grab_screen` | `tests/unit/`, fakes injected through factories |
 | UI | `ui/` (one module per window) | Yes | `tests/ui/`, pytest-qt, offscreen |
 | Wiring | `app.Controller`, `app.Services` | Yes | `tests/integration/`, every service faked |
 
@@ -70,12 +71,20 @@ The hardest correctness problem in the app. See [ADR 0003](adr/0003-resize-image
 | physical | screenshot pixels (logical x device pixel ratio) | OCR boxes, cropping |
 | sent | pixels of the resized image Claude sees | the model's answers |
 
+## Settings
+
+Defaults, then the settings file, then environment variables, then command-line switches
+([ADR 0015](adr/0015-settings-file-under-env.md)). `config.SETTINGS` is the one table every
+layer and the Settings window read. When Settings saves, the controller reloads every layer and
+rebuilds only the services whose settings changed, through `Services.factories`.
+
 ## Threads
 
 The Qt main thread owns every widget. Slow work (OCR, the API call, transcription, loading the
 speech model) runs on a `ThreadPoolExecutor`; results come back through `Bus` signals, which Qt
 delivers on the main thread. Every request carries an id, so a late answer to an abandoned
-question is dropped. See [ADR 0007](adr/0007-concurrency-model.md). A streaming answer whose
+question is dropped. Hotkey callbacks may arrive on any thread (Carbon's on the main thread,
+pynput's on its own) and only emit `Bus` signals. Quitting doesn't wait for busy workers. See [ADR 0007](adr/0007-concurrency-model.md). A streaming answer whose
 request went stale is cancelled from the worker side, so it stops costing tokens
 ([ADR 0012](adr/0012-stream-the-answer.md)).
 
