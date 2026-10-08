@@ -192,6 +192,7 @@ def fake_main(monkeypatch, qapp):
     monkeypatch.setattr(app_module, "Controller", FakeController)
     monkeypatch.setattr(QApplication, "exec", lambda *a: 7)
     monkeypatch.setattr(app_module.signal, "signal", lambda *a: None)
+    monkeypatch.setattr(app_module, "hard_exit", lambda code: sys.exit(code))
     return made
 
 
@@ -212,3 +213,36 @@ def test_missing_api_key_is_pointed_out(fake_main, monkeypatch, capsys):
     with pytest.raises(SystemExit):
         app_module.main([])
     assert "No ANTHROPIC_API_KEY found" in capsys.readouterr().out
+
+
+def test_quitting_does_not_wait_for_busy_workers(fake_main, monkeypatch):
+    """Bug: quit hung until a speech-model download or a still-thinking answer finished.
+
+    sys.exit joins every ThreadPoolExecutor worker first. Nothing a worker holds needs saving
+    (the journal is written on the main thread), so main ends the process directly.
+    """
+    exits = []
+
+    def record(code):
+        exits.append(code)
+        raise SystemExit(code)
+
+    monkeypatch.setattr(app_module, "hard_exit", record)
+    with pytest.raises(SystemExit):
+        app_module.main(["--demo"])
+    assert exits == [7]
+
+
+def test_stop_drops_queued_work(started):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    release = threading.Event()
+    pool = ThreadPoolExecutor(max_workers=1)
+    c = started(pool=pool)
+    c.start()
+    pool.submit(release.wait, 5)
+    queued = pool.submit(lambda: "never needed")
+    c.stop()
+    release.set()
+    assert queued.cancelled()

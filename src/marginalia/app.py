@@ -26,6 +26,9 @@ from .ui import AnswerBubble, AskBox, ListenBox, ModeChooser, Orb, PointerOverla
 from .voice import Recorder, Transcriber
 
 HISTORY_TURNS = 4
+# Enough for OCR, the answer, transcription and a speech-model download at once, plus answers that
+# went stale while the model was still thinking (they stop at their first words, not before).
+WORKERS = 6
 HIDE_DELAY_MS = 140  # let our own windows disappear before the screenshot
 PARTIAL_MS = 50  # redraw a streaming answer at most this often
 
@@ -69,7 +72,7 @@ class Services:
     transcriber: Transcriber | None = None
     recorder: Recorder = field(default_factory=Recorder)
     grab: Callable[[int, int], Snapshot] = grab_screen
-    pool: Executor = field(default_factory=lambda: ThreadPoolExecutor(max_workers=3))
+    pool: Executor = field(default_factory=lambda: ThreadPoolExecutor(max_workers=WORKERS))
 
 
 def default_services(cfg: Config) -> Services:
@@ -174,6 +177,7 @@ class Controller(QObject):
             self.hotkey.stop()
             self.hotkey = None
         self._stop_recorder()
+        self.pool.shutdown(wait=False, cancel_futures=True)
 
     def _warm_voice(self) -> None:
         try:
@@ -417,6 +421,13 @@ class Controller(QObject):
         self.bubble.raise_()
 
 
+def hard_exit(code: int) -> None:
+    """End the process now. sys.exit would first wait for every busy worker thread."""
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="marginalia", description="Screen-aware study companion.")
     ap.add_argument("--demo", action="store_true", help="canned answers, no API key needed")
@@ -437,4 +448,6 @@ def main(argv: list[str] | None = None) -> None:
     controller = Controller(cfg)
     app.aboutToQuit.connect(controller.stop)
     controller.start()
-    sys.exit(app.exec())
+    # Workers may still be downloading the speech model or waiting on an abandoned answer; nothing
+    # they hold needs saving (the journal is written on this thread), so don't wait for them.
+    hard_exit(app.exec())
