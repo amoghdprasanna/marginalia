@@ -34,6 +34,11 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
   keyboard input sources being read off the main thread.
 
 ### Fixed
+- Markers kept pointing at the old spot after you scrolled or switched windows; they now follow
+  the content, hide when it leaves the screen, and come back when it returns.
+- Floating windows stayed on one desktop; they now appear on every desktop and over full-screen apps.
+- Listening could wait silently until its time limit (speech heard as "background noise", or a
+  microphone that sent no sound); it now ends on a pause, or says which microphone is silent.
 - An old "Didn't catch that" message could hide a newer spoken question, which was then lost.
 - Cancelling a new question left the previous thread alive but hidden, so the next question
   carried its history; the orb could also keep spinning forever.

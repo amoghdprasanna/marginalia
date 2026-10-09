@@ -28,6 +28,7 @@ class PointerOverlay(QWidget):
     """Full-screen, click-through layer that flies amber markers to the targets."""
 
     TRAVEL = 0.65  # s per marker
+    PULSE = 0.6  # s the arrival ring keeps growing
     STAGGER = 0.14  # s between markers
     SETTLE = 2.4  # s the state dot keeps orbiting after arrival, then everything rests
 
@@ -38,6 +39,7 @@ class PointerOverlay(QWidget):
         keep_visible(self)
         self.origin = QPointF()
         self.targets: list[tuple[QPointF, str]] = []
+        self.hidden: set[int] = set()  # markers whose content has left the screen (tracking)
         self.clock = QElapsedTimer()
         self.frozen_at: float | None = None
         self.tick = QTimer(self)
@@ -49,6 +51,7 @@ class PointerOverlay(QWidget):
         off = QPointF(screen.topLeft())
         self.origin = QPointF(origin) - off
         self.targets = [(QPointF(x, y) - off, label) for x, y, label in targets]
+        self.hidden = set()
         if not self.targets:
             self.clear()
             return
@@ -58,8 +61,17 @@ class PointerOverlay(QWidget):
         self.show()
         self.raise_()
 
+    def follow(self, positions: list[tuple[float, float, bool]]) -> None:
+        """Tracking moved markers (global logical x, y), or hid them (visible False)."""
+        off = QPointF(self.geometry().topLeft())
+        for i, (x, y, visible) in enumerate(positions[: len(self.targets)]):
+            self.targets[i] = (QPointF(x, y) - off, self.targets[i][1])
+            (self.hidden.discard if visible else self.hidden.add)(i)
+        self.update()
+
     def clear(self) -> None:
         self.targets = []
+        self.hidden = set()
         self.tick.stop()
         self.hide()
 
@@ -79,6 +91,8 @@ class PointerOverlay(QWidget):
         t = self._elapsed()
         bounds = QRectF(self.rect())
         for i, (target, label) in enumerate(self.targets):
+            if i in self.hidden:
+                continue
             local = (t - i * self.STAGGER) / self.TRAVEL
             if local <= 0:
                 continue

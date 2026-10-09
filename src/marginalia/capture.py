@@ -200,3 +200,41 @@ def default_grab():
     from .hotkeys import wayland
 
     return grab_screen_portal if wayland() else grab_screen
+
+
+def small_frame(rgb_image: Image.Image, width: int):
+    """A screenshot -> small grayscale array for tracking (area-averaged, like Qt's smooth scaling)."""
+    import numpy as np
+
+    from .tracking import to_small_gray
+
+    h = max(1, round(rgb_image.height * width / rgb_image.width))
+    return to_small_gray(np.asarray(rgb_image.convert("RGB").resize((width, h), Image.BOX)), width)
+
+
+def grab_small_frame(screen_geo: tuple[int, int, int, int], width: int):
+    """The screen with that logical geometry, now, as a small grayscale array (None if it fails).
+
+    For tracking markers: Qt grabs and shrinks it, so a full-resolution copy never reaches Python.
+    """
+    import numpy as np
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtGui import QGuiApplication, QImage
+
+    from .tracking import to_small_gray
+
+    x, y, w, h = screen_geo
+    screen = QGuiApplication.screenAt(QPoint(x + w // 2, y + h // 2)) or QGuiApplication.primaryScreen()
+    img = screen.grabWindow(0).toImage()
+    if img.isNull():
+        return None
+    img = img.scaledToWidth(width, Qt.SmoothTransformation).convertToFormat(QImage.Format.Format_RGB888)
+    arr = np.frombuffer(bytes(img.constBits()), np.uint8).reshape(img.height(), img.bytesPerLine())
+    return to_small_gray(arr[:, : img.width() * 3].reshape(img.height(), img.width(), 3), width)
+
+
+def default_frame_grabber():
+    """Tracking grabs the screen every second: only where that is cheap and silent (not the Wayland portal)."""
+    from .hotkeys import wayland
+
+    return None if wayland() else grab_small_frame

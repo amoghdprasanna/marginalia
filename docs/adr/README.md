@@ -33,3 +33,4 @@ supersedes it, so the history of *why* survives.
 | [0022](0022-release-process.md) | Release process: SemVer, a changelog, and tag-triggered builds | Accepted |
 | [0023](0023-pyinstaller-app.md) | The desktop app: PyInstaller, signed and notarised when credentials exist | Accepted |
 | [0024](0024-wayland-through-the-portal.md) | Wayland: screenshots and shortcuts through the desktop portal, windows through XWayland | Accepted |
+| [0025](0025-markers-follow-their-content.md) | Markers follow what they point at | Accepted |

@@ -13,13 +13,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from PySide6.QtCore import QObject, QPoint, QProcess, QRect, QTimer, QUrl, Signal
+from PySide6.QtCore import QObject, QPoint, QPointF, QProcess, QRect, QRectF, QTimer, QUrl, Signal
 from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QApplication
 
 from . import __version__
 from .brain import BrainError, Cancelled, ClaudeBrain, DemoBrain
-from .capture import Snapshot, default_grab, prepare
+from .capture import Snapshot, default_frame_grabber, default_grab, prepare, small_frame
 from .config import Config, SettingsStore, load_config, settings_path
 from .crash import CrashReporter, issue_url
 from .cursor import RestTracker
@@ -31,6 +31,8 @@ from .ocr import OCR
 from .permissions import Fixer, default_probes, host_app, needs_attention, run_checks
 from .pointing import place_box, resolve_points
 from .secrets import Keychain
+from .tracking import WIDTH as TRACK_WIDTH
+from .tracking import Tracker
 from .ui import (
     AnswerBubble,
     AskBox,
@@ -55,6 +57,7 @@ HISTORY_TURNS = 4
 WORKERS = 6
 HIDE_DELAY_MS = 140  # let our own windows disappear before the screenshot
 PARTIAL_MS = 50  # redraw a streaming answer at most this often
+TRACK_MS = 1000  # how often markers check they still sit on what they point at
 TAP_S = 0.35  # a voice-key press shorter than this is a tap: listen until a pause instead of until release
 
 
@@ -68,6 +71,7 @@ class Bus(QObject):
     answer_partial = Signal(object)
     transcript_ready = Signal(object)
     update_ready = Signal(object)
+    tracked = Signal(object)
     journal_partial = Signal(object)
     journal_ready = Signal(object)
 
@@ -111,6 +115,8 @@ class Services:
     # App bookkeeping (when updates were last checked...), kept apart from your settings.
     state: SettingsStore = field(default_factory=lambda: SettingsStore(settings_path().with_name("state.json")))
     fetch_release: Callable[[], Release | None] = fetch_latest
+    # A small grayscale screenshot for keeping markers on their content; None turns tracking off.
+    frame: Callable | None = field(default_factory=default_frame_grabber)
 
 
 def default_services(cfg: Config) -> Services:
@@ -133,7 +139,7 @@ class Controller(QObject):
         self.brain, self.ocr, self.log, self.pool = sv.brain, sv.ocr, sv.log, sv.pool
         self.transcriber, self.recorder, self.grab = sv.transcriber, sv.recorder, sv.grab
         self.store, self.keychain, self.factories, self.probes = sv.store, sv.keychain, sv.factories, sv.probes
-        self.state, self.fetch_release = sv.state, sv.fetch_release
+        self.state, self.fetch_release, self.frame = sv.state, sv.fetch_release, sv.frame
         self.available_update: Release | None = None
 
         self.orb = Orb(None)
@@ -211,6 +217,15 @@ class Controller(QObject):
         self.bubble.followup.connect(self._followup)
         self.bubble.replay_requested.connect(self.replay_markers)
         self._last_pointing: tuple[QRect, QPoint, list] | None = None
+        # Markers follow their content when the screen scrolls or changes (ADR 0025).
+        self.tracker: Tracker | None = None
+        self._track_geo: tuple[int, int, int, int, float] | None = None
+        self._track_id = 0
+        self._track_busy = False
+        self._track_timer = QTimer(self.overlay)  # dies with the markers it moves
+        self._track_timer.setInterval(TRACK_MS)
+        self._track_timer.timeout.connect(self._track_tick)
+        self.bus.tracked.connect(self._on_tracked)
         self.hotkey = None
 
     def start(self) -> None:
@@ -232,6 +247,7 @@ class Controller(QObject):
     def stop(self) -> None:
         """Undo start(): stop polling the cursor, release the hotkey hook and the microphone."""
         self._poll.stop()
+        self._stop_tracking()
         self._drop_partial()
         self.request_id += 1  # an answer still streaming is cancelled at its next chunk
         self._stop_hotkeys()
@@ -553,6 +569,7 @@ class Controller(QObject):
         self._capturing = True
         self.request_id += 1  # anything still in flight is now stale
         self.orb.set_busy(False)  # ...so nobody is waiting on it any more
+        self._stop_tracking()
         self._stop_recorder()
         for w in (self.overlay, self.askbox, self.bubble, self.chooser, self.listenbox, self.orb):
             w.hide()
@@ -682,6 +699,7 @@ class Controller(QObject):
         history = list(self.history)
         cursor = QPoint(*snap.cursor)
         self.overlay.clear()
+        self._stop_tracking()
         self.bubble.show_thinking(question)
         self._show_bubble_near(cursor, [])
         self.orb.set_busy(True)
@@ -765,6 +783,7 @@ class Controller(QObject):
         targets = resolve_points(prep, snap, lines, answer.points)
         self._last_pointing = (QRect(*snap.screen_geo), cursor, targets)
         self.overlay.point_to(QRect(*snap.screen_geo), cursor, targets)
+        self._start_tracking(snap, targets)
         # The footer says what matters to a reader; the numbers matter to a tinkerer, so they're a hover away.
         details = [answer.model]
         if answer.first_text is not None:
@@ -806,6 +825,80 @@ class Controller(QObject):
     def replay_markers(self) -> None:
         if self._last_pointing is not None:
             self.overlay.point_to(*self._last_pointing)
+            if self.tracker is not None:  # fly to where things are now, and keep following
+                self._track_timer.start()
+
+    # tracking ---------------------------------------------------------------------------------
+
+    def _start_tracking(self, snap: Snapshot, targets: list[tuple[float, float, str]]) -> None:
+        self._stop_tracking()
+        if not targets or self.frame is None:
+            return
+        gx, gy, gw, gh = snap.screen_geo
+        try:
+            first = small_frame(snap.image, TRACK_WIDTH)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("Not tracking markers: %s", exc)
+            return
+        k = first.shape[1] / gw  # small-frame px per logical px
+        bounds = QRectF(0, 0, gw, gh)
+        boxes = []
+        for x, y, label in targets:
+            r = self.overlay.label_rect(QPointF(x - gx, y - gy), label, bounds)
+            boxes.append(((r.x() - (x - gx)) * k, (r.y() - (y - gy)) * k, r.width() * k, r.height() * k))
+        points = [((x - gx) * k, (y - gy) * k, label) for x, y, label in targets]
+        # Patch ~190 x 66 points around each target; the ring and its glow cover ~24 points of radius.
+        self.tracker = Tracker(first, points, (round(190 * k), round(66 * k)), 24 * k, boxes)
+        self._track_geo = (gx, gy, gw, gh, k)
+        # Wait until the markers have landed: their flight and arrival pulse would look like change.
+        settle = self.overlay.TRAVEL + self.overlay.STAGGER * (len(targets) - 1) + self.overlay.PULSE
+        tid = self._track_id
+
+        def begin() -> None:
+            if tid == self._track_id:
+                self._track_timer.start()
+
+        QTimer.singleShot(int(settle * 1000), self, begin)
+
+    def _stop_tracking(self) -> None:
+        self._track_id += 1  # a check still running in a worker is now stale
+        self._track_timer.stop()
+        self.tracker = None
+        self._track_busy = False
+
+    def _track_tick(self) -> None:
+        if self.tracker is None or self._track_busy or not self.overlay.isVisible():
+            return
+        gx, gy, gw, gh, _k = self._track_geo
+        try:
+            frame = self.frame((gx, gy, gw, gh), TRACK_WIDTH)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("Tracking frame failed: %s", exc)
+            frame = None
+        if frame is None:
+            return
+        self._track_busy = True
+        tid, tracker = self._track_id, self.tracker
+        future = self.pool.submit(tracker.update, frame)  # a search after scrolling takes ~50 ms
+        future.add_done_callback(lambda f: self.bus.tracked.emit((tid, f)))
+
+    def _on_tracked(self, payload) -> None:
+        tid, future = payload
+        if tid != self._track_id:
+            return
+        self._track_busy = False
+        try:
+            targets = future.result()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("Tracking failed: %s", exc)
+            return
+        gx, gy, _gw, _gh, k = self._track_geo
+        positions = [(gx + t.x / k, gy + t.y / k, t.visible) for t in targets]
+        self.overlay.follow(positions)
+        if self._last_pointing is not None:  # "Show again" flies to where things are now
+            screen, cursor, _old = self._last_pointing
+            now = [(x, y, t.label) for (x, y, _v), t in zip(positions, targets, strict=True)]
+            self._last_pointing = (screen, cursor, now)
 
     def _followup(self, question: str) -> None:
         # Re-capture first: the lecture or page may have moved on since the last question.
@@ -818,6 +911,7 @@ class Controller(QObject):
         self.history.clear()
         self.thread_id = ""
         self._last_pointing = None
+        self._stop_tracking()
         self.overlay.clear()
         self.orb.set_busy(False)
 

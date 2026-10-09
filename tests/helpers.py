@@ -239,7 +239,18 @@ class FakeProbes:
 
 
 def build(
-    qtbot, cfg, *, brain=None, pool=None, voice_text=None, grab=None, ocr=None, log=None, factories=None, probes=None
+    qtbot,
+    cfg,
+    *,
+    brain=None,
+    pool=None,
+    voice_text=None,
+    grab=None,
+    ocr=None,
+    log=None,
+    factories=None,
+    probes=None,
+    frame=None,
 ):
     streams = []
     brain = brain or FakeBrain()
@@ -260,6 +271,7 @@ def build(
         probes=probes or FakeProbes(),
         state=SettingsStore(cfg.log_dir / "state.json"),
         fetch_release=lambda: None,
+        frame=frame,
     )
     c = Controller(cfg, services)
     for w in (c.orb, c.askbox, c.bubble, c.overlay, c.chooser, c.listenbox):
