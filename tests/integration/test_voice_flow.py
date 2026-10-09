@@ -133,3 +133,13 @@ def test_the_voice_key_types_when_voice_is_off(qtbot, cfg):
     c.bus.voice_down.emit()
     qtbot.waitUntil(c.askbox.isVisible)
     c.bus.voice_up.emit()  # harmless
+
+
+def test_voice_outcomes_are_logged_for_diagnosis(qtbot, cfg, caplog):
+    c = build(qtbot, cfg, voice_text="")
+    c.start_voice(at_cursor=False)
+    qtbot.waitUntil(c.listenbox.isVisible)
+    c.streams[0].push(np.full(16000, 0.2, dtype=np.float32))
+    c.listenbox._send()
+    assert "recorded" in caplog.text and "Nothing was heard" in caplog.text
+    assert "what does this mean" not in caplog.text, "never the words themselves"

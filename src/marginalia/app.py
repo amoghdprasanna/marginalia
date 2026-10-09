@@ -611,6 +611,7 @@ class Controller(QObject):
         try:
             self.recorder.start()
         except Exception as exc:  # noqa: BLE001
+            log.warning("Microphone unavailable: %s", exc)
             self.listenbox.open_at(pos, screen, lambda: 0.0)
             self.listenbox.show_problem(f"Microphone unavailable: {exc}"[:90])
             return
@@ -626,7 +627,10 @@ class Controller(QObject):
     def _finish_listening(self) -> None:
         audio = self._stop_recorder()
         if audio is None:
+            log.warning("Recording failed: the microphone stream could not be stopped cleanly")
             return self.listenbox.show_problem("Recording failed. Try again.")
+        peak = float(abs(audio).max()) if audio.size else 0.0
+        log.debug("recorded", extra={"seconds": round(audio.size / 16000, 2), "peak": round(peak, 4)})
         self.listenbox.show_transcribing()
         lid = self.listen_id
         future = self.pool.submit(self.transcriber.transcribe, audio)
@@ -644,9 +648,12 @@ class Controller(QObject):
         try:
             text = future.result()
         except Exception as exc:  # noqa: BLE001
+            log.warning("Transcription failed: %s", exc)
             return self.listenbox.show_problem(f"Transcription failed: {exc}"[:90])
         if not text:
+            log.info("Nothing was heard in that recording")
             return self.listenbox.show_problem("Didn't catch that.")
+        log.debug("transcribed", extra={"words": len(text.split())})
         self.listenbox.close_quietly()
         self.ask(text)
 
