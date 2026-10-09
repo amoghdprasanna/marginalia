@@ -84,3 +84,28 @@ def test_finish_sends_once(qtbot, listen):
         listen.finish()
     with qtbot.assertNotEmitted(listen.stop_requested):
         listen.finish()
+
+
+def test_no_audio_at_all_is_reported_instead_of_waiting_forever(qtbot):
+    """Bug: a mic still switching modes delivered nothing; listening waited silently for 45 s."""
+    w = ListenBox(SilenceDetector(max_s=100))
+    qtbot.addWidget(w)
+    w.NO_AUDIO_S = 0.2
+    with qtbot.waitSignal(w.no_audio, timeout=2000):
+        w.open_at(QPoint(300, 300), SCREEN, lambda: 0.0, device="Amogh's AirPods Pro")
+    assert "AirPods" in w.device_lab.text()
+
+
+def test_a_quiet_but_real_microphone_is_not_no_audio(qtbot):
+    w = ListenBox(SilenceDetector(max_s=100))
+    qtbot.addWidget(w)
+    w.NO_AUDIO_S = 0.2
+    with qtbot.assertNotEmitted(w.no_audio, wait=500):
+        w.open_at(QPoint(300, 300), SCREEN, lambda: 0.002)
+
+
+def test_problems_wrap_and_stay_long_enough_to_read(qtbot, listen):
+    listen.show_problem("No sound from Amogh's AirPods Pro. Pick another input in System Settings › Sound.")
+    assert listen.status.wordWrap()
+    qtbot.wait(2800)
+    assert listen.isVisible(), "a long message isn't gone before you've read it"

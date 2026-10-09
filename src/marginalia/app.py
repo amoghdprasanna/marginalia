@@ -185,6 +185,7 @@ class Controller(QObject):
         self.bubble.voice_followup.connect(lambda: self.start_voice(at_cursor=False))
         self.listenbox.stop_requested.connect(self._finish_listening)
         self.listenbox.cancelled.connect(self._cancel_listening)
+        self.listenbox.no_audio.connect(self._no_audio)
         # A new question hid the bubble when it captured. Cancelling it leaves nothing on screen,
         # so the thread ends too; otherwise the next question would carry answers you can't see.
         self.askbox.cancelled.connect(self._end_thread)
@@ -618,9 +619,11 @@ class Controller(QObject):
             self.listenbox.open_at(pos, screen, lambda: 0.0)
             self.listenbox.show_problem(f"Microphone unavailable: {exc}"[:90])
             return
-        log.debug("listening", extra={"hold": self._holding})
+        log.debug("listening", extra={"hold": self._holding, "device": self.recorder.device})
         # Still holding the voice key (it may have been let go during the capture delay): until release.
-        self.listenbox.open_at(pos, screen, lambda: self.recorder.level, hold=self._holding)
+        self.listenbox.open_at(
+            pos, screen, lambda: self.recorder.level, hold=self._holding, device=self.recorder.device
+        )
 
     def _stop_recorder(self):
         try:
@@ -639,6 +642,13 @@ class Controller(QObject):
         lid = self.listen_id
         future = self.pool.submit(self.transcriber.transcribe, audio)
         future.add_done_callback(lambda f: self.bus.transcript_ready.emit((lid, f)))
+
+    def _no_audio(self) -> None:
+        device = self.recorder.device or "the microphone"
+        blocks = self.recorder.blocks
+        self._stop_recorder()
+        log.warning("No audio from %s (%d blocks, all silent)", device, blocks)
+        self.listenbox.show_problem(f"No sound from {device}. Pick another input in System Settings › Sound.")
 
     def _cancel_listening(self) -> None:
         self.listen_id += 1

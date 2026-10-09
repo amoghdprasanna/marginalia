@@ -36,9 +36,9 @@ def test_short_breath_mid_sentence_does_not_end_it():
 
 def test_noisy_room_raises_the_threshold():
     d = SilenceDetector()
-    run(d, [0.02] * 8)  # calibration in a noisy room
-    assert d.threshold == pytest.approx(0.06)
-    assert not d.feed(1.0, 0.04)  # the room noise is not speech
+    run(d, [0.006] * 8)  # calibration in a noisy room
+    assert d.threshold == pytest.approx(0.018)
+    assert not d.feed(1.0, 0.012)  # the room noise is not speech
     assert not d.heard_speech
 
 
@@ -139,3 +139,58 @@ def test_missing_portaudio_is_named(monkeypatch):
     problem = voice._missing()
     assert problem and "pip install -e '.[voice]'" in problem
     assert not Transcriber("tiny.en").available
+
+
+def test_speaking_straight_away_still_ends_on_a_pause():
+    """Bug: speech during the first 0.35 s became the 'noise floor', so the threshold sat above
+    the speaker's own voice, speech was never heard, and listening never ended (it looked hung)."""
+    d = SilenceDetector()
+    t = 0.0
+    while t < 2.0:  # talking from the very first block
+        assert not d.feed(t, 0.05)
+        t += 0.033
+    while t < 3.6:
+        if d.feed(t, 0.003):
+            break
+        t += 0.033
+    assert t < 3.6, "the pause after speaking ended it"
+
+
+def test_a_loud_room_never_puts_the_bar_above_normal_speech():
+    d = SilenceDetector()
+    for i in range(12):
+        d.feed(i * 0.03, 0.08)  # a noisy start
+    assert d.threshold <= SilenceDetector.max_threshold
+
+
+def test_recorder_counts_blocks_and_names_its_microphone():
+    streams = []
+    rec = Recorder(
+        stream_factory=lambda cb: streams.append(FakeStream(cb)) or streams[-1],
+        device_name=lambda: "MacBook Pro Microphone",
+    )
+    rec.start()
+    assert rec.blocks == 0 and rec.device == "MacBook Pro Microphone"
+    streams[0].push(np.full(160, 0.1, dtype=np.float32))
+    assert rec.blocks == 1
+
+
+def test_a_stuck_audio_driver_cannot_freeze_stop(caplog):
+    """Stopping a stream whose device vanished (AirPods switching modes) can block in PortAudio."""
+    import threading
+
+    gate = threading.Event()
+
+    class Stuck(FakeStream):
+        def abort(self):
+            gate.wait(5)
+
+    rec = Recorder(stream_factory=lambda cb: Stuck(cb), stop_timeout=0.2)
+    rec.start()
+    import time
+
+    t0 = time.monotonic()
+    rec.stop()
+    assert time.monotonic() - t0 < 1.0, "the main thread gets control back"
+    assert "did not stop" in caplog.text
+    gate.set()

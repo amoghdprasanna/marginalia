@@ -143,3 +143,13 @@ def test_voice_outcomes_are_logged_for_diagnosis(qtbot, cfg, caplog):
     c.listenbox._send()
     assert "recorded" in caplog.text and "Nothing was heard" in caplog.text
     assert "what does this mean" not in caplog.text, "never the words themselves"
+
+
+def test_no_audio_says_which_microphone(qtbot, cfg, caplog):
+    c = build(qtbot, cfg, voice_text="x")
+    c.recorder._device_name = lambda: "iPhone (2) Microphone"
+    c.start_voice(at_cursor=False)
+    qtbot.waitUntil(c.listenbox.isVisible)
+    c.listenbox.no_audio.emit()
+    assert "No sound from iPhone (2) Microphone" in c.listenbox.status.text()
+    assert not c.recorder.recording and "No audio from iPhone" in caplog.text

@@ -6,10 +6,13 @@ without a microphone or a model download.
 from __future__ import annotations
 
 import importlib.util
+import logging
 import threading
 from dataclasses import dataclass
 
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 RATE = 16000
 
@@ -30,13 +33,20 @@ class SilenceDetector:
 
     The first `calibrate_s` seconds measure the room's noise floor; speech is anything louder
     than `ratio` times that floor (and never below `min_level`, so a dead-silent room still works).
+
+    The floor is the *quietest* calibration block, and never above `max_floor`: if you start
+    talking at once, your speech must not become the "room", or the bar ends up above your own
+    voice and listening never ends.
     """
 
     silence_s: float = 1.4
-    max_s: float = 45.0
+    max_s: float = 30.0
     calibrate_s: float = 0.35
     ratio: float = 3.0
     min_level: float = 0.012
+    max_floor: float = 0.008  # a loud room; normal speech is several times this
+
+    max_threshold = 3.0 * 0.008
 
     def __post_init__(self) -> None:
         self.reset()
@@ -48,7 +58,7 @@ class SilenceDetector:
 
     @property
     def threshold(self) -> float:
-        floor = sum(self._floor) / len(self._floor) if self._floor else 0.0
+        floor = min(min(self._floor), self.max_floor) if self._floor else 0.0
         return max(self.ratio * floor, self.min_level)
 
     def feed(self, t: float, level: float) -> bool:
@@ -74,14 +84,31 @@ def _sounddevice_stream(callback):
     return sd.InputStream(samplerate=RATE, channels=1, dtype="float32", callback=callback)
 
 
-class Recorder:
-    """Collects 16 kHz mono audio; `level` is the RMS of the latest block, for the UI."""
+def _input_device_name() -> str:
+    try:
+        import sounddevice as sd
 
-    def __init__(self, stream_factory=_sounddevice_stream) -> None:
+        return str(sd.query_devices(kind="input")["name"])
+    except Exception:  # noqa: BLE001
+        return "the microphone"
+
+
+class Recorder:
+    """Collects 16 kHz mono audio; `level` is the RMS of the latest block, for the UI.
+
+    `blocks` counts audio blocks received, so the UI can tell "silent" from "no audio at all"
+    (a Bluetooth or iPhone mic still switching modes delivers nothing, or exact zeros).
+    """
+
+    def __init__(self, stream_factory=_sounddevice_stream, device_name=_input_device_name, stop_timeout=1.5) -> None:
         self._stream_factory = stream_factory
+        self._device_name = device_name
+        self._stop_timeout = stop_timeout
         self._chunks: list[np.ndarray] = []
         self._stream = None
         self.level = 0.0
+        self.blocks = 0
+        self.device = ""
 
     @property
     def recording(self) -> bool:
@@ -92,19 +119,35 @@ class Recorder:
         mono = indata[:, 0].copy()
         self._chunks.append(mono)
         self.level = float(np.sqrt(np.mean(mono * mono)))
+        self.blocks += 1
 
     def start(self) -> None:
         self.stop()
         self._chunks = []
         self.level = 0.0
+        self.blocks = 0
+        self.device = self._device_name()
         self._stream = self._stream_factory(self._on_audio)
         self._stream.start()
 
     def stop(self) -> np.ndarray:
+        """Stop and return the audio. Never blocks the caller for more than `stop_timeout`:
+        PortAudio can hang stopping a device that vanished mid-recording (AirPods switching)."""
         if self._stream is not None:
             stream, self._stream = self._stream, None
-            stream.stop()
-            stream.close()
+
+            def shut() -> None:
+                try:
+                    (stream.abort if hasattr(stream, "abort") else stream.stop)()  # abort: don't drain buffers
+                    stream.close()
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("Closing the microphone stream: %s", exc)
+
+            t = threading.Thread(target=shut, name="mic-stop", daemon=True)
+            t.start()
+            t.join(self._stop_timeout)
+            if t.is_alive():
+                log.warning("The microphone (%s) did not stop in time; carrying on without it", self.device)
         return np.concatenate(self._chunks) if self._chunks else np.zeros(0, np.float32)
 
 
