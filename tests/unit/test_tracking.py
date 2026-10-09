@@ -22,10 +22,10 @@ def view(doc, scroll=0):
     return doc[scroll : scroll + H].copy()
 
 
-def draw_marker(frame, x, y, r=8):
+def draw_marker(frame, x, y, r=8, width=1.5):
     """What our overlay adds on top of the screen: an amber ring (bright) around the target."""
     yy, xx = np.mgrid[0 : frame.shape[0], 0 : frame.shape[1]]
-    ring = np.abs(np.hypot(xx - x, yy - y) - r) < 1.5
+    ring = np.abs(np.hypot(xx - x, yy - y) - r) < width
     out = frame.copy()
     out[ring] = 180.0
     return out
@@ -111,3 +111,24 @@ def test_one_odd_frame_does_not_hide_a_marker(doc):
     assert t.targets[0].visible
     t.update(page(seed=7)[:H])
     assert not t.targets[0].visible, "two misses in a row: it really is gone"
+
+
+def test_two_look_alike_places_do_not_make_the_marker_hop(doc):
+    """Bug (seen live): the marker jumped between two similar spots every second. Our own ring,
+    a little bigger than the area we ignore, failed the 'still here' check; the search, which
+    doesn't ignore the ring, then preferred the clean look-alike, and so on back and forth."""
+    frame0 = view(doc)
+    frame0[200:222, 200:264] = frame0[100:122, 200:264] * 0.9 + 20  # a near copy lower down
+    t = Tracker(frame0, [(232, 111, "row")], ring=4)  # mask smaller than the ring we draw
+    seen = []
+    for _ in range(6):
+        target = t.update(draw_marker(frame0, t.targets[0].x, t.targets[0].y, r=9, width=6))[0]
+        seen.append((round(target.x), round(target.y), target.visible))
+    assert set(seen) == {(232, 111, True)}, f"hopped: {seen}"
+
+
+def test_match_reports_how_unique_the_best_place_is(doc):
+    frame = view(doc)
+    frame[200:222, 200:264] = frame[100:122, 200:264]
+    best, second = match(frame, frame[100:122, 200:264], runner_up=True)
+    assert best[0] > 0.99 and second[0] > 0.99, "two equally good places"

@@ -20,6 +20,9 @@ import numpy as np
 WIDTH = 480  # every frame is scaled to this width; marker geometry is measured in these pixels
 STAY = 0.80  # correlation at the old spot that means "still there"
 FOUND = 0.72  # best correlation elsewhere that means "it moved here"
+TIE = 0.03  # a place elsewhere must beat the current spot by more than this to move the marker
+KEEP = 0.5  # below this the current spot no longer counts as the same content
+HOLD = 0.7  # at or above this the current spot still holds, however good a look-alike elsewhere is
 MIN_CONTRAST = 6.0  # a patch flatter than this (blank page, solid colour) can't be tracked reliably
 
 
@@ -42,37 +45,56 @@ def _ncc_masked(a: np.ndarray, b: np.ndarray, mask: np.ndarray) -> float:
     return float((x * y).sum() / den) if den > 1e-6 else 0.0
 
 
-def match(frame: np.ndarray, patch: np.ndarray) -> tuple[float, int, int]:
-    """Best normalised cross-correlation of `patch` anywhere in `frame`: (score, top, left).
+def score_map(frame: np.ndarray, patch: np.ndarray, mask: np.ndarray | None = None) -> np.ndarray:
+    """Normalised cross-correlation of `patch` at every placement in `frame` (indexed by top, left).
 
-    FFT correlation plus integral images for the local means and energies: O(N log N) for the
-    whole frame, instead of sliding the patch pixel by pixel.
+    With `mask` (True = use this pixel of the patch), every placement is scored on the same
+    pixels. That matters: our marker sits on the current spot, so scoring the current spot with
+    the ring ignored but a look-alike elsewhere with every pixel would favour the look-alike.
+    FFT correlations plus local sums: O(N log N) for the whole frame.
     """
     fh, fw = frame.shape
     ph, pw = patch.shape
     if ph > fh or pw > fw:
-        return 0.0, 0, 0
-    p = patch - patch.mean()
+        return np.zeros((1, 1), np.float32)
+    m = np.ones_like(patch, np.float32) if mask is None else mask.astype(np.float32)
+    n = float(m.sum())
+    if n < 16:
+        return np.zeros((fh - ph + 1, fw - pw + 1), np.float32)
+    p = (patch - (patch * m).sum() / n) * m  # zero-mean over the used pixels, zero elsewhere
     p_norm = float(np.sqrt((p * p).sum()))
-    if p_norm < 1e-6:
-        return 0.0, 0, 0
     shape = (fh + ph - 1, fw + pw - 1)
-    corr = np.fft.irfft2(np.fft.rfft2(frame, shape) * np.conj(np.fft.rfft2(p, shape)), shape)
-    corr = corr[: fh - ph + 1, : fw - pw + 1]  # valid placements only (top-left at 0..fh-ph)
-    s = np.pad(frame, ((1, 0), (1, 0))).cumsum(0).cumsum(1)
-    s2 = np.pad(frame * frame, ((1, 0), (1, 0))).cumsum(0).cumsum(1)
+    f_hat, f2_hat = np.fft.rfft2(frame, shape), np.fft.rfft2(frame * frame, shape)
 
-    def box(t):
-        return t[ph:, pw:] - t[:-ph, pw:] - t[ph:, :-pw] + t[:-ph, :-pw]
+    def corr(kernel_hat):
+        return np.fft.irfft2(kernel_hat, shape)[: fh - ph + 1, : fw - pw + 1]
 
-    n = ph * pw
-    win_sum, win_sq = box(s), box(s2)
+    m_hat = np.conj(np.fft.rfft2(m, shape))
+    num = corr(f_hat * np.conj(np.fft.rfft2(p, shape)))
+    win_sum, win_sq = corr(f_hat * m_hat), corr(f2_hat * m_hat)
     var = np.maximum(win_sq - win_sum * win_sum / n, 1e-6)
-    score = corr / (np.sqrt(var) * p_norm)
+    if p_norm < 1e-6:
+        return np.zeros_like(var)
+    score = num / (np.sqrt(var) * p_norm)
     score[var < (MIN_CONTRAST**2) * n * 0.25] = 0.0  # flat windows can't be a real match
+    return score
+
+
+def match(frame: np.ndarray, patch: np.ndarray, mask: np.ndarray | None = None, runner_up: bool = False):
+    """Best placement of `patch` in `frame`: (score, top, left). With `runner_up`, also the best
+    placement at least a patch away from it, which says how unique the best one is."""
+    score = score_map(frame, patch, mask)
     i = int(np.argmax(score))
     top, left = divmod(i, score.shape[1])
-    return float(score[top, left]), top, left
+    best = (float(score[top, left]), top, left)
+    if not runner_up:
+        return best
+    ph, pw = patch.shape
+    rest = score.copy()
+    rest[max(0, top - ph) : top + ph, max(0, left - pw) : left + pw] = -1.0
+    j = int(np.argmax(rest))
+    t2, l2 = divmod(j, rest.shape[1])
+    return best, (float(rest[t2, l2]), t2, l2)
 
 
 @dataclass
@@ -85,6 +107,7 @@ class Target:
     visible: bool = True
     trackable: bool = True
     misses: int = 0  # checks in a row that couldn't find it; one odd frame mustn't hide a marker
+    came_from: tuple[float, float] | None = None  # where it last moved from: never bounce straight back
 
 
 class Tracker:
@@ -140,11 +163,29 @@ class Tracker:
                 if here is not None and _ncc_masked(t.patch, here, self._mask(t, occluders)) >= STAY:
                     t.misses = 0
                     continue
-            score, top, left = match(frame, t.patch)
+            # Search with the marker's ring and label ignored at every placement, so the current spot
+            # (under our marker) and a look-alike elsewhere are scored on the same pixels.
+            scores = score_map(frame, t.patch, self._mask(t))
+            i = int(np.argmax(scores))
+            top, left = divmod(i, scores.shape[1])
+            best = float(scores[top, left])
+            cur_top, cur_left = round(t.y - self.ph / 2), round(t.x - self.pw / 2)
+            here = -1.0
+            if t.visible and 0 <= cur_top < scores.shape[0] and 0 <= cur_left < scores.shape[1]:
+                here = float(scores[cur_top, cur_left])
             x, y = left + self.pw / 2, top + self.ph / 2
-            # The best match is the marker's own spot, only scored lower because our ring sits on it.
-            on_itself = t.visible and abs(x - t.x) <= 2 and abs(y - t.y) <= 2 and score >= FOUND / 2
-            if score >= FOUND or on_itself:
+            back = t.came_from is not None and abs(x - t.came_from[0]) <= 3 and abs(y - t.came_from[1]) <= 3
+            if here >= HOLD or here >= max(best - TIE, KEEP):
+                # Still clearly here (a real move leaves the old spot far below this), or as good as
+                # anywhere: a tie or a look-alike never moves a marker.
+                t.misses = 0
+            elif back and here >= KEEP:
+                # Back to where it just came from while this spot still matches: two look-alikes,
+                # and our own marker tipping the balance. Moving would start a back-and-forth.
+                t.misses = 0
+            elif best >= FOUND:
+                if t.visible:
+                    t.came_from = (t.x, t.y)
                 t.x, t.y, t.visible, t.misses = x, y, True, 0
             else:
                 t.misses += 1
