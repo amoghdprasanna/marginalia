@@ -17,7 +17,8 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 from PIL import Image
 
@@ -164,7 +165,7 @@ def uri_to_path(uri: str) -> Path:
     parsed = urlparse(uri)
     if parsed.scheme != "file":
         raise PortalError(f"unexpected screenshot location {uri}")
-    return Path(unquote(parsed.path))
+    return Path(url2pathname(parsed.path))  # decodes %20 and, on Windows, the /C:/ drive form
 
 
 def crop_box(

@@ -253,3 +253,9 @@ def test_request_raises_when_cancelled_or_refused(jeepney_portal):
         jeepney_portal(FakeConn(code=CANCELLED)).request(SCREENSHOT, "Screenshot", "sa{sv}", ("", {}), 5)
     with pytest.raises(PortalError):
         jeepney_portal(FakeConn(error=True)).request(SCREENSHOT, "Screenshot", "sa{sv}", ("", {}), 5)
+
+
+def test_uri_to_path_round_trips_on_every_platform(tmp_path):
+    """Bug (CI on Windows): file:///C:/... became the invalid path \\C:\\..."""
+    path = tmp_path / "Screenshot from now.png"
+    assert uri_to_path(path.as_uri()) == path

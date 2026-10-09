@@ -208,7 +208,7 @@ class SettingsWindow(QWidget):
         buttons.addWidget(self.cancel_btn)
         buttons.addWidget(self.save_btn)
         lay.addLayout(buttons)
-        self.setFixedWidth(600)
+        self.setMinimumWidth(600)
         self.load(cfg)
 
     # building ---------------------------------------------------------------------------------
@@ -224,7 +224,7 @@ class SettingsWindow(QWidget):
     def _row(self, form: QFormLayout, label: str, field, help_text: str = "") -> None:
         """A labelled row, with a line of help under the field when the label alone isn't enough."""
         lab = QLabel(label)
-        lab.setFixedWidth(LABEL_WIDTH)
+        lab.setMinimumWidth(LABEL_WIDTH)  # a column that lines up, but grows rather than clip a larger font
         lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         if not help_text:
             form.addRow(lab, field)
@@ -293,7 +293,7 @@ class SettingsWindow(QWidget):
 
     def _keys_group(self) -> QGroupBox:
         box, form = self._form("Shortcuts")
-        self._row(form, "", self._check("hotkey_enabled", "Use shortcuts from any app"))
+        self._row(form, "", self._check("hotkey_enabled", "Shortcuts work in any app"))
         ask, voice = HotkeyEdit(), HotkeyEdit()
         ask.changed.connect(self._changed)
         voice.changed.connect(self._changed)
@@ -304,14 +304,14 @@ class SettingsWindow(QWidget):
 
     def _voice_group(self) -> QGroupBox:
         box, form = self._form("Voice and reading")
-        self._row(form, "", self._check("voice_enabled", "Ask by voice (transcribed on this computer)"))
+        self._row(form, "", self._check("voice_enabled", "Ask by voice"), "Speech is transcribed on this computer.")
         speech = QComboBox()
         speech.setEditable(True)
         speech.addItems(WHISPER_MODELS)
         speech.currentTextChanged.connect(self._changed)
         self.fields["whisper_model"] = speech
         self._row(form, "Speech model", speech, "tiny.en is fastest; small.en understands more. Downloaded once.")
-        self._row(form, "", self._check("ocr_enabled", "Read text on screen (sharper pointing at small print)"))
+        self._row(form, "", self._check("ocr_enabled", "Read text on screen"), "Sharper pointing at small print.")
         return box
 
     def _journal_group(self) -> QGroupBox:
@@ -326,8 +326,9 @@ class SettingsWindow(QWidget):
         row.addWidget(folder, 1)
         row.addWidget(browse)
         self._row(form, "Folder", row, "Every question, answer and screenshot is saved here.")
-        self._row(form, "", self._check("check_updates", "Tell me when a new version is out"))
-        self._row(form, "", self._check("crash_reports", "Offer to report crashes (you see each report first)"))
+        self._row(form, "", self._check("check_updates", "Check for new versions"))
+        crash = self._check("crash_reports", "Offer to report crashes")
+        self._row(form, "", crash, "You see each report before anything is sent.")
         return box
 
     def _advanced_group(self) -> QGroupBox:
@@ -338,9 +339,9 @@ class SettingsWindow(QWidget):
         tokens.valueChanged.connect(self._changed)
         self.fields["max_tokens"] = tokens
         self._row(form, "Max tokens", tokens, "Room for thinking plus the answer. Raise it if answers get cut off.")
-        self._row(form, "", self._check("hires", "High-resolution images (only for models that take them)"))
+        self._row(form, "", self._check("hires", "High-resolution images"), "Only for models that accept them.")
         self._row(form, "Console detail", self._choice("log_level", LOG_CHOICES))
-        self._row(form, "", self._check("save_cases", "Save each question as an eval case"))
+        self._row(form, "", self._check("save_cases", "Save questions as eval cases"))
         return box
 
     def _toggle_advanced(self) -> None:
@@ -352,11 +353,14 @@ class SettingsWindow(QWidget):
             QTimer.singleShot(0, self, lambda: self.scroll.ensureWidgetVisible(self.advanced))
 
     def _fit_to_screen(self) -> None:
-        """As tall as the content, but never taller than the screen it's on."""
+        """As tall as the content but never taller than the screen; wide enough that nothing is cut
+        off, whatever the platform's fonts (Windows' run larger than macOS')."""
         self._content.adjustSize()
+        bar = self.scroll.verticalScrollBar().sizeHint().width()
+        wide = max(600, self._content.minimumSizeHint().width() + bar + 2 * self.scroll.frameWidth() + 4)
+        room = self.screen().availableGeometry()
         want = self._content.sizeHint().height() + 70  # the buttons row and margins
-        room = self.screen().availableGeometry().height() - 40
-        self.resize(self.width(), min(want, room))
+        self.resize(min(wide, room.width() - 40), min(want, room.height() - 40))
 
     # values -----------------------------------------------------------------------------------
 
