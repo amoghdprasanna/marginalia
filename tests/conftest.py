@@ -92,3 +92,27 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(layer)
         if layer in ("ui", "integration"):
             item.add_marker("qt")
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Tear Qt down in order before Python's own shutdown does it in any order.
+
+    Seen on CI (Linux, Python 3.12, once in two runs): every test passed, then the process
+    aborted at exit with "shared QObject was deleted directly" and heap corruption, because
+    windows left over from tests were destroyed during interpreter teardown, after or around
+    QApplication. The app itself never hits this: it ends with os._exit (see app.hard_exit).
+    """
+    import gc
+
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    if app is None:
+        return
+    for w in QApplication.topLevelWidgets():
+        w.close()
+        w.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    app.processEvents()
+    gc.collect()
