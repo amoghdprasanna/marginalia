@@ -583,16 +583,19 @@ class Controller(QObject):
 
     def start_voice(self, at_cursor: bool) -> None:
         if self.transcriber is None or not self.transcriber.available:
+            log.info("Voice is off or not installed; asking by typing instead")
             return self.start_ask(at_cursor)
         pos = QCursor.pos() if at_cursor else self.last_rest
         self._capture(pos, then=lambda: self._begin_listening(pos))
 
     def _voice_key_down(self) -> None:
         """Hold to talk: ask about where the mouse is, and listen while the key is held."""
+        log.debug("voice key down")
         self._holding, self._hold_t0 = True, time.monotonic()
         self.start_voice(at_cursor=True)
 
     def _voice_key_up(self) -> None:
+        log.debug("voice key up")
         if not self._holding:
             return
         self._holding = False
@@ -615,6 +618,7 @@ class Controller(QObject):
             self.listenbox.open_at(pos, screen, lambda: 0.0)
             self.listenbox.show_problem(f"Microphone unavailable: {exc}"[:90])
             return
+        log.debug("listening", extra={"hold": self._holding})
         # Still holding the voice key (it may have been let go during the capture delay): until release.
         self.listenbox.open_at(pos, screen, lambda: self.recorder.level, hold=self._holding)
 
