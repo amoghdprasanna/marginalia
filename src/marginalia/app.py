@@ -882,6 +882,10 @@ class Controller(QObject):
         future = self.pool.submit(tracker.update, frame)  # a search after scrolling takes ~50 ms
         future.add_done_callback(lambda f: self.bus.tracked.emit((tid, f)))
 
+    def _marker_state(self) -> list[tuple[int, int, bool]]:
+        hidden = self.overlay.hidden
+        return [(round(p.x()), round(p.y()), i not in hidden) for i, (p, _label) in enumerate(self.overlay.targets)]
+
     def _on_tracked(self, payload) -> None:
         tid, future = payload
         if tid != self._track_id:
@@ -894,7 +898,11 @@ class Controller(QObject):
             return
         gx, gy, _gw, _gh, k = self._track_geo
         positions = [(gx + t.x / k, gy + t.y / k, t.visible) for t in targets]
+        before = self._marker_state()
         self.overlay.follow(positions)
+        after = self._marker_state()
+        if after != before:
+            log.debug("markers followed", extra={"markers": after})
         if self._last_pointing is not None:  # "Show again" flies to where things are now
             screen, cursor, _old = self._last_pointing
             now = [(x, y, t.label) for (x, y, _v), t in zip(positions, targets, strict=True)]
