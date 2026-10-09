@@ -849,6 +849,22 @@ class Controller(QObject):
         self.bubble.raise_()
 
 
+def become_accessory_app() -> bool:
+    """macOS: run as an accessory (no Dock icon, like the packaged app's LSUIElement).
+
+    Only accessory apps may show windows over another app's full-screen desktop, which is where a
+    full-screen PDF or lecture lives. Returns False if pyobjc is missing.
+    """
+    try:
+        from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+
+        NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        log.debug("Could not become an accessory app: %s", exc)
+        return False
+
+
 def use_xwayland(env=os.environ) -> bool:
     """On Wayland, run Qt through XWayland so the orb, bubble and markers can be placed (ADR 0024).
 
@@ -904,6 +920,8 @@ def main(argv: list[str] | None = None) -> None:
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName("Marginalia")
     app.setWindowIcon(app_icon())
+    if sys.platform == "darwin":
+        become_accessory_app()
     app.setQuitOnLastWindowClosed(False)
     signal.signal(signal.SIGINT, signal.SIG_DFL)  # Ctrl+C in the terminal quits
 
