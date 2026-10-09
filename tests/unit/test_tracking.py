@@ -58,13 +58,15 @@ def test_scrolling_moves_the_marker_with_the_content(doc):
 def test_content_gone_hides_the_marker_and_its_return_shows_it(doc):
     t = Tracker(view(doc, 120), [(232, 211, "eq 4")])
     other = page(seed=99)[:H]  # another app, another desktop
-    assert not t.update(other)[0].visible
+    t.update(other)
+    assert not t.update(other)[0].visible, "gone for two checks: hidden"
     [back] = t.update(view(doc, 120))
     assert back.visible and (back.x, back.y) == pytest.approx((232, 211), abs=1)
 
 
 def test_scrolled_out_of_view_is_gone_not_misplaced(doc):
     t = Tracker(view(doc, 0), [(232, 30, "title")])
+    t.update(view(doc, 200))
     assert not t.update(view(doc, 200))[0].visible
 
 
@@ -87,3 +89,25 @@ def test_to_small_gray():
     rgb[:, :, 0] = 255
     g = to_small_gray(rgb)
     assert g.shape == (300, 480) and g.mean() == pytest.approx(0.299 * 255, abs=0.5)
+
+
+def test_our_own_bubble_over_part_of_the_spot_does_not_make_it_flicker(doc):
+    """Bug (seen live): the answer bubble covered part of a marker's patch. The 'still there' check
+    failed, the marker hid, the next frame (no marker drawn) found it again: on, off, on, off."""
+    t = Tracker(view(doc), [(232, 111, "eq 4")])
+    bubble = (250, 95, 200, 160)  # x, y, w, h in frame px, over the right part of the patch
+    states = []
+    for _ in range(6):
+        frame = draw_marker(view(doc), 232, 111) if t.targets[0].visible else view(doc)
+        x, y, w, h = bubble
+        frame[y : y + h, x : x + w] = 40.0  # the slate bubble
+        states.append(t.update(frame, occluders=[bubble])[0].visible)
+    assert all(states), states
+
+
+def test_one_odd_frame_does_not_hide_a_marker(doc):
+    t = Tracker(view(doc), [(232, 111, "eq 4")])
+    t.update(page(seed=7)[:H])  # e.g. a notification sliding over, for one frame
+    assert t.targets[0].visible
+    t.update(page(seed=7)[:H])
+    assert not t.targets[0].visible, "two misses in a row: it really is gone"

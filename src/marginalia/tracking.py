@@ -84,6 +84,7 @@ class Target:
     label_box: tuple[float, float, float, float]  # where the marker's label sits, relative to the centre
     visible: bool = True
     trackable: bool = True
+    misses: int = 0  # checks in a row that couldn't find it; one odd frame mustn't hide a marker
 
 
 class Tracker:
@@ -115,28 +116,38 @@ class Tracker:
             return None
         return frame[top : top + self.ph, left : left + self.pw].copy()
 
-    def _mask(self, t: Target) -> np.ndarray:
-        """True where the live frame shows content rather than our own marker."""
+    def _mask(self, t: Target, occluders=()) -> np.ndarray:
+        """True where the live frame shows content, not something of ours: the marker's ring and
+        label, and our other windows (`occluders`: x, y, w, h in frame px, e.g. the answer bubble)."""
         yy, xx = np.mgrid[0 : self.ph, 0 : self.pw]
         cx, cy = self.pw / 2, self.ph / 2
         m = (xx - cx) ** 2 + (yy - cy) ** 2 > self.ring**2
         dx, dy, w, h = t.label_box
         if w and h:
             m &= ~((xx >= cx + dx) & (xx <= cx + dx + w) & (yy >= cy + dy) & (yy <= cy + dy + h))
+        left, top = t.x - cx, t.y - cy  # the patch's corner in frame px
+        for ox, oy, ow, oh in occluders:
+            m &= ~((xx + left >= ox) & (xx + left < ox + ow) & (yy + top >= oy) & (yy + top < oy + oh))
         return m
 
-    def update(self, frame: np.ndarray) -> list[Target]:
+    def update(self, frame: np.ndarray, occluders=()) -> list[Target]:
         """Check every target against a new small frame; positions and visibility are updated in place."""
         for t in self.targets:
             if not t.trackable:
                 continue  # nothing distinctive to follow: leave it as it was
             if t.visible:
                 here = self._cut(frame, t.x, t.y)
-                if here is not None and _ncc_masked(t.patch, here, self._mask(t)) >= STAY:
+                if here is not None and _ncc_masked(t.patch, here, self._mask(t, occluders)) >= STAY:
+                    t.misses = 0
                     continue
             score, top, left = match(frame, t.patch)
-            if score >= FOUND:
-                t.x, t.y, t.visible = left + self.pw / 2, top + self.ph / 2, True
+            x, y = left + self.pw / 2, top + self.ph / 2
+            # The best match is the marker's own spot, only scored lower because our ring sits on it.
+            on_itself = t.visible and abs(x - t.x) <= 2 and abs(y - t.y) <= 2 and score >= FOUND / 2
+            if score >= FOUND or on_itself:
+                t.x, t.y, t.visible, t.misses = x, y, True, 0
             else:
-                t.visible = False
+                t.misses += 1
+                if t.misses >= 2:
+                    t.visible = False
         return self.targets

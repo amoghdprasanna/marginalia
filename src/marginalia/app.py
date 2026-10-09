@@ -879,7 +879,15 @@ class Controller(QObject):
             return
         self._track_busy = True
         tid, tracker = self._track_id, self.tracker
-        future = self.pool.submit(tracker.update, frame)  # a search after scrolling takes ~50 ms
+        # Our own windows are in the screenshot too; their pixels are not the content.
+        k = self._track_geo[4]
+        occluders = [
+            ((g.x() - gx) * k, (g.y() - gy) * k, g.width() * k, g.height() * k)
+            for w in (self.bubble, self.orb, self.askbox, self.listenbox, self.chooser)
+            if w.isVisible()
+            for g in (w.frameGeometry(),)
+        ]
+        future = self.pool.submit(tracker.update, frame, occluders)  # a search after scrolling takes ~50 ms
         future.add_done_callback(lambda f: self.bus.tracked.emit((tid, f)))
 
     def _marker_state(self) -> list[tuple[int, int, bool]]:
