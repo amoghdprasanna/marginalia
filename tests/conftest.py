@@ -56,6 +56,8 @@ def _private_settings_and_keychain(monkeypatch, tmp_path):
     import marginalia.secrets
 
     monkeypatch.setenv("MARGINALIA_SETTINGS_FILE", str(tmp_path / "settings" / "settings.json"))
+    # Nor the real journal and logs: a test that reloads settings would otherwise default to ~/Marginalia.
+    monkeypatch.setenv("MARGINALIA_LOG_DIR", str(tmp_path / "home"))
     # Nor register real global hotkeys: a test that turns them on gets a backend that does nothing.
     import marginalia.hotkeys
 
