@@ -69,6 +69,20 @@ def test_a_bad_number_falls_back_to_the_default_instead_of_crashing(monkeypatch,
     assert "MARGINALIA_MAX_TOKENS" in caplog.text
 
 
+@pytest.mark.parametrize("raw", ["0", "-5", "10000000"])
+def test_an_out_of_range_number_falls_back_to_the_default(monkeypatch, caplog, raw):
+    """Bug: MARGINALIA_MAX_TOKENS=0 reached the API, which rejected every question with a 400."""
+    monkeypatch.setenv("MARGINALIA_MAX_TOKENS", raw)
+    assert load_config().max_tokens == 16000
+    assert "MARGINALIA_MAX_TOKENS" in caplog.text and "between 1024 and 128000" in caplog.text
+
+
+def test_the_ends_of_the_range_are_allowed(monkeypatch):
+    for raw in ("1024", "128000"):
+        monkeypatch.setenv("MARGINALIA_MAX_TOKENS", raw)
+        assert load_config().max_tokens == int(raw)
+
+
 def test_an_unknown_effort_falls_back_to_medium(monkeypatch, caplog):
     """Bug: a typo here made every single question fail with an API error."""
     monkeypatch.setenv("MARGINALIA_EFFORT", "hihg")
@@ -112,6 +126,12 @@ def test_a_bad_value_in_the_settings_file_falls_back(store, caplog):
     assert c.max_tokens == 16000 and c.effort == "medium"
     assert c.log_dir == Path.home() / "Notes", "paths expand ~"
     assert "settings max_tokens" in caplog.text
+
+
+def test_an_out_of_range_number_in_the_settings_file_falls_back(store, caplog):
+    store.save({"max_tokens": 0})
+    assert load_config(store=store).max_tokens == 16000
+    assert "settings max_tokens=0" in caplog.text
 
 
 def test_a_corrupt_settings_file_is_ignored_not_fatal(store, caplog):
