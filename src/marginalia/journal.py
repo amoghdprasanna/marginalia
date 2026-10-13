@@ -11,6 +11,7 @@ import logging
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from itertools import pairwise
 from pathlib import Path
 
 from PIL import Image
@@ -78,14 +79,18 @@ _PAGE_DAY = re.compile(r"^(\d{4}-\d{2}-\d{2})\.md$")
 _HEADING = re.compile(r"^## (\d{2}:\d{2})  (.*)$", re.M)
 _SHOT = re.compile(r"!\[screen\]\((shots/([0-9-]+)\.png)\)")
 _MODEL = re.compile(r"<sub>(.*?)</sub>\s*$", re.S)
+_SEPARATOR = re.compile(r"\n---\s*$")  # DoubtLog's rule after each entry
 
 
 def parse_page(text: str, day: str) -> list[Entry]:
     """Entries from one Markdown page. Tolerant: a block it can't read is skipped, not fatal."""
     out = []
-    blocks = text.split("\n---\n")
-    for block in blocks:
-        head = _HEADING.search(block)
+    # Entries are delimited by their headings, not by the rule DoubtLog writes between them:
+    # answers are Markdown and can contain a `---` of their own.
+    edges = [m.start() for m in _HEADING.finditer(text)] + [len(text)]
+    for start, end in pairwise(edges):
+        block = _SEPARATOR.sub("", text[start:end].rstrip())
+        head = _HEADING.match(block)
         shot = _SHOT.search(block)
         if head is None or shot is None:
             continue
