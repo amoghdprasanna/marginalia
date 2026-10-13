@@ -13,6 +13,7 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 - First-run setup check with fix-it buttons for Screen Recording, the microphone and the API key.
 - Hold-to-talk voice shortcut (Ctrl+Alt+V): hold and speak, let go to ask; tap to talk until you pause.
 - Journal browser: search past questions, reopen a thread with its screenshot and ask more about it.
+- Journal: copy a thread as Markdown (Copy button, or Ctrl/Cmd+Shift+C).
 - JSON-lines log file in `<log dir>/logs`.
 - Crash reports are kept locally; optionally, offered as a pre-filled GitHub issue you review.
 - A daily check for new releases (can be turned off).
@@ -48,6 +49,9 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 - A bad value in `MARGINALIA_MAX_TOKENS` crashed startup; a typo in `MARGINALIA_EFFORT` failed
   every question.
 - Saving an eval result with non-ASCII text failed on Windows.
+- An out-of-range `MARGINALIA_MAX_TOKENS` (0, negative, or above 128000) failed every question;
+  it now falls back to the default with a warning.
+- Indexing old journal pages cut an answer short at its first `---` rule and lost its model name.
 
 ## [0.1.0] - 2026-10-04
 

@@ -38,7 +38,8 @@ still works and takes precedence; see `.env.example`.)
 - **Esc or the close button** ends the thread, clears the markers and stops an answer mid-stream.
 - Every question, answer and screenshot is saved to `~/Marginalia/doubts/<date>.md`. The
   **Journal** window searches them, shows each thread with its screenshot and markers, and takes
-  follow-ups about that saved screenshot.
+  follow-ups about that saved screenshot. **Copy** (Ctrl/Cmd+Shift+C) puts a thread on the
+  clipboard as Markdown, ready for your own notes.
 - **Settings** covers model, effort, shortcuts (click a field and press the keys), voice, OCR
   and the journal folder. Changes apply at once. A field set by an environment variable is
   locked and says which one.
