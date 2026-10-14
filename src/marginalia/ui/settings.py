@@ -334,7 +334,7 @@ class SettingsWindow(QWidget):
     def _advanced_group(self) -> QGroupBox:
         box, form = self._form("Advanced")
         tokens = QSpinBox()
-        tokens.setRange(1024, 128000)
+        tokens.setRange(*BY_KEY["max_tokens"].bounds)
         tokens.setSingleStep(1000)
         tokens.valueChanged.connect(self._changed)
         self.fields["max_tokens"] = tokens

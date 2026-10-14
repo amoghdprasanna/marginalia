@@ -9,6 +9,7 @@ from PIL import Image
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QDesktopServices,
+    QGuiApplication,
     QImage,
     QKeySequence,
     QPainter,
@@ -153,9 +154,16 @@ class JournalWindow(QWidget):
         self.send = QPushButton("Ask")
         self.send.setObjectName("primary")
         self.send.clicked.connect(self._send)
+        # Ctrl means Cmd on macOS.
+        copy_keys = QKeySequence("Ctrl+Shift+C")
+        self.copy = QPushButton("Copy")
+        self.copy.setToolTip(f"Copy this thread as Markdown  ({copy_keys.toString(QKeySequence.NativeText)})")
+        self.copy.clicked.connect(self._copy)
+        QShortcut(copy_keys, self, activated=self._copy)
         row = QHBoxLayout()
         row.addWidget(self.ask, 1)
         row.addWidget(self.send)
+        row.addWidget(self.copy)
         right = QWidget()
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 0)
@@ -173,6 +181,7 @@ class JournalWindow(QWidget):
         lay.setContentsMargins(14, 14, 14, 14)
         lay.addWidget(split)
         self._set_enabled(False)
+        self.copy.setEnabled(False)
 
     # listing ----------------------------------------------------------------------------------
 
@@ -214,6 +223,7 @@ class JournalWindow(QWidget):
                 "Every question and answer lands here with its screenshot, so you can find it and ask more later."
             )
             self._set_enabled(False)
+            self.copy.setEnabled(False)
             return
         last = thread.last
         img = self.journal.image(last)
@@ -224,6 +234,7 @@ class JournalWindow(QWidget):
         set_markdown(self.body, conversation_markdown(thread))
         self.status.setText("")
         self._set_enabled(img is not None and not self._busy)
+        self.copy.setEnabled(True)
 
     # asking -----------------------------------------------------------------------------------
 
@@ -256,6 +267,13 @@ class JournalWindow(QWidget):
         self._busy = False
         self.status.setText(message)
         self._set_enabled(self.thread is not None)
+
+    def _copy(self) -> None:
+        if self.thread is None:
+            return
+        QGuiApplication.clipboard().setText(conversation_markdown(self.thread))
+        n = len(self.thread.entries)
+        self.status.setText(f"Copied {n} question{'s' if n != 1 else ''} as Markdown")
 
     def _open_shot(self) -> None:
         if self.thread is not None:

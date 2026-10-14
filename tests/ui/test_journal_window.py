@@ -62,6 +62,34 @@ def test_busy_states(window):
     assert window.ask.isEnabled() and window.status.text() == "Rate limited."
 
 
+def test_copy_puts_the_thread_on_the_clipboard_as_markdown(window):
+    from PySide6.QtGui import QGuiApplication
+
+    window.list.setCurrentRow(1)
+    assert window.copy.isEnabled()
+    window.copy.click()
+    text = QGuiApplication.clipboard().text()
+    assert text.startswith("**what is the code distance?**\n\nThe **minimum** weight of a logical.")
+    assert "**why odd?**\n\nMajority vote." in text and "· m</sub>" in text
+    assert window.status.text() == "Copied 2 questions as Markdown"
+    window.list.setCurrentRow(0)
+    window._copy()
+    assert window.status.text() == "Copied 1 question as Markdown"
+
+
+def test_copy_is_disabled_without_a_thread(qtbot, window):
+    window.search.setText("zzz")
+    qtbot.waitUntil(lambda: window.list.count() == 0)
+    assert not window.copy.isEnabled()
+    window._copy()  # the shortcut does nothing either
+    assert "Copied" not in window.status.text()
+
+
+def test_copy_works_while_a_follow_up_is_being_answered(window):
+    window.show_thinking("q")
+    assert window.copy.isEnabled()
+
+
 def test_markers_are_drawn_where_the_answer_pointed(qtbot, tmp_path):
     from helpers import make_snapshot
 

@@ -44,6 +44,17 @@ def test_parse_an_old_page():
     assert b.id == "20261001-162501-123456" and b.answer == "Still there."
 
 
+def test_a_rule_inside_an_answer_is_kept():
+    page = (
+        "## 10:15  q\n\n![screen](shots/20261001-101500-000001.png)\n\nLine one.\n\n---\n\nLine two.\n\n"
+        "<sub>m</sub>\n\n---\n\n"
+        "## 10:16  next\n\n![screen](shots/20261001-101600.png)\n\nOk.\n\n<sub>m</sub>\n\n---\n\n"
+    )
+    a, b = parse_page(page, "2026-10-01")
+    assert (a.answer, a.model) == ("Line one.\n\n---\n\nLine two.", "m")
+    assert (b.question, b.answer) == ("next", "Ok.")
+
+
 def test_a_garbled_block_is_skipped():
     assert parse_page("# Doubts\n\n## not a heading\n\ntext\n\n---\n", "2026-10-01") == []
 
