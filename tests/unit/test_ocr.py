@@ -1,10 +1,12 @@
-"""OCR post-processing with a fake engine: both RapidOCR output shapes, scaling, order, filtering."""
+"""OCR post-processing with a fake engine: Vision's and both RapidOCR output shapes, scaling, order,
+filtering. One test runs the real Vision engine where it is installed (macOS with the ocr extra)."""
+import sys
 from types import SimpleNamespace
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
-from marginalia.ocr import OCR
+from marginalia.ocr import OCR, _apple_vision
 
 
 def quad(x1, y1, x2, y2):
@@ -34,7 +36,11 @@ def v2_engine(arr):
     return SimpleNamespace(boxes=list(boxes), txts=list(txts), scores=list(scores))
 
 
-@pytest.mark.parametrize(("kind", "engine"), [("v1", v1_engine), ("v2", v2_engine)])
+def vision_engine(img):
+    return RAW
+
+
+@pytest.mark.parametrize(("kind", "engine"), [("vision", vision_engine), ("v1", v1_engine), ("v2", v2_engine)])
 def test_lines_in_reading_order_with_low_scores_and_blanks_dropped(kind, engine):
     lines = ocr_with(kind, engine).read(Image.new("RGB", (1000, 800)))
     assert [l.text for l in lines] == ["first on line 1", "second on line 1", "line 2"]
@@ -51,6 +57,18 @@ def test_big_screens_are_downscaled_for_ocr_and_boxes_scaled_back():
 
     [line] = ocr_with("v1", engine).read(Image.new("RGB", (4400, 2000)), max_edge=2200)
     assert seen["shape"][:2] == (1000, 2200)
+    assert line.box == pytest.approx((200, 200, 400, 220))
+
+
+def test_vision_gets_the_downscaled_image_itself():
+    seen = {}
+
+    def engine(img):
+        seen["size"] = img.size
+        return [(quad(100, 100, 200, 110), "x", 1.0)]
+
+    [line] = ocr_with("vision", engine).read(Image.new("RGB", (4400, 2000)), max_edge=2200)
+    assert seen["size"] == (2200, 1000)
     assert line.box == pytest.approx((200, 200, 400, 220))
 
 
@@ -82,3 +100,25 @@ def test_falls_back_to_the_newer_package():
 def test_no_engine_keeps_the_reason():
     o = OCR(loaders=[("v1", _fails(ImportError("a"))), ("v2", _fails(OSError("onnxruntime broken")))])
     assert not o.available and isinstance(o.error, OSError)
+
+
+@pytest.mark.skipif(sys.platform == "darwin", reason="checks the guard on other systems")
+def test_vision_is_skipped_off_macos():
+    with pytest.raises(ImportError):
+        _apple_vision()
+
+
+def test_real_vision_reads_text_with_boxes_from_the_top():
+    pytest.importorskip("Vision")
+    img = Image.new("RGB", (900, 300), "white")
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 28)
+    draw.text((40, 40), "Logical error rate", fill="black", font=font)
+    draw.text((40, 200), "below threshold", fill="black", font=font)
+
+    top, bottom = OCR(loaders=[("vision", _apple_vision)]).read(img)
+    assert (top.text, bottom.text) == ("Logical error rate", "below threshold")
+    # Vision's origin is the bottom left; boxes come back in image pixels from the top.
+    assert 30 < top.box[1] < 50 < top.box[3] < 90
+    assert 190 < bottom.box[1] < 210 < bottom.box[3] < 250
+    assert 30 < top.box[0] < 50
