@@ -58,6 +58,8 @@ def notarise(path: Path) -> None:
 
 def macos() -> Path:
     app = DIST / "Marginalia.app"
+    # PyInstaller leaves the one-folder build next to the bundle it copied it into; only the .app ships.
+    shutil.rmtree(DIST / "Marginalia", ignore_errors=True)
     identity = os.environ.get("MACOS_SIGN_IDENTITY")
     if identity:
         # PyInstaller signed each binary; sign the bundle as a whole with the hardened runtime.
