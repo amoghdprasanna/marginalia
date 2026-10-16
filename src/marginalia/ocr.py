@@ -1,11 +1,13 @@
 """Optional OCR. It gives the model exact text for small fonts and gives the pointer
 real text-line boxes to snap to, which makes pointing noticeably more precise.
 
-Uses RapidOCR (pure pip install, no system packages). If it is missing, everything
-still works from the screenshots alone.
+On macOS it uses the system's own text recognition (Vision), which adds almost nothing to the
+app; elsewhere RapidOCR (pure pip install, no system packages). See ADR 0026. If neither is
+installed, everything still works from the screenshots alone.
 """
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 
 from PIL import Image
@@ -17,6 +19,43 @@ class TextLine:
     text: str
     box: tuple[float, float, float, float]  # x1, y1, x2, y2 in physical px
     score: float
+
+
+def _apple_vision():
+    """An engine that takes a PIL image and returns (quad, text, score) in that image's pixels."""
+    if sys.platform != "darwin":
+        raise ImportError("Apple Vision is macOS only")
+    import objc
+    import Quartz
+    import Vision
+
+    def engine(img: Image.Image) -> list[tuple]:
+        rgba = img.convert("RGBA")
+        W, H = rgba.size
+        with objc.autorelease_pool():  # we run on worker threads, which have no pool of their own
+            cg = Quartz.CGImageCreate(
+                W, H, 8, 32, W * 4, Quartz.CGColorSpaceCreateDeviceRGB(), Quartz.kCGImageAlphaNoneSkipLast,
+                Quartz.CGDataProviderCreateWithCFData(rgba.tobytes()), None, False, Quartz.kCGRenderingIntentDefault,
+            )  # fmt: skip
+            request = Vision.VNRecognizeTextRequest.alloc().init()
+            request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
+            request.setUsesLanguageCorrection_(False)  # it "corrects" code and symbols, and halves their scores
+            handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(cg, {})
+            ok, error = handler.performRequests_error_([request], None)
+            if not ok:
+                raise RuntimeError(f"Vision text recognition failed: {error}")
+            raw = []
+            for obs in request.results() or []:
+                best = obs.topCandidates_(1)
+                if not best:
+                    continue
+                bb = obs.boundingBox()  # 0..1, origin at the bottom left
+                x1, x2 = bb.origin.x * W, (bb.origin.x + bb.size.width) * W
+                y1, y2 = (1 - bb.origin.y - bb.size.height) * H, (1 - bb.origin.y) * H
+                raw.append(([(x1, y1), (x2, y1), (x2, y2), (x1, y2)], best[0].string(), float(best[0].confidence())))
+            return raw
+
+    return engine
 
 
 def _rapidocr_v1():
@@ -32,7 +71,7 @@ def _rapidocr_v2():
 
 
 # Tried in order; the first that loads wins. Each returns an engine; the kind says how to read its output.
-LOADERS = (("v1", _rapidocr_v1), ("v2", _rapidocr_v2))
+LOADERS = (("vision", _apple_vision), ("v1", _rapidocr_v1), ("v2", _rapidocr_v2))
 
 
 class OCR:
@@ -52,23 +91,22 @@ class OCR:
         return self.engine is not None
 
     def read(self, image: Image.Image, max_edge: int = 2200, min_score: float = 0.5) -> list[TextLine]:
-        import numpy as np
-
         if not self.available:
             return []
         scale = min(1.0, max_edge / max(image.size))
         img = image if scale == 1.0 else image.resize(
             (round(image.width * scale), round(image.height * scale)), Image.LANCZOS
         )
-        arr = np.ascontiguousarray(np.asarray(img.convert("RGB"))[:, :, ::-1])  # BGR, like OpenCV
 
         raw: list[tuple] = []
-        if self.kind == "v1":
-            result, _ = self.engine(arr)
+        if self.kind == "vision":
+            raw = self.engine(img)
+        elif self.kind == "v1":
+            result, _ = self.engine(_bgr(img))
             for box, text, score in result or []:
                 raw.append((box, text, float(score)))
         else:
-            result = self.engine(arr)
+            result = self.engine(_bgr(img))
             if getattr(result, "boxes", None) is not None:
                 for box, text, score in zip(result.boxes, result.txts, result.scores, strict=False):
                     raw.append((box, text, float(score)))
@@ -86,3 +124,9 @@ class OCR:
         for i, line in enumerate(lines):
             line.id = i
         return lines
+
+
+def _bgr(img: Image.Image):
+    import numpy as np
+
+    return np.ascontiguousarray(np.asarray(img.convert("RGB"))[:, :, ::-1])  # RapidOCR wants BGR, like OpenCV

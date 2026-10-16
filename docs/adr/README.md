@@ -31,6 +31,7 @@ supersedes it, so the history of *why* survives.
 | [0020](0020-local-crash-reports-opt-in-sending.md) | Crash reports: always local, sent only through an issue you review | Accepted |
 | [0021](0021-update-check.md) | Updates: a daily check that tells you, not a self-installer (yet) | Accepted |
 | [0022](0022-release-process.md) | Release process: SemVer, a changelog, and tag-triggered builds | Accepted |
-| [0023](0023-pyinstaller-app.md) | The desktop app: PyInstaller, signed and notarised when credentials exist | Accepted |
+| [0023](0023-pyinstaller-app.md) | The desktop app: PyInstaller, signed and notarised when credentials exist | Size and FFmpeg notes superseded by 0026 |
 | [0024](0024-wayland-through-the-portal.md) | Wayland: screenshots and shortcuts through the desktop portal, windows through XWayland | Accepted |
 | [0025](0025-markers-follow-their-content.md) | Markers follow what they point at | Accepted |
+| [0026](0026-apple-vision-ocr-and-a-leaner-app.md) | OCR with Apple Vision on macOS, and a leaner app | Accepted |
