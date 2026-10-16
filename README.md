@@ -69,7 +69,7 @@ shortcut / orb
 | File | Job |
 |---|---|
 | `src/marginalia/capture.py` | Screen grab, HiDPI mapping, image resizing, cursor ring |
-| `src/marginalia/ocr.py` | Optional RapidOCR text lines with boxes |
+| `src/marginalia/ocr.py` | Optional OCR text lines with boxes (Apple Vision on macOS, RapidOCR elsewhere) |
 | `src/marginalia/brain/` | Prompt, API call, reply parsing, demo mode |
 | `src/marginalia/pointing.py` | Point resolution and snapping, bubble placement |
 | `src/marginalia/ui/` | Orb, chooser, ask and listen boxes, bubble, pointer overlay; Settings, Setup and Journal windows |

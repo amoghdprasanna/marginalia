@@ -23,6 +23,9 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 - Windows: the setup check reads microphone consent; the app has its own taskbar icon.
 
 ### Changed
+- On macOS, OCR uses the system's own text recognition (Apple Vision) instead of RapidOCR: it is
+  several times faster, and the app is 40% smaller (the download drops from 188 MB to 106 MB).
+  Windows and Linux keep RapidOCR.
 - Errors offer their fix as a button (Try again, Open Settings, Open setup check) and are worded
   in plain language; they look different from answers.
 - The answer footer says how long it took; technical details moved to its tooltip. "Show again"

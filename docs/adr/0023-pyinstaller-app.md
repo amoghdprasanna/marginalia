@@ -1,6 +1,7 @@
 # 0023. The desktop app: PyInstaller, signed and notarised when credentials exist
 
-**Status:** Accepted, 2026-10-08
+**Status:** Accepted, 2026-10-08. The size and duplicate-FFmpeg consequences are superseded by
+[0026](0026-apple-vision-ocr-and-a-leaner-app.md) for macOS.
 
 ## Context
 "Someone else can install it" means no Python, no terminal, no `pip`. On macOS it also means a
