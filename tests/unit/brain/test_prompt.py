@@ -7,6 +7,7 @@ from marginalia.brain import (
     build_user_text,
     select_lines,
 )
+from marginalia.brain.prompt import PER_MILLE, PIXELS, from_units, system_prompt, to_units
 from marginalia.capture import prepare
 from marginalia.ocr import TextLine
 
@@ -41,3 +42,33 @@ def test_user_text_lists_ocr_in_full_image_pixels_and_trims_history():
 
 def test_user_text_says_when_ocr_is_missing():
     assert "OCR: not available" in build_user_text(prepare(make_snapshot()), [], "q", [])
+
+
+def test_claude_and_gpt_are_asked_for_pixels():
+    text = system_prompt("ctx")
+    assert "ctx" in text and "Give integer pixel coordinates of the target's center" in text
+    assert "{" not in text, "every placeholder is filled"
+
+
+def test_gemini_is_asked_for_its_0_to_1000_grid():
+    text = system_prompt("ctx", PER_MILLE)
+    assert "integers from 0 to 1000" in text and "pixel coordinates" not in text
+
+
+def test_per_mille_user_text_puts_cursor_and_ocr_on_the_same_grid():
+    prep = prepare(make_snapshot())
+    fw, fh = prep.full.size
+    sx, sy = prep.full_scale
+    line = TextLine(0, "d = 2t + 1", (0, 0, fw / 2 * sx, fh / 4 * sy), 0.99)
+    text = build_user_text(prep, [line], "q", [], PER_MILLE)
+    cx, cy = prep.cursor_full
+    assert f"cursor at {[round(cx * 1000 / fw), round(cy * 1000 / fh)]}" in text
+    assert "[0] [0, 0, 500, 250] d = 2t + 1" in text and "full-image 0 to 1000" in text
+
+
+def test_units_round_trip():
+    prep = prepare(make_snapshot())
+    for image in ("full", "zoom"):
+        x, y = from_units(prep, image, *to_units(prep, image, 300, 200, PER_MILLE), PER_MILLE)
+        assert abs(x - 300) < 2 and abs(y - 200) < 2
+        assert to_units(prep, image, 300.4, 200.6, PIXELS) == [300, 201]

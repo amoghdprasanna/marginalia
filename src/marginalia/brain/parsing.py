@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import re
+import time
+from collections.abc import Callable
 
 from .types import Answer, Point
 
@@ -58,6 +60,34 @@ def partial_answer(raw: str) -> str | None:
         out.append(chr(cp))
         i += step
     return "".join(out)
+
+
+class Progress:
+    """A reply arriving in pieces: hands on the answer-so-far each time it grows (ADR 0012), and
+    times the first words. Every brain streams through one of these, whatever its SDK."""
+
+    def __init__(self, on_text: Callable[[str], None] | None = None) -> None:
+        self.on_text = on_text
+        self.raw, self.shown = "", ""
+        self.t0 = time.monotonic()
+        self.first_text: float | None = None
+
+    def add(self, chunk: str) -> None:
+        """May raise Cancelled from on_text; the brain lets it through to close its stream."""
+        self.raw += chunk
+        text = partial_answer(self.raw)
+        if text and text != self.shown:
+            self.shown = text
+            if self.first_text is None:
+                self.first_text = time.monotonic() - self.t0
+            if self.on_text is not None:
+                self.on_text(text)
+
+    def elapsed(self) -> float:
+        return time.monotonic() - self.t0
+
+
+CUT_OFF = "\n\n*(Cut off at the length limit. Raise Max tokens in Settings for longer answers.)*"
 
 
 def _point(p: dict) -> Point:
