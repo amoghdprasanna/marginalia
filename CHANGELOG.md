@@ -7,6 +7,8 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 ## [Unreleased]
 
 ### Added
+- Ask OpenAI's GPT models or Google's Gemini instead of Claude: Settings → Service. Each service
+  keeps its own key in the keychain (or `OPENAI_API_KEY` / `GEMINI_API_KEY`). Claude stays the default.
 - Settings window (right-click the orb): model, effort, shortcuts, voice, OCR, journal folder;
   changes apply at once. Settings live in a per-user file; environment variables still win.
 - The API key is kept in the system keychain.

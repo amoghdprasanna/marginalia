@@ -1,7 +1,8 @@
 # Architecture
 
 Marginalia is a desktop overlay. You ask about something on screen; it grabs the screen, asks
-Claude, shows the answer in a bubble and flies markers to what the answer talks about.
+a model (Claude by default; OpenAI or Gemini if you choose, ADR 0027), shows the answer in a
+bubble and flies markers to what the answer talks about.
 
 ## One question, end to end
 
@@ -40,10 +41,10 @@ sequenceDiagram
 
 ```
 src/marginalia/      the app (installed with pip install -e .; see ADR 0010)
-  brain/             prompt, parsing, the API call, demo mode
+  brain/             prompt, parsing, one module per provider's API call, demo mode
   ui/                theme and painting, shared widgets, one module per window
-  *.py               capture, ocr, pointing, cursor, voice, doubtlog, journal, config, secrets,
-                     hotkeys, permissions, logs, app (wiring)
+  *.py               capture, ocr, pointing, cursor, voice, doubtlog, journal, config, providers,
+                     secrets, hotkeys, permissions, logs, app (wiring)
 tests/               unit and pytest-qt tests; fakes in helpers.py
 eval/                answer-quality harness and labelled cases (costs real API calls)
 docs/                this file, ADRs, README images
@@ -57,7 +58,7 @@ That is what lets ~230 tests run in seconds with no display, no microphone and n
 | Layer | Modules | Knows about Qt? | Tested by |
 |---|---|---|---|
 | Pure core | `capture` (math), `brain.prompt`, `brain.parsing`, `pointing`, `cursor`, `voice.SilenceDetector`, `config`, `doubtlog`, `journal`, `hotkeys.ChordTracker`, `permissions.run_checks` | No | `tests/unit/` |
-| Adapters | `capture.grab_screen`, `ocr.OCR`, `voice.Recorder`/`Transcriber`, `brain.claude.ClaudeBrain`, `secrets.Keychain`, `hotkeys` backends, `permissions.MacProbes` | Only `grab_screen` | `tests/unit/`, fakes injected through factories |
+| Adapters | `capture.grab_screen`, `ocr.OCR`, `voice.Recorder`/`Transcriber`, `brain.claude.ClaudeBrain`/`gpt.GPTBrain`/`gemini.GeminiBrain`, `secrets.Keychain`, `hotkeys` backends, `permissions.MacProbes` | Only `grab_screen` | `tests/unit/`, fakes injected through factories |
 | UI | `ui/` (one module per window) | Yes | `tests/ui/`, pytest-qt, offscreen |
 | Wiring | `app.Controller`, `app.Services` | Yes | `tests/integration/`, every service faked |
 
@@ -69,7 +70,7 @@ The hardest correctness problem in the app. See [ADR 0003](adr/0003-resize-image
 |---|---|---|
 | logical | Qt desktop points | the overlay, the cursor |
 | physical | screenshot pixels (logical x device pixel ratio) | OCR boxes, cropping |
-| sent | pixels of the resized image Claude sees | the model's answers |
+| sent | pixels of the resized image the model sees | the model's answers (Gemini answers on a 0–1000 grid; `GeminiBrain` converts) |
 
 ## Settings
 

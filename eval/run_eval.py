@@ -15,6 +15,7 @@ targets and must_mention; model_points shows where the model pointed). Copy the 
   python eval/run_eval.py                          # every case, configured model and effort
   python eval/run_eval.py --effort low             # one setting of a sweep
   python eval/run_eval.py --model claude-sonnet-5-5 --repeat 3
+  python eval/run_eval.py --provider gemini         # its default model; the key from GEMINI_API_KEY or the keychain
   python eval/run_eval.py --no-ocr                 # does OCR earn its keep?
   python eval/run_eval.py --demo                   # check the harness itself, no API key
 
@@ -31,16 +32,19 @@ from pathlib import Path
 
 from PIL import Image
 
-from marginalia.brain import ClaudeBrain, DemoBrain, Usage
+from marginalia.brain import DemoBrain, Usage, brain_for
 from marginalia.capture import Snapshot, prepare
-from marginalia.config import EFFORTS, load_config
+from marginalia.config import EFFORTS, find_key, load_config
 from marginalia.ocr import OCR
 from marginalia.pointing import resolve_points
+from marginalia.providers import PROVIDERS
+from marginalia.secrets import Keychain
 
 MARGIN = 12  # logical px of slack around each target box
 
 # USD per million tokens: (input, output, cache read). Cache writes (5-minute TTL) cost 1.25x input.
 # Copied from the pricing page on 2026-10-04; check it before trusting a cost comparison.
+# Other providers' models aren't listed yet, so their cost shows as unknown.
 PRICES = {
     "claude-opus-5-5": (4.00, 20.00, 0.20),
     "claude-opus-5": (5.00, 25.00, 0.50),
@@ -151,6 +155,7 @@ def format_summary(s: dict, label: str) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("cases", nargs="?", default=str(Path(__file__).parent / "cases"))
+    ap.add_argument("--provider", choices=tuple(PROVIDERS), help="override MARGINALIA_PROVIDER for this run")
     ap.add_argument("--model", help="override MARGINALIA_MODEL for this run")
     ap.add_argument("--effort", choices=EFFORTS, help="override MARGINALIA_EFFORT")
     ap.add_argument("--repeat", type=int, default=1, help="run each case N times (answers vary run to run)")
@@ -159,9 +164,12 @@ def main() -> None:
     args = ap.parse_args()
 
     cfg = load_config(demo=args.demo, no_ocr=args.no_ocr)
+    if args.provider and args.provider != cfg.provider:
+        cfg.provider, cfg.model = args.provider, PROVIDERS[args.provider].default_model
+        cfg.api_key, _ = find_key(args.provider, Keychain())
     cfg.model = args.model or cfg.model
     cfg.effort = args.effort or cfg.effort
-    brain = DemoBrain(delay=0) if cfg.demo else ClaudeBrain(cfg)
+    brain = DemoBrain(delay=0) if cfg.demo else brain_for(cfg)
     ocr = OCR() if cfg.ocr_enabled else None
     if ocr is not None and not ocr.available:
         ocr = None

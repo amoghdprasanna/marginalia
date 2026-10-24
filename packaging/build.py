@@ -1,6 +1,6 @@
 """Build the desktop app, and on macOS sign, notarise and wrap it in a disk image.
 
-    pip install -e ".[package]"          # plus ".[ocr,voice]" to bundle those features
+    pip install -e ".[package]"          # plus ".[ocr,voice,openai,gemini]" to bundle those features
     python packaging/build.py            # -> dist/Marginalia.app and dist/Marginalia-<v>-macos.dmg
                                          #    (Windows: dist/Marginalia-<v>-windows.zip)
 
