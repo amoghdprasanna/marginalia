@@ -51,6 +51,23 @@ def test_a_new_model_gets_a_new_brain_and_nothing_else(qtbot, cfg, factories):
     assert c.brain.text == "answer from claude-sonnet-5-5"
 
 
+def test_switching_provider_in_the_window_brings_the_real_brain_for_it(qtbot, cfg, monkeypatch):
+    """No fake factory here: the app's own make_brain picks GPTBrain from the saved provider."""
+    from marginalia.brain import GPTBrain
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-from-env")
+    real = Factories(brain=app_module.make_brain, ocr=lambda c: None, transcriber=lambda c: None)
+    c = build(qtbot, cfg, factories=real)
+    c.open_settings()
+    w = c.settings_window
+    qtbot.addWidget(w)
+    w.fields["provider"].setCurrentIndex(w.fields["provider"].findData("openai"))
+    w.fields["log_dir"].setText(str(cfg.log_dir))
+    assert w.save()
+    assert isinstance(c.brain, GPTBrain) and c.brain.model == "gpt-6-astra"
+    assert c.cfg.api_key == "sk-proj-from-env"
+
+
 def test_saving_in_the_window_applies_at_once(qtbot, cfg, factories, caplog):
     c = build(qtbot, cfg, factories=factories)
     c.open_settings()

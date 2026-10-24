@@ -81,6 +81,61 @@ def test_a_broken_keychain_is_explained(qtbot, store):
     assert not w.save() and w.error.isVisibleTo(w)
 
 
+def _pick(window, provider):
+    w = window.fields["provider"]
+    w.setCurrentIndex(w.findData(provider))
+
+
+def test_choosing_a_provider_offers_its_models_and_its_key(window):
+    _pick(window, "gemini")
+    models = window.fields["model"]
+    assert window.values()["model"] == "gemini-4-argon"
+    offered = [models.itemData(i) for i in range(models.count())]
+    assert offered == ["gemini-4-argon", "gemini-3.8-flash", "gemini-3.5-flash-lite"]
+    assert "aistudio.google.com" in window.key_status.text() and "Google AI Studio" in window.key_edit.placeholderText()
+    assert "three depths" in window.thinking_help.text()
+    _pick(window, "anthropic")
+    assert window.values()["model"] == "claude-opus-5-5", "back to the model you had"
+    assert "sk-ant-" in window.key_edit.placeholderText()
+
+
+def test_switching_saves_the_provider_its_model_and_its_key(qtbot, window, keychain, store):
+    _pick(window, "openai")
+    window.set_value("model", "gpt-6-luna")
+    window.key_edit.setText("sk-proj-openaikeyopenaikey")
+    with qtbot.waitSignal(window.saved):
+        assert window.save()
+    assert store.load() == {"provider": "openai", "model": "gpt-6-luna"}
+    assert keychain.get("openai-api-key") == "sk-proj-openaikeyopenaikey"
+    assert keychain.get() is None, "Claude's key is untouched"
+    c = load_config(store=store, keychain=keychain)
+    assert (c.provider, c.model, c.api_key) == ("openai", "gpt-6-luna", "sk-proj-openaikeyopenaikey")
+
+
+def test_another_providers_key_from_the_environment_is_shown(window, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "AIzaSyD-abcdefghijklmnop1234")
+    _pick(window, "gemini")
+    assert "GEMINI_API_KEY" in window.key_status.text() and "1234" in window.key_status.text()
+    assert not window.key_remove.isEnabled()
+
+
+def test_removing_a_key_removes_only_that_providers(window, keychain):
+    keychain.set("sk-ant-keepme-keepme")
+    keychain.set("sk-proj-removeme-removeme", "openai-api-key")
+    _pick(window, "openai")
+    assert window.key_remove.isEnabled()
+    window._remove_key()
+    assert keychain.get("openai-api-key") is None and keychain.get() == "sk-ant-keepme-keepme"
+
+
+def test_a_missing_library_is_shown_where_the_key_goes(window, monkeypatch):
+    from marginalia.providers import Provider
+
+    monkeypatch.setattr(Provider, "installed", lambda self: False)
+    _pick(window, "openai")
+    assert "marginalia[openai]" in window.key_status.text()
+
+
 def test_two_identical_shortcuts_are_refused(window, store):
     window.fields["voice_hotkey"].set_value("<ctrl>+<alt>+<space>")
     assert not window.save()

@@ -1,4 +1,4 @@
-"""The Settings window: everything that used to need a .env file, plus the API key in the keychain.
+"""The Settings window: everything that used to need a .env file, plus API keys in the keychain.
 
 It edits a copy of the values and writes the settings file only on Save; the controller then
 reloads the config and applies what changed (ADR 0015). Fields an environment variable pins
@@ -28,8 +28,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..config import BY_KEY, LOG_LEVELS, WHISPER_MODELS, Config, SettingsStore
+from ..config import BY_KEY, LOG_LEVELS, WHISPER_MODELS, Config, SettingsStore, find_key
 from ..hotkeys import Combo, format_combo, parse_combo, to_text
+from ..providers import PROVIDERS
 from ..secrets import Keychain, mask
 from .theme import DIALOG_STYLE, bring_to_front
 
@@ -131,12 +132,11 @@ def _locked(widget: QWidget, why: str) -> None:
 
 
 # Names people recognise, and what each choice trades (docs/design.md: speak the user's language).
-MODEL_CHOICES = (
-    ("claude-opus-5-5", "Claude Opus 5.5", "Best answers. The default."),
-    ("claude-sonnet-5-5", "Claude Sonnet 5.5", "Faster, about half the price."),
-    ("claude-haiku-5-5", "Claude Haiku 5.5", "Fastest and cheapest; fine for quick definitions."),
-    ("claude-fable-5-1", "Claude Fable 5.1", "Most capable; slower and pricier."),
-)
+# Each provider's models come from providers.PROVIDERS.
+PROVIDER_CHOICES = tuple((p.key, p.name, "") for p in PROVIDERS.values())
+THINKING_HELP = {
+    "gemini": "Gemini has three depths; the last two both use its deepest.",
+}
 EFFORT_CHOICES = (
     ("low", "Quick", "Answers sooner; thinks less."),
     ("medium", "Balanced", "The default."),
@@ -177,7 +177,7 @@ class SettingsWindow(QWidget):
         inner = QVBoxLayout(content)
         inner.setContentsMargins(18, 16, 18, 4)
         inner.setSpacing(12)
-        inner.addWidget(self._claude_group())
+        inner.addWidget(self._model_group())
         inner.addWidget(self._keys_group())
         inner.addWidget(self._voice_group())
         inner.addWidget(self._journal_group())
@@ -221,14 +221,16 @@ class SettingsWindow(QWidget):
         form.setVerticalSpacing(10)
         return box, form
 
-    def _row(self, form: QFormLayout, label: str, field, help_text: str = "") -> None:
-        """A labelled row, with a line of help under the field when the label alone isn't enough."""
+    def _row(self, form: QFormLayout, label: str, field, help_text: str = "") -> QLabel | None:
+        """A labelled row, with a line of help under the field when the label alone isn't enough.
+
+        Returns the help line, for rows whose help changes."""
         lab = QLabel(label)
         lab.setMinimumWidth(LABEL_WIDTH)  # a column that lines up, but grows rather than clip a larger font
         lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         if not help_text:
             form.addRow(lab, field)
-            return
+            return None
         holder = QWidget()
         col = QVBoxLayout(holder)
         col.setContentsMargins(0, 0, 0, 0)
@@ -241,6 +243,7 @@ class SettingsWindow(QWidget):
         form.addRow(lab, holder)
         lab.setAlignment(Qt.AlignRight | Qt.AlignTop)
         lab.setContentsMargins(0, 6, 0, 0)
+        return hint
 
     def _choice(self, key: str, choices) -> QComboBox:
         """A drop-down showing friendly names; the stored value is the item's data."""
@@ -260,11 +263,13 @@ class SettingsWindow(QWidget):
         self.fields[key] = w
         return w
 
-    def _claude_group(self) -> QGroupBox:
-        box, form = self._form("Claude")
+    def _model_group(self) -> QGroupBox:
+        box, form = self._form("AI model")
+        service = self._choice("provider", PROVIDER_CHOICES)
+        service.currentIndexChanged.connect(self._provider_changed)
+        self._row(form, "Service", service, "Who answers. Each service needs its own API key.")
         self.key_edit = QLineEdit()
         self.key_edit.setEchoMode(QLineEdit.Password)
-        self.key_edit.setPlaceholderText("Paste a key that starts with sk-ant-")
         self.key_edit.textChanged.connect(self._changed)
         self.key_status = QLabel()
         self.key_status.setObjectName("muted")
@@ -282,14 +287,37 @@ class SettingsWindow(QWidget):
         col.addLayout(row)
         col.addWidget(self.key_status)
         self._row(form, "API key", holder)
-        self._row(form, "Model", self._choice("model", MODEL_CHOICES))
-        self._row(form, "Thinking", self._choice("effort", EFFORT_CHOICES), "How long Claude thinks before it answers.")
+        self._row(form, "Model", self._choice("model", ()))
+        self.thinking_help = self._row(form, "Thinking", self._choice("effort", EFFORT_CHOICES), " ")
         context = QPlainTextEdit()
         context.setFixedHeight(76)
         context.textChanged.connect(self._changed)
         self.fields["user_context"] = context
-        self._row(form, "About you", context, "Claude pitches its answers at this. Your field, your level.")
+        self._row(form, "About you", context, "Answers are pitched at this. Your field, your level.")
         return box
+
+    def provider(self) -> str:
+        return self.fields["provider"].currentData() or self.cfg.provider
+
+    def _fill_models(self, provider: str, keep: str | None = None) -> None:
+        """Offer `provider`'s models, selecting `keep` if given, else the provider's default."""
+        w = self.fields["model"]
+        w.blockSignals(True)
+        w.clear()
+        for value, name, note in PROVIDERS[provider].models:
+            w.addItem(f"{name}  ·  {note}" if note else name, value)
+        w.blockSignals(False)
+        self.set_value("model", keep or PROVIDERS[provider].default_model)
+
+    def _provider_changed(self, *_args) -> None:
+        if self._loading:
+            return
+        provider = self.provider()
+        if self.cfg.sources.get("model") != "env":  # a model the environment pins stays, whatever it is
+            self._fill_models(provider, self.cfg.model if provider == self.cfg.provider else None)
+        self.key_edit.clear()
+        self._show_provider()
+        self._changed()
 
     def _keys_group(self) -> QGroupBox:
         box, form = self._form("Shortcuts")
@@ -392,6 +420,8 @@ class SettingsWindow(QWidget):
         self.cfg = cfg
         self._loading = True
         self.browse_btn.setEnabled(True)
+        self.set_value("provider", cfg.provider)
+        self._fill_models(cfg.provider, cfg.model)
         for key, w in self.fields.items():
             self.set_value(key, getattr(cfg, key))
             w.setEnabled(True)
@@ -406,22 +436,32 @@ class SettingsWindow(QWidget):
                 self.browse_btn.setEnabled(False)
         self.key_edit.clear()
         self._loading = False
-        self._show_key_status()
+        self._show_provider()
         self.error.hide()
         self._changed()
 
-    def _show_key_status(self) -> None:
-        source = self.cfg.sources.get("api_key")
-        if source == "env":
-            self.key_status.setText(f"Using {mask(self.cfg.api_key)} from ANTHROPIC_API_KEY (environment or .env).")
+    def _show_provider(self) -> None:
+        """The key field, its status and the thinking help, for the service now chosen."""
+        p = PROVIDERS[self.provider()]
+        self.key_edit.setPlaceholderText(p.key_hint)
+        self.thinking_help.setText(THINKING_HELP.get(p.key, "How long the model thinks before it answers."))
+        self._content.adjustSize()  # a help line that changed length re-flows the rows below it
+        if p.key == self.cfg.provider:
+            key, source = self.cfg.api_key, self.cfg.sources.get("api_key")
+        else:
+            key, source = find_key(p.key, self.keychain)
+        site = p.console.split("//", 1)[1].split("/", 1)[0]
+        if not p.installed():
+            self.key_status.setText(f"{p.name} needs its library first: {p.install_hint()}")
+        elif source == "env":
+            self.key_status.setText(f"Using {mask(key)} from {p.env} (environment or .env).")
         elif source == "keychain":
-            self.key_status.setText(f"Saved in your keychain: {mask(self.cfg.api_key)}")
+            self.key_status.setText(f"Saved in your keychain: {mask(key)}")
         elif self.keychain.problem:
-            self.key_status.setText(f"No keychain here ({self.keychain.problem}). Use ANTHROPIC_API_KEY instead.")
+            self.key_status.setText(f"No keychain here ({self.keychain.problem}). Use {p.env} instead.")
         else:
             self.key_status.setText(
-                'No key yet. Create one at <a href="https://console.anthropic.com/settings/keys" '
-                'style="color:#FFB224">console.anthropic.com</a>, then paste it here.'
+                f'No key yet. Create one at <a href="{p.console}" style="color:#FFB224">{site}</a>, then paste it here.'
             )
         self.key_remove.setEnabled(source == "keychain")
 
@@ -478,7 +518,7 @@ class SettingsWindow(QWidget):
             self.error.show()
             return False
         new_key = self.key_edit.text().strip()
-        if new_key and not self.keychain.set(new_key):
+        if new_key and not self.keychain.set(new_key, PROVIDERS[self.provider()].account):
             self.error.setText(f"Could not save the key to the keychain: {self.keychain.problem}")
             self.error.show()
             return False
@@ -501,10 +541,11 @@ class SettingsWindow(QWidget):
         return True
 
     def _remove_key(self) -> None:
-        self.keychain.delete()
-        self.cfg.api_key = None
-        self.cfg.sources["api_key"] = "none"
-        self._show_key_status()
+        self.keychain.delete(PROVIDERS[self.provider()].account)
+        if self.provider() == self.cfg.provider:
+            self.cfg.api_key = None
+            self.cfg.sources["api_key"] = "none"
+        self._show_provider()
         self.saved.emit()  # the controller drops the key it holds
 
     def _choose_folder(self) -> None:
