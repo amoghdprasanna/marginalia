@@ -15,6 +15,14 @@ def test_round_trip():
     assert kc.delete() and kc.get() is None
 
 
+def test_each_provider_has_its_own_account():
+    kc = Keychain(FakeKeyring())
+    kc.set("sk-ant-a")
+    kc.set("sk-openai", "openai-api-key")
+    assert kc.get() == "sk-ant-a" and kc.get("openai-api-key") == "sk-openai"
+    assert kc.delete("openai-api-key") and kc.get() == "sk-ant-a"
+
+
 def test_failures_are_reported_not_raised(caplog):
     kc = Keychain(FakeKeyring(error=RuntimeError("No recommended backend")))
     assert kc.get() is None and kc.problem == "No recommended backend"

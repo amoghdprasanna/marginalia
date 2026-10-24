@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .providers import DEFAULT_PROVIDER, PROVIDERS, provider_of_model
+
 try:
     from dotenv import find_dotenv, load_dotenv
 
@@ -49,7 +51,10 @@ class Setting:
 
 
 SETTINGS: tuple[Setting, ...] = (
-    Setting("model", "MARGINALIA_MODEL", str, "claude-opus-5-5"),
+    # Which service answers: anthropic | openai | gemini (ADR 0027).
+    Setting("provider", "MARGINALIA_PROVIDER", str, DEFAULT_PROVIDER, tuple(PROVIDERS)),
+    # Left unset, the provider's own default model (load_config fills it in).
+    Setting("model", "MARGINALIA_MODEL", str, PROVIDERS[DEFAULT_PROVIDER].default_model),
     # low | medium | high | xhigh | max. Trades answer depth against wait time.
     Setting("effort", "MARGINALIA_EFFORT", str, "medium", EFFORTS),
     # Only for models on the high-resolution image tier (sharper small text).
@@ -100,6 +105,7 @@ class Config:
     voice_hotkey: str = "<ctrl>+<alt>+v"
     crash_reports: bool = False
     check_updates: bool = True
+    provider: str = DEFAULT_PROVIDER
     # Where each value came from: "default", "settings", "env" or "command line" (plus "keychain"
     # for the API key). Lets the Settings window lock fields that an environment variable pins.
     sources: dict[str, str] = field(default_factory=dict)
@@ -224,14 +230,31 @@ def load_config(
         if flag:
             values[key], sources[key] = value, "command line"
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY") or None
-    sources["api_key"] = "env" if api_key else "none"
-    if api_key is None:
-        if keychain is None:
-            from .secrets import Keychain
+    provider = PROVIDERS[values["provider"]]
+    # A model nobody chose follows the provider. So does one saved for a different provider (you
+    # switched with MARGINALIA_PROVIDER); a model an environment variable names is left alone.
+    owner = provider_of_model(values["model"])
+    if sources["model"] == "default" or (sources["model"] == "settings" and owner not in (None, provider.key)):
+        if sources["model"] == "settings":
+            _warn(f"settings model={values['model']!r} is not a {provider.name} model; using {provider.default_model}.")
+        values["model"], sources["model"] = provider.default_model, "default"
 
-            keychain = Keychain()
-        api_key = keychain.get()
-        if api_key:
-            sources["api_key"] = "keychain"
+    if keychain is None:
+        from .secrets import Keychain
+
+        keychain = Keychain()
+    api_key, sources["api_key"] = find_key(values["provider"], keychain)
     return Config(api_key=api_key, sources=sources, **values)
+
+
+def find_key(provider: str, keychain) -> tuple[str | None, str]:
+    """A provider's API key and where it came from: "env", "keychain" or "none".
+
+    The environment wins, so CI, the eval and existing .env setups behave as before (ADR 0016).
+    """
+    p = PROVIDERS[provider]
+    key = os.environ.get(p.env) or None
+    if key:
+        return key, "env"
+    key = keychain.get(p.account)
+    return (key, "keychain") if key else (None, "none")

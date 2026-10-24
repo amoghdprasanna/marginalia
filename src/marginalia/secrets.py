@@ -1,8 +1,9 @@
-"""The API key, kept in the operating system's credential store instead of a plain-text file.
+"""API keys, kept in the operating system's credential store instead of a plain-text file.
 
 macOS Keychain, Windows Credential Locker, or the Secret Service on Linux, through `keyring`
-(ADR 0016). Where no store works (a headless Linux box), it says so and the app falls back to
-ANTHROPIC_API_KEY from the environment or .env.
+(ADR 0016). One account per provider (ADR 0027). Where no store works (a headless Linux box),
+it says so and the app falls back to the provider's variable (ANTHROPIC_API_KEY, ...) from the
+environment or .env.
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ import logging
 log = logging.getLogger(__name__)
 
 SERVICE = "Marginalia"
-ACCOUNT = "anthropic-api-key"
+ACCOUNT = "anthropic-api-key"  # the default; providers.Provider.account names the others
 
 
 def _default_backend():
@@ -21,7 +22,7 @@ def _default_backend():
 
 
 class Keychain:
-    """get/set/delete the one secret we keep. Never raises: a broken store logs and acts empty."""
+    """get/set/delete a provider's key (`account`). Never raises: a broken store logs and acts empty."""
 
     def __init__(self, backend=None) -> None:
         self._backend = backend
@@ -32,17 +33,17 @@ class Keychain:
             self._backend = _default_backend()
         return self._backend
 
-    def get(self) -> str | None:
+    def get(self, account: str = ACCOUNT) -> str | None:
         try:
-            return self._store().get_password(SERVICE, ACCOUNT) or None
+            return self._store().get_password(SERVICE, account) or None
         except Exception as exc:  # noqa: BLE001  (ImportError, NoKeyringError, a locked keychain...)
             self.problem = str(exc) or type(exc).__name__
             log.debug("Keychain unavailable: %s", self.problem)
             return None
 
-    def set(self, key: str) -> bool:
+    def set(self, key: str, account: str = ACCOUNT) -> bool:
         try:
-            self._store().set_password(SERVICE, ACCOUNT, key.strip())
+            self._store().set_password(SERVICE, account, key.strip())
             self.problem = None
             return True
         except Exception as exc:  # noqa: BLE001
@@ -50,9 +51,9 @@ class Keychain:
             log.warning("Could not save the API key to the keychain: %s", self.problem)
             return False
 
-    def delete(self) -> bool:
+    def delete(self, account: str = ACCOUNT) -> bool:
         try:
-            self._store().delete_password(SERVICE, ACCOUNT)
+            self._store().delete_password(SERVICE, account)
             return True
         except Exception as exc:  # noqa: BLE001  (PasswordDeleteError when there was none)
             log.debug("Nothing deleted from the keychain: %s", exc)
