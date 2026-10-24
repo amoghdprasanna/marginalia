@@ -18,7 +18,7 @@ from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QApplication
 
 from . import __version__
-from .brain import BrainError, Cancelled, ClaudeBrain, DemoBrain
+from .brain import BrainError, Cancelled, DemoBrain, brain_for
 from .capture import Snapshot, default_frame_grabber, default_grab, prepare, small_frame
 from .config import Config, SettingsStore, load_config, settings_path
 from .crash import CrashReporter, issue_url
@@ -30,6 +30,7 @@ from .logs import setup_logging
 from .ocr import OCR
 from .permissions import Fixer, default_probes, host_app, needs_attention, run_checks
 from .pointing import place_box, resolve_points
+from .providers import PROVIDERS
 from .secrets import Keychain
 from .tracking import WIDTH as TRACK_WIDTH
 from .tracking import Tracker
@@ -77,7 +78,7 @@ class Bus(QObject):
 
 
 def make_brain(cfg: Config):
-    return DemoBrain() if cfg.demo else ClaudeBrain(cfg)
+    return DemoBrain() if cfg.demo else brain_for(cfg)
 
 
 def make_ocr(cfg: Config) -> OCR | None:
@@ -126,7 +127,7 @@ def default_services(cfg: Config) -> Services:
 
 
 # Settings that, when changed, need a new brain (the others are read per question or elsewhere).
-BRAIN_KEYS = {"model", "effort", "api_key", "user_context", "max_tokens", "hires", "demo"}
+BRAIN_KEYS = {"provider", "model", "effort", "api_key", "user_context", "max_tokens", "hires", "demo"}
 HOTKEY_KEYS = {"hotkey", "voice_hotkey", "hotkey_enabled"}
 
 
@@ -1036,7 +1037,8 @@ def main(argv: list[str] | None = None) -> None:
     signal.signal(signal.SIGINT, signal.SIG_DFL)  # Ctrl+C in the terminal quits
 
     if not cfg.demo and not cfg.api_key:
-        log.warning("No API key found. Paste one in Settings (right-click the orb), or run with --demo.")
+        name = PROVIDERS[cfg.provider].name
+        log.warning("No %s API key found. Paste one in Settings (right-click the orb), or run with --demo.", name)
 
     controller = Controller(cfg)
     app.aboutToQuit.connect(controller.stop)

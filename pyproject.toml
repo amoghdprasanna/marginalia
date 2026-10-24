@@ -28,7 +28,11 @@ ocr = [
 ]
 # Ask by voice. Local Whisper; the model downloads once on first run.
 voice = ["faster-whisper>=1.0", "sounddevice>=0.4.6"]
-dev = ["pytest>=8", "pytest-qt>=4.4", "pytest-cov>=5", "ruff>=0.6"]
+# Other model providers (ADR 0027). Claude needs nothing extra.
+openai = ["openai>=3.30"]
+gemini = ["google-genai>=2.30"]
+# The provider SDKs are here too, so their error classes are tested; OCR and voice stay out (ADR 0005).
+dev = ["pytest>=8", "pytest-qt>=4.4", "pytest-cov>=5", "ruff>=0.6", "openai>=3.30", "google-genai>=2.30"]
 # Build the desktop app (packaging/build.py).
 package = ["pyinstaller>=6.10"]
 

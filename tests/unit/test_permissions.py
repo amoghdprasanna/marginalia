@@ -47,6 +47,20 @@ def test_no_api_key_needs_attention_unless_in_demo(mac, cfg):
     assert not needs_attention(run_checks(demo, FakeProbes()))
 
 
+def test_the_key_check_names_the_chosen_provider(mac, cfg):
+    gem = replace(cfg, provider="gemini", sources={"api_key": "env"})
+    check = by_key(run_checks(gem, FakeProbes()))["api_key"]
+    assert check.title == "Gemini API key" and check.status == OK and "GEMINI_API_KEY" in check.detail
+
+
+def test_a_provider_without_its_library_needs_attention(mac, cfg, monkeypatch):
+    from marginalia.providers import Provider
+
+    monkeypatch.setattr(Provider, "installed", lambda self: False)
+    check = by_key(run_checks(replace(cfg, provider="openai"), FakeProbes()))["api_key"]
+    assert check.status == MISSING and 'marginalia[openai]' in check.detail and check.action == "Open Settings"
+
+
 @pytest.mark.parametrize(
     ("mic", "status", "action"),
     [("not_determined", MISSING, "Allow…"), ("denied", MISSING, "Open Settings…"), ("unknown", UNKNOWN, None)],

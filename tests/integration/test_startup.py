@@ -221,7 +221,7 @@ def test_missing_api_key_is_pointed_out(fake_main, monkeypatch, caplog):
     monkeypatch.delenv("MARGINALIA_DEMO", raising=False)
     with pytest.raises(SystemExit):
         app_module.main([])
-    assert "No API key found" in caplog.text
+    assert "No Claude API key found" in caplog.text
 
 
 def test_quitting_does_not_wait_for_busy_workers(fake_main, monkeypatch):
