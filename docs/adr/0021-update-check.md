@@ -1,6 +1,7 @@
 # 0021. Updates: a daily check that tells you, not a self-installer (yet)
 
-**Status:** Accepted, 2026-10-08
+**Status:** Accepted, 2026-10-08. "Not a self-installer" is superseded by
+[0028](0028-installers-login-item-and-in-app-updates.md), which installs from the app; the daily check stays.
 
 ## Context
 The roadmap asks for auto-update. A real self-updater for a macOS app (download, verify the

@@ -7,6 +7,9 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 ## [Unreleased]
 
 ### Added
+- Install and update without a terminal: a Windows installer (Start menu entry, no administrator
+  rights needed), **Update now** in the update notice (downloads the release, checks it against
+  GitHub's checksum, restarts into it), and Settings → *Open Marginalia when you log in*.
 - Ask OpenAI's GPT models or Google's Gemini instead of Claude: Settings → Service. Each service
   keeps its own key in the keychain (or `OPENAI_API_KEY` / `GEMINI_API_KEY`). Claude stays the default.
 - Settings window (right-click the orb): model, effort, shortcuts, voice, OCR, journal folder;

@@ -16,11 +16,14 @@ git push origin main v0.2.0
 ```
 
 The tag starts `.github/workflows/release.yml`: it checks that the tag, `__version__` and the
-changelog agree, runs the tests, builds the wheel, the macOS disk image and the Windows zip, and
+changelog agree, runs the tests, builds the wheel, the macOS disk image and the Windows installer, and
 publishes a GitHub release with that changelog section as its notes. Running the workflow by hand
 from the Actions tab builds everything without publishing (a dry run).
 
-Users find out from the app's daily update check (ADR 0021).
+Users find out from the app's daily update check (ADR 0021), and the installed app updates itself
+with **Update now** (ADR 0028). That needs the releases to be public, and each release's installers
+to keep the names `packaging/build.py` gives them (`-macos.dmg`, `-windows-setup.exe`): the app
+looks for those, and checks them against the SHA-256 GitHub records when they are uploaded.
 
 ## Building the app yourself
 
@@ -28,6 +31,9 @@ Users find out from the app's daily update check (ADR 0021).
 pip install -e ".[package,ocr,voice,openai,gemini]"
 python packaging/build.py             # macOS: dist/Marginalia.app and dist/Marginalia-<v>-macos.dmg
 ```
+
+On Windows, install [Inno Setup 6](https://jrsoftware.org/isinfo.php) first (`choco install innosetup`)
+to get `dist/Marginalia-<v>-windows-setup.exe`; without it the build falls back to a `.zip`.
 
 ## Signing and notarising (macOS)
 
