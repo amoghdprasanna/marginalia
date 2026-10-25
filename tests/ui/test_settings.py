@@ -330,17 +330,22 @@ def test_a_refused_login_item_is_reported_and_nothing_is_saved(qtbot, store, key
 def test_forms_lay_out_the_same_on_every_platform(window):
     """Bug: on macOS fields kept their natural width and forms were centred, so help lines wrapped
     into the row below and the label columns didn't line up between groups."""
-    from PySide6.QtWidgets import QFormLayout, QLabel
+    from PySide6.QtWidgets import QApplication, QFormLayout, QLabel
 
     forms = window.findChildren(QFormLayout)
     assert forms and all(f.fieldGrowthPolicy() == QFormLayout.AllNonFixedFieldsGrow for f in forms)
     assert all(f.formAlignment() & Qt.AlignLeft for f in forms)
     window.open(window.cfg)
-    hints = [lab for lab in window.findChildren(QLabel) if lab.objectName() == "muted" and lab.text().strip()]
-    assert hints
-    for hint in hints:
-        assert not hint.wordWrap(), hint.text()
-        assert hint.width() >= hint.sizeHint().width(), f"cut off: {hint.text()}"
+    for width in (window.width(), 480):  # as opened, and squeezed so help lines wrap
+        window.setMinimumWidth(width)
+        window.resize(width, window.height())
+        QApplication.processEvents()
+        hints = [lab for lab in window.findChildren(QLabel) if lab.objectName() == "muted" and lab.isVisible()]
+        assert hints
+        for hint in hints:
+            assert hint.height() >= hint.heightForWidth(hint.width()), f"cut off at {width}px: {hint.text()}"
+    about = window.fields["user_context"]
+    assert about.height() >= 3 * about.fontMetrics().lineSpacing(), "About you shows three lines"
     window.close()
 
 

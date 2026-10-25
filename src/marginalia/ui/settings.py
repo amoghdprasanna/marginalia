@@ -247,9 +247,7 @@ class SettingsWindow(QWidget):
         col.addLayout(field) if isinstance(field, QHBoxLayout) else col.addWidget(field)
         hint = QLabel(help_text)
         hint.setObjectName("muted")
-        # One line each. A wrapped label in a form row is given one line's height on some platforms
-        # and overlaps the row below; the window widens to the longest line instead (_fit_to_screen).
-        hint.setWordWrap(False)
+        hint.setWordWrap(True)  # fields fill the column (see _form), so it wraps only on a narrow screen
         col.addWidget(hint)
         form.addRow(lab, holder)
         lab.setAlignment(Qt.AlignRight | Qt.AlignTop)
@@ -284,7 +282,7 @@ class SettingsWindow(QWidget):
         self.key_edit.textChanged.connect(self._changed)
         self.key_status = QLabel()
         self.key_status.setObjectName("muted")
-        self.key_status.setWordWrap(False)  # one line, like the other help lines
+        self.key_status.setWordWrap(True)
         self.key_status.setOpenExternalLinks(True)
         self.key_remove = QPushButton("Remove")
         self.key_remove.clicked.connect(self._remove_key)
@@ -302,8 +300,6 @@ class SettingsWindow(QWidget):
         self.thinking_help = self._row(form, "Thinking", self._choice("effort", EFFORT_CHOICES), " ")
         context = QPlainTextEdit()
         context.setPlaceholderText("Optional. For example: second-year physics student; show the algebra step by step.")
-        lines = context.fontMetrics().lineSpacing() * 3  # three lines of the font in use, not a guess in pixels
-        context.setFixedHeight(lines + 2 * context.frameWidth() + int(context.document().documentMargin()) * 2)
         context.textChanged.connect(self._changed)
         self.fields["user_context"] = context
         self._row(form, "About you", context, "Answers are pitched at this: your field, your level. Optional.")
@@ -404,6 +400,12 @@ class SettingsWindow(QWidget):
     def _fit_to_screen(self) -> None:
         """As tall as the content but never taller than the screen; wide enough that nothing is cut
         off, whatever the platform's fonts (Windows' run larger than macOS')."""
+        # "About you" shows three lines of the font in use. Measured here, once the window's style
+        # sheet applies: its font size, padding and border aren't known while the box is built.
+        about = self.fields["user_context"]
+        edges = about.contentsMargins().top() + about.contentsMargins().bottom()
+        margin = 2 * int(about.document().documentMargin())
+        about.setFixedHeight(about.fontMetrics().lineSpacing() * 3 + margin + edges)
         self._content.adjustSize()
         bar = self.scroll.verticalScrollBar().sizeHint().width()
         wide = max(600, self._content.minimumSizeHint().width() + bar + 2 * self.scroll.frameWidth() + 4)
@@ -483,7 +485,7 @@ class SettingsWindow(QWidget):
         elif source == "keychain":
             self.key_status.setText(f"Saved in your keychain: {mask(key)}")
         elif self.keychain.problem:
-            self.key_status.setText(f"No keychain here ({str(self.keychain.problem)[:40]}). Use {p.env} instead.")
+            self.key_status.setText(f"No keychain here ({self.keychain.problem}). Use {p.env} instead.")
         else:
             self.key_status.setText(
                 f'No key yet. Create one at <a href="{p.console}" style="color:#FFB224">{site}</a>, then paste it here.'
