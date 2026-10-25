@@ -487,7 +487,7 @@ def test_an_unsigned_mac_build_warns_about_screen_recording(qtbot, cfg, monkeypa
     c, _ = updating(qtbot, cfg, monkeypatch, FakeUpdater(loses_permissions=True), pool=ManualExecutor())
     c.notice.buttons["Update now"].click()
     qtbot.addWidget(c.update_notice)
-    assert "Screen Recording again" in c.update_notice.text.text()
+    assert "Screen Recording again" in c.update_notice.text.text() and "keychain" in c.update_notice.text.text()
 
 
 def test_where_it_cannot_update_itself_it_offers_the_download(qtbot, cfg, monkeypatch):

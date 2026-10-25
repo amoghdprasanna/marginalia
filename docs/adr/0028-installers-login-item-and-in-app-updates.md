@@ -55,10 +55,11 @@ it catches a damaged or swapped download.
 - Releases are built for Apple silicon (ADR 0023), so an Intel Mac is offered "Download…".
 
 ## Consequences
-- **Unsigned Mac builds lose their permissions on every update.** macOS ties Screen Recording and
-  microphone grants to the code signature; an ad-hoc signature is a hash of the exact build, so a
-  new build is a new app to it. The progress window says so, and the setup check (ADR 0018)
-  walks you through granting it again. A Developer ID (`docs/releasing.md`) ends this, because
+- **Unsigned Mac builds lose their permissions on every update.** macOS ties Screen Recording,
+  microphone and keychain access to the code signature; an ad-hoc signature is a hash of the
+  exact build, so a new build is a new app to it. It asks again for the keychain item holding the
+  API key (until you answer, the app waits at startup) and the setup check (ADR 0018) walks you
+  through Screen Recording. The progress window says so beforehand. A Developer ID (`docs/releasing.md`) ends this, because
   then the grant follows the team, and the updater also gets a signature to compare.
 - Python's downloader doesn't set the quarantine flag (or Windows' mark of the web), so the new
   version opens without the Gatekeeper or SmartScreen prompt the first install showed. That is

@@ -160,8 +160,8 @@ class Updater:
         return self._team
 
     def loses_permissions(self) -> bool:
-        """macOS ties Screen Recording and microphone grants to the signature. An app without a
-        developer's signature is a different app to it after every update, so it asks again."""
+        """macOS ties Screen Recording, microphone and keychain access to the signature. An app without
+        a developer's signature is a different app to it after every update, so it asks again."""
         return self.platform == "darwin" and self.team() is None
 
     # doing it -----------------------------------------------------------------------------------

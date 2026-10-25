@@ -430,8 +430,8 @@ class Controller(QObject):
         text = "Downloading…"
         if self.updater.loses_permissions():
             text += (
-                "\n\nThis build isn't signed by a registered Apple developer, so macOS will ask you to "
-                "allow Screen Recording again after the update."
+                "\n\nThis build isn't signed by a registered Apple developer, so after the update macOS "
+                "will ask you to allow Screen Recording again, and to let Marginalia use its keychain item."
             )
         self._notice(f"Updating to {release.version}", text, [("Cancel", cancel.set)])
         self.update_notice = self.notice
