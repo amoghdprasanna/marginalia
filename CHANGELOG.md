@@ -28,6 +28,8 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 - Windows: the setup check reads microphone consent; the app has its own taskbar icon.
 
 ### Changed
+- Settings → *About you* starts empty (it used to describe one particular researcher); answers
+  are pitched at a general reader until you fill it in.
 - On macOS, OCR uses the system's own text recognition (Apple Vision) instead of RapidOCR: it is
   several times faster, and the app is 40% smaller (the download drops from 188 MB to 106 MB).
   Windows and Linux keep RapidOCR.
@@ -43,6 +45,7 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
   keyboard input sources being read off the main thread.
 
 ### Fixed
+- Settings on macOS: help lines overlapped the row below and the columns didn't line up.
 - OCR on macOS 27 failed on every question ("key does not exist"); Apple Vision now reads text again.
 - On Windows, two answers saved within one clock tick shared a screenshot and mixed up their threads.
 - Markers kept pointing at the old spot after you scrolled or switched windows; they now follow

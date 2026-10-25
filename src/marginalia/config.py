@@ -26,11 +26,6 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
-DEFAULT_CONTEXT = (
-    "The user is a graduate researcher in quantum information (quantum error correction "
-    "and quantum machine learning). They read papers and watch lectures and want precise, "
-    "technical answers that respect the notation on their screen."
-)
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 LOG_LEVELS = ("debug", "info", "warning", "error")
 # Suggestions for the Settings window; any faster-whisper model name works.
@@ -67,7 +62,7 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("voice_enabled", "MARGINALIA_VOICE", bool, True),
     # Whisper size: tiny.en, base.en, small.en (sharper, slower). Downloaded once on first use.
     Setting("whisper_model", "MARGINALIA_WHISPER_MODEL", str, "base.en"),
-    Setting("user_context", "MARGINALIA_USER_CONTEXT", str, DEFAULT_CONTEXT),
+    Setting("user_context", "MARGINALIA_USER_CONTEXT", str, ""),  # empty: answers for a general reader
     Setting("log_dir", "MARGINALIA_LOG_DIR", Path, Path.home() / "Marginalia"),
     # Thinking shares this budget on current models, so keep it generous; answers stay short anyway.
     Setting("max_tokens", "MARGINALIA_MAX_TOKENS", int, 16000, bounds=(1024, 128000)),

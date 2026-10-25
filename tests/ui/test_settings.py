@@ -343,3 +343,7 @@ def test_forms_lay_out_the_same_on_every_platform(window):
         assert hint.width() >= hint.sizeHint().width(), f"cut off: {hint.text()}"
     window.close()
 
+
+def test_about_you_starts_empty_with_an_example(window):
+    w = window.fields["user_context"]
+    assert w.toPlainText() == "" and w.placeholderText().startswith("Optional.")

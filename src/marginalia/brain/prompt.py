@@ -32,7 +32,10 @@ POINT_UNITS = {
 
 
 def system_prompt(user_context: str, units: str = PIXELS) -> str:
-    return SYSTEM_PROMPT.replace("{user_context}", user_context).replace("{point_units}", POINT_UNITS[units])
+    """The system prompt; what the user wrote about themselves gets its own paragraph, if anything."""
+    about = user_context.strip()
+    text = SYSTEM_PROMPT.replace("{user_context}\n\n", f"{about}\n\n" if about else "")
+    return text.replace("{point_units}", POINT_UNITS[units])
 
 
 # Structured outputs (ADR 0011): the API constrains the reply to this schema, so it always parses.

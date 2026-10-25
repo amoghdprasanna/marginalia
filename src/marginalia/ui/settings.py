@@ -301,10 +301,12 @@ class SettingsWindow(QWidget):
         self._row(form, "Model", self._choice("model", ()))
         self.thinking_help = self._row(form, "Thinking", self._choice("effort", EFFORT_CHOICES), " ")
         context = QPlainTextEdit()
-        context.setFixedHeight(76)
+        context.setPlaceholderText("Optional. For example: second-year physics student; show the algebra step by step.")
+        lines = context.fontMetrics().lineSpacing() * 3  # three lines of the font in use, not a guess in pixels
+        context.setFixedHeight(lines + 2 * context.frameWidth() + int(context.document().documentMargin()) * 2)
         context.textChanged.connect(self._changed)
         self.fields["user_context"] = context
-        self._row(form, "About you", context, "Answers are pitched at this. Your field, your level.")
+        self._row(form, "About you", context, "Answers are pitched at this: your field, your level. Optional.")
         return box
 
     def provider(self) -> str:
