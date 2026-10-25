@@ -91,6 +91,8 @@ jobs:
       - name: The installer was built
         shell: bash
         run: ls dist/*-windows-setup.exe
+      - name: Install, update and uninstall the app
+        run: python packaging/windows/smoke_test.py
       - uses: actions/upload-artifact@v4
         with:
           name: windows-app
