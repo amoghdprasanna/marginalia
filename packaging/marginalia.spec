@@ -9,7 +9,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT = Path(SPECPATH).parent  # noqa: F821  (SPECPATH is defined by PyInstaller)
 sys.path.insert(0, str(ROOT / "src"))
-from marginalia import __version__  # noqa: E402
+from marginalia import BUNDLE_ID, __version__  # noqa: E402
 
 BUILD = ROOT / "packaging" / "build"
 ICON = BUILD / ("icon.icns" if sys.platform == "darwin" else "icon.ico")
@@ -79,7 +79,7 @@ if sys.platform == "darwin":
         coll,
         name="Marginalia.app",
         icon=str(ICON) if ICON.exists() else None,
-        bundle_identifier="io.github.amoghdprasanna.marginalia",
+        bundle_identifier=BUNDLE_ID,
         version=__version__,
         info_plist={
             "CFBundleDisplayName": "Marginalia",
