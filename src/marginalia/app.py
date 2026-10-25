@@ -6,6 +6,7 @@ import logging
 import os
 import signal
 import sys
+import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import Executor, ThreadPoolExecutor
@@ -18,6 +19,7 @@ from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QApplication
 
 from . import __version__
+from .autostart import LoginItem
 from .brain import BrainError, Cancelled, DemoBrain, brain_for
 from .capture import Snapshot, default_frame_grabber, default_grab, prepare, small_frame
 from .config import Config, SettingsStore, load_config, settings_path
@@ -32,6 +34,7 @@ from .permissions import Fixer, default_probes, host_app, needs_attention, run_c
 from .pointing import place_box, resolve_points
 from .providers import PROVIDERS
 from .secrets import Keychain
+from .selfupdate import UpdateCancelled, UpdateError, Updater
 from .tracking import WIDTH as TRACK_WIDTH
 from .tracking import Tracker
 from .ui import (
@@ -72,6 +75,8 @@ class Bus(QObject):
     answer_partial = Signal(object)
     transcript_ready = Signal(object)
     update_ready = Signal(object)
+    update_progress = Signal(object)  # (bytes so far, total) while an update downloads
+    update_staged = Signal(object)  # the future of Updater.prepare
     tracked = Signal(object)
     journal_partial = Signal(object)
     journal_ready = Signal(object)
@@ -116,6 +121,8 @@ class Services:
     # App bookkeeping (when updates were last checked...), kept apart from your settings.
     state: SettingsStore = field(default_factory=lambda: SettingsStore(settings_path().with_name("state.json")))
     fetch_release: Callable[[], Release | None] = fetch_latest
+    updater: Updater = field(default_factory=Updater)
+    login_item: LoginItem = field(default_factory=LoginItem)
     # A small grayscale screenshot for keeping markers on their content; None turns tracking off.
     frame: Callable | None = field(default_factory=default_frame_grabber)
 
@@ -141,7 +148,10 @@ class Controller(QObject):
         self.transcriber, self.recorder, self.grab = sv.transcriber, sv.recorder, sv.grab
         self.store, self.keychain, self.factories, self.probes = sv.store, sv.keychain, sv.factories, sv.probes
         self.state, self.fetch_release, self.frame = sv.state, sv.fetch_release, sv.frame
+        self.updater, self.login_item = sv.updater, sv.login_item
         self.available_update: Release | None = None
+        self._update_cancel: threading.Event | None = None  # set while an update downloads
+        self.update_notice: Notice | None = None  # its progress window
 
         self.orb = Orb(None)
         self.askbox = AskBox()
@@ -201,9 +211,11 @@ class Controller(QObject):
         self.orb.settings_requested.connect(self.open_settings)
         self.orb.setup_requested.connect(self.open_setup)
         self.orb.journal_requested.connect(self.open_journal)
-        self.orb.update_requested.connect(self.download_update)
+        self.orb.update_requested.connect(self.offer_update)
         self.orb.check_updates_requested.connect(lambda: self.check_for_updates(force=True))
         self.bus.update_ready.connect(self._on_update_checked)
+        self.bus.update_progress.connect(self._on_update_progress)
+        self.bus.update_staged.connect(self._on_update_staged)
         self.bus.journal_partial.connect(self._on_journal_partial)
         self.bus.journal_ready.connect(self._on_journal_answer)
         self.bus.hotkey.connect(lambda: self.start_ask(at_cursor=True))
@@ -244,6 +256,11 @@ class Controller(QObject):
             self.pool.submit(self._warm_voice)
         if self.ocr is not None and not self.ocr.available:
             log.warning("OCR not installed; pointing still works. pip install -e '.[ocr]'")
+        try:
+            self.updater.cleanup()  # what an earlier update left behind
+            self.login_item.refresh()  # the app moved: its login item follows
+        except OSError as exc:
+            log.debug("Startup tidy-up failed: %s", exc)
 
     def stop(self) -> None:
         """Undo start(): stop polling the cursor, release the hotkey hook and the microphone."""
@@ -300,7 +317,7 @@ class Controller(QObject):
 
     def open_settings(self) -> None:
         if self.settings_window is None:
-            self.settings_window = SettingsWindow(self.cfg, self.store, self.keychain)
+            self.settings_window = SettingsWindow(self.cfg, self.store, self.keychain, self.login_item)
             self.settings_window.saved.connect(self.reload_settings)
             self.settings_window.saved.connect(self._refresh_setup)
             self.settings_window.closed.connect(self._start_hotkeys)
@@ -381,17 +398,101 @@ class Controller(QObject):
                 self.state.save({"update_notified": release.version})
             except OSError:
                 pass
-            notes = release.notes.strip()
-            notes = (notes[:400] + "…") if len(notes) > 400 else notes
-            self._notice(
-                f"Marginalia {release.version} is available",
-                f"You have {__version__}.\n\n{notes}".strip(),
-                [("Later", None), ("Download…", self.download_update)],
-            )
+            self.offer_update()
+
+    def offer_update(self) -> None:
+        """The newer release, its notes, and Update now (or Download… where this copy can't)."""
+        release = self.available_update
+        if release is None:
+            return
+        notes = release.notes.strip()
+        notes = (notes[:400] + "…") if len(notes) > 400 else notes
+        if self.updater.problem(release) is None:
+            action = ("Update now", self.install_update)
+        else:
+            action = ("Download…", self.download_update)
+        self._notice(
+            f"Marginalia {release.version} is available",
+            f"You have {__version__}.\n\n{notes}".strip(),
+            [("Later", None), action],
+        )
 
     def download_update(self) -> None:
         if self.available_update is not None:
             self.open_url(QUrl(self.available_update.download_url()))
+
+    def install_update(self) -> None:
+        """Download, check and stage the update on a worker, then quit into it (ADR 0028)."""
+        release = self.available_update
+        if release is None or self._update_cancel is not None:
+            return
+        cancel = self._update_cancel = threading.Event()
+        text = "Downloading…"
+        if self.updater.loses_permissions():
+            text += (
+                "\n\nThis build isn't signed by a registered Apple developer, so macOS will ask you to "
+                "allow Screen Recording again after the update."
+            )
+        self._notice(f"Updating to {release.version}", text, [("Cancel", cancel.set)])
+        self.update_notice = self.notice
+        shown = [-1]  # the last whole percent reported, so the window isn't redrawn per chunk
+
+        def progress(got: int, total: int) -> None:  # worker thread
+            pct = got * 100 // total if total else 0
+            if pct != shown[0]:
+                shown[0] = pct
+                self.bus.update_progress.emit((got, total))
+
+        future = self.pool.submit(self.updater.prepare, release, progress, cancel.is_set)
+        future.add_done_callback(lambda f: self.bus.update_staged.emit(f))
+
+    def _on_update_progress(self, payload) -> None:
+        got, total = payload
+        notice = self.update_notice
+        if self._update_cancel is None or notice is None:
+            return
+        if not notice.isVisible():  # closed with the window's own button: that's a cancel too
+            self._update_cancel.set()
+            return
+        first, sep, rest = notice.text.text().partition("\n\n")
+        mb = 1024 * 1024
+        line = f"Downloading… {got * 100 // total}% of {total / mb:.0f} MB" if total else f"Downloading… {got // mb} MB"
+        notice.text.setText(line + sep + rest)
+
+    def _on_update_staged(self, future) -> None:
+        cancel, self._update_cancel = self._update_cancel, None
+        notice, self.update_notice = self.update_notice, None
+        version = self.available_update.version if self.available_update else "?"
+        try:
+            apply = future.result()
+        except UpdateCancelled:
+            log.info("Update to %s cancelled", version)
+            return
+        except UpdateError as exc:
+            return self._update_failed(str(exc))
+        except Exception as exc:  # noqa: BLE001
+            log.exception("Update failed")
+            return self._update_failed(f"Something went wrong ({type(exc).__name__}). It's in the log.")
+        if cancel is not None and (cancel.is_set() or (notice is not None and not notice.isVisible())):
+            log.info("Update to %s cancelled", version)
+            self.updater.cleanup()
+            return
+        if notice is not None:
+            notice.close()
+        try:
+            apply()
+        except OSError as exc:
+            return self._update_failed(f"The installer couldn't be started ({exc}).")
+        log.info("Restarting into Marginalia %s", version)
+        self.quit_app()
+
+    def _update_failed(self, why: str) -> None:
+        log.warning("Update failed: %s", why)
+        self._notice("Couldn't update Marginalia", why, [("Close", None), ("Download…", self.download_update)])
+
+    @staticmethod
+    def quit_app() -> None:
+        QApplication.quit()
 
     def _notice(self, title: str, text: str, buttons) -> None:
         self.notices = [n for n in self.notices if n.isVisible()]

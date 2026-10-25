@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..autostart import LoginItem
 from ..config import BY_KEY, LOG_LEVELS, WHISPER_MODELS, Config, SettingsStore, find_key
 from ..hotkeys import Combo, format_combo, parse_combo, to_text
 from ..providers import PROVIDERS
@@ -154,11 +155,14 @@ class SettingsWindow(QWidget):
     saved = Signal()
     closed = Signal()
 
-    def __init__(self, cfg: Config, store: SettingsStore, keychain: Keychain) -> None:
+    def __init__(
+        self, cfg: Config, store: SettingsStore, keychain: Keychain, login_item: LoginItem | None = None
+    ) -> None:
         super().__init__(None, Qt.Window)
         self.setWindowTitle("Marginalia Settings")
         self.setStyleSheet(DIALOG_STYLE)
         self.store, self.keychain = store, keychain
+        self.login_item = login_item or LoginItem()
         self.fields: dict[str, QWidget] = {}
         self._loading = False
         self.error = QLabel()
@@ -181,6 +185,7 @@ class SettingsWindow(QWidget):
         inner.addWidget(self._keys_group())
         inner.addWidget(self._voice_group())
         inner.addWidget(self._journal_group())
+        inner.addWidget(self._app_group())
         inner.addWidget(self.advanced_toggle, 0, Qt.AlignLeft)
         inner.addWidget(self.advanced)
         inner.addStretch(1)
@@ -343,7 +348,7 @@ class SettingsWindow(QWidget):
         return box
 
     def _journal_group(self) -> QGroupBox:
-        box, form = self._form("Journal and updates")
+        box, form = self._form("Journal")
         folder = QLineEdit()
         folder.textChanged.connect(self._changed)
         self.fields["log_dir"] = folder
@@ -354,6 +359,14 @@ class SettingsWindow(QWidget):
         row.addWidget(folder, 1)
         row.addWidget(browse)
         self._row(form, "Folder", row, "Every question, answer and screenshot is saved here.")
+        return box
+
+    def _app_group(self) -> QGroupBox:
+        box, form = self._form("Startup and updates")
+        # Not a setting in the file: the system keeps it, so this shows what will really happen.
+        self.login_box = QCheckBox("Open Marginalia when you log in")
+        self.login_box.toggled.connect(self._changed)
+        self.login_help = self._row(form, "", self.login_box, " ")
         self._row(form, "", self._check("check_updates", "Check for new versions"))
         crash = self._check("crash_reports", "Offer to report crashes")
         self._row(form, "", crash, "You see each report before anything is sent.")
@@ -435,6 +448,10 @@ class SettingsWindow(QWidget):
             if key == "log_dir" and not w.isEnabled():
                 self.browse_btn.setEnabled(False)
         self.key_edit.clear()
+        problem = self.login_item.problem
+        self.login_box.setChecked(self.login_item.enabled())
+        self.login_box.setEnabled(problem is None)
+        self.login_help.setText(problem or "Starts quietly: the orb appears, nothing else opens.")
         self._loading = False
         self._show_provider()
         self.error.hide()
@@ -487,7 +504,7 @@ class SettingsWindow(QWidget):
 
     def dirty(self) -> bool:
         """Is there anything to save?"""
-        if self.key_edit.text().strip():
+        if self.key_edit.text().strip() or self.login_box.isChecked() != self.login_item.enabled():
             return True
         return any(v != getattr(self.cfg, k) for k, v in self.values().items())
 
@@ -522,6 +539,13 @@ class SettingsWindow(QWidget):
             self.error.setText(f"Could not save the key to the keychain: {self.keychain.problem}")
             self.error.show()
             return False
+        if self.login_box.isChecked() != self.login_item.enabled():
+            try:
+                self.login_item.set(self.login_box.isChecked())
+            except OSError as exc:
+                self.error.setText(f"Could not change opening at login: {exc}")
+                self.error.show()
+                return False
         # Save what you changed, and keep what the file already had. Never write a value an
         # environment variable or a command-line switch decided: it would outlive that override.
         stored = self.store.load()
