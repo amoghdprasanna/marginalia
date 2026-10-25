@@ -40,6 +40,7 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
   keyboard input sources being read off the main thread.
 
 ### Fixed
+- OCR on macOS 27 failed on every question ("key does not exist"); Apple Vision now reads text again.
 - Markers kept pointing at the old spot after you scrolled or switched windows; they now follow
   the content, hide when it leaves the screen, and come back when it returns.
 - Floating windows stayed on one desktop; they now appear on every desktop and over full-screen apps.
