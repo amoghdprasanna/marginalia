@@ -221,6 +221,10 @@ class SettingsWindow(QWidget):
     def _form(self, title: str) -> tuple[QGroupBox, QFormLayout]:
         box = QGroupBox(title)
         form = QFormLayout(box)
+        # Spelled out because macOS's defaults differ: fields there stay at their natural width and
+        # the form is centred, so help lines wrapped into overlapping text and labels didn't line up.
+        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
         form.setLabelAlignment(Qt.AlignRight | Qt.AlignTop)
         form.setHorizontalSpacing(12)
         form.setVerticalSpacing(10)
@@ -243,7 +247,9 @@ class SettingsWindow(QWidget):
         col.addLayout(field) if isinstance(field, QHBoxLayout) else col.addWidget(field)
         hint = QLabel(help_text)
         hint.setObjectName("muted")
-        hint.setWordWrap(True)
+        # One line each. A wrapped label in a form row is given one line's height on some platforms
+        # and overlaps the row below; the window widens to the longest line instead (_fit_to_screen).
+        hint.setWordWrap(False)
         col.addWidget(hint)
         form.addRow(lab, holder)
         lab.setAlignment(Qt.AlignRight | Qt.AlignTop)
@@ -278,7 +284,7 @@ class SettingsWindow(QWidget):
         self.key_edit.textChanged.connect(self._changed)
         self.key_status = QLabel()
         self.key_status.setObjectName("muted")
-        self.key_status.setWordWrap(True)
+        self.key_status.setWordWrap(False)  # one line, like the other help lines
         self.key_status.setOpenExternalLinks(True)
         self.key_remove = QPushButton("Remove")
         self.key_remove.clicked.connect(self._remove_key)
@@ -475,7 +481,7 @@ class SettingsWindow(QWidget):
         elif source == "keychain":
             self.key_status.setText(f"Saved in your keychain: {mask(key)}")
         elif self.keychain.problem:
-            self.key_status.setText(f"No keychain here ({self.keychain.problem}). Use {p.env} instead.")
+            self.key_status.setText(f"No keychain here ({str(self.keychain.problem)[:40]}). Use {p.env} instead.")
         else:
             self.key_status.setText(
                 f'No key yet. Create one at <a href="{p.console}" style="color:#FFB224">{site}</a>, then paste it here.'
@@ -591,6 +597,9 @@ class SettingsWindow(QWidget):
     def open(self, cfg: Config) -> None:
         self.load(cfg)
         self._fit_to_screen()
+        bring_to_front(self)
+        # Group boxes report their true minimum width only once shown, so measure again (before
+        # anything is painted); the first guess was narrow enough to cut off a help line.
+        self._fit_to_screen()
         screen = self.screen().availableGeometry()
         self.move(screen.center() - self.rect().center())
-        bring_to_front(self)

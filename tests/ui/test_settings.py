@@ -322,3 +322,24 @@ def test_a_refused_login_item_is_reported_and_nothing_is_saved(qtbot, store, key
     assert not w.save()
     assert "permission denied" in w.error.text()
     assert store.load() == {}
+
+
+# layout ------------------------------------------------------------------------------------------
+
+
+def test_forms_lay_out_the_same_on_every_platform(window):
+    """Bug: on macOS fields kept their natural width and forms were centred, so help lines wrapped
+    into the row below and the label columns didn't line up between groups."""
+    from PySide6.QtWidgets import QFormLayout, QLabel
+
+    forms = window.findChildren(QFormLayout)
+    assert forms and all(f.fieldGrowthPolicy() == QFormLayout.AllNonFixedFieldsGrow for f in forms)
+    assert all(f.formAlignment() & Qt.AlignLeft for f in forms)
+    window.open(window.cfg)
+    hints = [lab for lab in window.findChildren(QLabel) if lab.objectName() == "muted" and lab.text().strip()]
+    assert hints
+    for hint in hints:
+        assert not hint.wordWrap(), hint.text()
+        assert hint.width() >= hint.sizeHint().width(), f"cut off: {hint.text()}"
+    window.close()
+
