@@ -74,6 +74,12 @@ class MacProbes(NoProbes):
         import objc
 
         objc.loadBundle("AVFoundation", {}, bundle_path="/System/Library/Frameworks/AVFoundation.framework")
+        # A bundle loaded this way comes without PyObjC's metadata, so the bridge doesn't know the
+        # completion handler is a block taking a BOOL, and refuses the call ("Argument 3 is a block,
+        # but no signature available"). Arguments 0 and 1 are self and _cmd.
+        handler = {"retval": {"type": b"v"}, "arguments": {0: {"type": b"^v"}, 1: {"type": b"Z"}}}
+        selector = b"requestAccessForMediaType:completionHandler:"
+        objc.registerMetaDataForSelector(b"AVCaptureDevice", selector, {"arguments": {3: {"callable": handler}}})
         return objc.lookUpClass("AVCaptureDevice")
 
     def screen_recording(self) -> bool | None:

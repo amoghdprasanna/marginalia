@@ -45,6 +45,7 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
   keyboard input sources being read off the main thread.
 
 ### Fixed
+- macOS app: the setup check's microphone button did nothing ("Argument 3 is a block").
 - Settings on macOS: help lines overlapped the row below and the columns didn't line up.
 - OCR on macOS 27 failed on every question ("key does not exist"); Apple Vision now reads text again.
 - On Windows, two answers saved within one clock tick shared a screenshot and mixed up their threads.
