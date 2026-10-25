@@ -30,6 +30,7 @@ def mac(tmp_path, exe=MAC_EXE, frozen=True):
     return LoginItem(platform="darwin", frozen=frozen, executable=exe, home=tmp_path)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="macOS paths")
 def test_mac_writes_and_removes_a_launch_agent_that_opens_the_app(tmp_path):
     item = mac(tmp_path)
     assert item.problem is None and not item.enabled()
@@ -42,6 +43,7 @@ def test_mac_writes_and_removes_a_launch_agent_that_opens_the_app(tmp_path):
     assert not item.enabled()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="macOS paths")
 def test_a_moved_mac_app_repoints_its_login_item(tmp_path):
     mac(tmp_path).set(True)
     moved = mac(tmp_path, exe="/Users/a/Applications/Marginalia.app/Contents/MacOS/Marginalia")
@@ -73,7 +75,11 @@ def test_windows_uses_the_run_key(tmp_path):
     [
         ({"platform": "linux", "frozen": True}, "Not available"),
         ({"platform": "darwin", "frozen": False}, "installed app"),
-        ({"platform": "darwin", "frozen": True, "executable": "/Volumes/M/M.app/Contents/MacOS/M"}, "Applications"),
+        pytest.param(
+            {"platform": "darwin", "frozen": True, "executable": "/Volumes/M/M.app/Contents/MacOS/M"},
+            "Applications",
+            marks=pytest.mark.skipif(sys.platform == "win32", reason="macOS paths"),
+        ),
     ],
 )
 def test_only_an_installed_app_can_open_at_login(tmp_path, kw, says):

@@ -115,6 +115,7 @@ def test_only_the_packaged_app_with_a_checksummed_installer_updates_itself(tmp_p
     assert "checksum" in mac_updater(tmp_path).problem(release(asset(digest="")))
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="macOS paths")
 def test_a_mac_app_still_on_the_disk_image_asks_to_be_moved_first(tmp_path):
     exe = "/Volumes/Marginalia/Marginalia.app/Contents/MacOS/Marginalia"
     u = Updater(platform="darwin", machine="arm64", frozen=True, executable=exe)
