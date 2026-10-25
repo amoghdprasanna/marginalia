@@ -11,6 +11,7 @@ import sys
 from dataclasses import dataclass, field
 
 from .config import Config
+from .providers import PROVIDERS
 
 log = logging.getLogger(__name__)
 
@@ -159,15 +160,20 @@ def run_checks(cfg: Config, probes, voice_problem: str | None = None, ocr_availa
     checks: list[Check] = []
     who = host_app()
 
+    provider = PROVIDERS[cfg.provider]
+    title = f"{provider.name} API key"
     if cfg.demo:
         demo = "Demo mode: canned answers, no key needed."
-        checks.append(Check("api_key", "Claude API key", OK, demo, required=False))
+        checks.append(Check("api_key", title, OK, demo, required=False))
+    elif not provider.installed():
+        need = f"Its library isn't installed: {provider.install_hint()}. Or pick another service in Settings."
+        checks.append(Check("api_key", title, MISSING, need, "Open Settings"))
     elif cfg.api_key:
-        where = {"keychain": "in your keychain", "env": "from ANTHROPIC_API_KEY"}.get(cfg.sources.get("api_key"), "")
-        checks.append(Check("api_key", "Claude API key", OK, f"Set {where}.".replace(" .", ".")))
+        where = {"keychain": "in your keychain", "env": f"from {provider.env}"}.get(cfg.sources.get("api_key"), "")
+        checks.append(Check("api_key", title, OK, f"Set {where}.".replace(" .", ".")))
     else:
         need = "Needed for real answers. Paste one in Settings."
-        checks.append(Check("api_key", "Claude API key", MISSING, need, "Open Settings"))
+        checks.append(Check("api_key", title, MISSING, need, "Open Settings"))
 
     if sys.platform == "darwin":
         screen = probes.screen_recording()

@@ -14,6 +14,7 @@ python -m venv .venv
 source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -e .                     # the core app
 pip install -e ".[ocr,voice]"        # optional: sharper pointing, ask by voice
+pip install -e ".[openai,gemini]"    # optional: ask OpenAI's or Google's models instead of Claude
 
 marginalia --demo                    # try the interface with canned answers, no key needed
 marginalia                           # the real thing (also: python -m marginalia)
@@ -23,6 +24,14 @@ On first launch a **setup check** lists what Marginalia needs (API key, Screen R
 microphone) with a button to fix each. Paste your API key in **Settings**; it is kept in your
 system keychain, not in a file. (An `ANTHROPIC_API_KEY` in the environment or a `.env` file
 still works and takes precedence; see `.env.example`.)
+
+**Claude, OpenAI or Gemini.** Settings → *Service* picks who answers; each has its own key
+(`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`), and switching keeps the others.
+Get a key from [console.anthropic.com](https://console.anthropic.com/settings/keys),
+[platform.openai.com](https://platform.openai.com/api-keys) or
+[Google AI Studio](https://aistudio.google.com/apikey). A ChatGPT subscription doesn't include
+API access; the OpenAI key is billed separately. Claude is the default and the most tested;
+pointing accuracy on the others isn't measured yet (see ADR 0027).
 
 ## Use it
 
@@ -76,7 +85,8 @@ shortcut / orb
 | `src/marginalia/voice.py` | Optional mic recording and local Whisper transcription |
 | `src/marginalia/cursor.py` | Where the mouse last rested (what the orb asks about) |
 | `src/marginalia/config.py` | Settings: defaults, settings file, environment, command line |
-| `src/marginalia/secrets.py` | The API key in the system keychain |
+| `src/marginalia/providers.py` | The model services: names, key locations, models |
+| `src/marginalia/secrets.py` | API keys in the system keychain |
 | `src/marginalia/hotkeys.py` | Global shortcuts with press and release (Carbon on macOS, pynput elsewhere) |
 | `src/marginalia/permissions.py` | The setup check: what the system allows, and how to fix it |
 | `src/marginalia/journal.py` | Reading the journal back: threads, search, reopening a screenshot |

@@ -7,6 +7,8 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 ## [Unreleased]
 
 ### Added
+- Ask OpenAI's GPT models or Google's Gemini instead of Claude: Settings → Service. Each service
+  keeps its own key in the keychain (or `OPENAI_API_KEY` / `GEMINI_API_KEY`). Claude stays the default.
 - Settings window (right-click the orb): model, effort, shortcuts, voice, OCR, journal folder;
   changes apply at once. Settings live in a per-user file; environment variables still win.
 - The API key is kept in the system keychain.
@@ -38,6 +40,8 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
   keyboard input sources being read off the main thread.
 
 ### Fixed
+- OCR on macOS 27 failed on every question ("key does not exist"); Apple Vision now reads text again.
+- On Windows, two answers saved within one clock tick shared a screenshot and mixed up their threads.
 - Markers kept pointing at the old spot after you scrolled or switched windows; they now follow
   the content, hide when it leaves the screen, and come back when it returns.
 - Floating windows stayed on one desktop; they now appear on every desktop and over full-screen apps.

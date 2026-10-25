@@ -25,6 +25,7 @@ def _apple_vision():
     """An engine that takes a PIL image and returns (quad, text, score) in that image's pixels."""
     if sys.platform != "darwin":
         raise ImportError("Apple Vision is macOS only")
+    import Foundation
     import objc
     import Quartz
     import Vision
@@ -40,7 +41,8 @@ def _apple_vision():
             request = Vision.VNRecognizeTextRequest.alloc().init()
             request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
             request.setUsesLanguageCorrection_(False)  # it "corrects" code and symbols, and halves their scores
-            handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(cg, {})
+            no_options = Foundation.NSDictionary.dictionary()  # not {}: macOS 27 rejects PyObjC's proxy for it
+            handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(cg, no_options)
             ok, error = handler.performRequests_error_([request], None)
             if not ok:
                 raise RuntimeError(f"Vision text recognition failed: {error}")

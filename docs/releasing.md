@@ -25,7 +25,7 @@ Users find out from the app's daily update check (ADR 0021).
 ## Building the app yourself
 
 ```bash
-pip install -e ".[package,ocr,voice]"
+pip install -e ".[package,ocr,voice,openai,gemini]"
 python packaging/build.py             # macOS: dist/Marginalia.app and dist/Marginalia-<v>-macos.dmg
 ```
 

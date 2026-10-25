@@ -134,10 +134,14 @@ def prepare(snap: Snapshot, hires: bool = False) -> Prepared:
     return Prepared(full, zoom, (fsx, fsy), (x0, y0), (zsx, zsy), cursor_full, cursor_zoom)
 
 
-def to_b64_png(img: Image.Image) -> str:
+def to_png_bytes(img: Image.Image) -> bytes:
     buf = io.BytesIO()
     img.save(buf, "PNG")
-    return base64.standard_b64encode(buf.getvalue()).decode("ascii")
+    return buf.getvalue()
+
+
+def to_b64_png(img: Image.Image) -> str:
+    return base64.standard_b64encode(to_png_bytes(img)).decode("ascii")
 
 
 # Qt-specific capture (imported lazily so the rest of this module is testable without a display).

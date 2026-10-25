@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from PIL import Image
@@ -34,6 +34,9 @@ class DoubtLog:
         shots = self.dir / "shots"
         shots.mkdir(parents=True, exist_ok=True)
         stamp = now.strftime("%Y%m%d-%H%M%S-%f")  # microseconds: quick follow-ups must not collide
+        while (shots / f"{stamp}.png").exists():  # Windows' clock ticks every ~15 ms, so they still can
+            now += timedelta(microseconds=1)
+            stamp = now.strftime("%Y%m%d-%H%M%S-%f")
         screenshot.save(shots / f"{stamp}.png")
         page = self.dir / f"{now:%Y-%m-%d}.md"
         with page.open("a", encoding="utf-8") as f:

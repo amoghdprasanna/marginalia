@@ -35,3 +35,4 @@ supersedes it, so the history of *why* survives.
 | [0024](0024-wayland-through-the-portal.md) | Wayland: screenshots and shortcuts through the desktop portal, windows through XWayland | Accepted |
 | [0025](0025-markers-follow-their-content.md) | Markers follow what they point at | Accepted |
 | [0026](0026-apple-vision-ocr-and-a-leaner-app.md) | OCR with Apple Vision on macOS, and a leaner app | Accepted |
+| [0027](0027-more-than-one-model-provider.md) | More than one model provider: Claude, OpenAI and Gemini | Accepted |

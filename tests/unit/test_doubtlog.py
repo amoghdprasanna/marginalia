@@ -19,6 +19,26 @@ def test_journal_appends_entries_under_one_daily_header(tmp_path):
     assert all(f"shots/{s.name}" in text for s in shots)
 
 
+
+def test_entries_stay_apart_when_the_clock_does_not_move(tmp_path, monkeypatch):
+    """Windows' clock only ticks every ~15 ms, so two answers can read the same microsecond."""
+    import marginalia.doubtlog as doubtlog
+
+    class Frozen(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 24, 9, 30, 0, 123456)
+
+    monkeypatch.setattr(doubtlog, "datetime", Frozen)
+    log = DoubtLog(tmp_path)
+    shot = Image.new("RGB", (10, 10))
+    log.add("what is d?", "The code distance.", shot, "m")
+    first = log.last_entry
+    log.add("why odd?", "So majority vote works.", shot, "m", thread=first.id)
+    second = log.last_entry
+    assert first.id != second.id and first.time < second.time
+    assert len(list((tmp_path / "doubts" / "shots").glob("*.png"))) == 2
+
 def test_saved_case_is_ready_to_label(tmp_path):
     import json
 

@@ -69,7 +69,7 @@ jobs:
           security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
-      - run: pip install -e ".[package,ocr,voice]"
+      - run: pip install -e ".[package,ocr,voice,openai,gemini]"
       - run: python packaging/build.py
       - uses: actions/upload-artifact@v4
         with:
@@ -84,7 +84,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e ".[package,ocr,voice]"
+      - run: pip install -e ".[package,ocr,voice,openai,gemini]"
       - run: python packaging/build.py
       - uses: actions/upload-artifact@v4
         with:

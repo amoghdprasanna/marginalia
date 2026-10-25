@@ -8,6 +8,9 @@ from marginalia.secrets import Keychain
 
 VARS = [
     "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "MARGINALIA_PROVIDER",
     "MARGINALIA_MODEL",
     "MARGINALIA_HIRES",
     "MARGINALIA_HOTKEY",
@@ -191,3 +194,52 @@ def test_api_key_in_the_environment_wins(store, monkeypatch):
 def test_a_broken_keychain_means_no_key_not_a_crash(store):
     c = load_config(store=store, keychain=Keychain(FakeKeyring(error=RuntimeError("locked"))))
     assert c.api_key is None and c.sources["api_key"] == "none"
+
+
+# the provider (ADR 0027) ------------------------------------------------------------------------
+
+
+def test_claude_is_the_default_provider():
+    c = load_config()
+    assert c.provider == "anthropic" and c.model == "claude-opus-5-5"
+
+
+@pytest.mark.parametrize(("provider", "model"), [("openai", "gpt-6-astra"), ("gemini", "gemini-4-argon")])
+def test_a_model_nobody_chose_follows_the_provider(store, provider, model):
+    store.save({"provider": provider})
+    c = load_config(store=store)
+    assert c.provider == provider and c.model == model and c.sources["model"] == "default"
+
+
+def test_a_saved_model_of_another_provider_is_replaced_with_a_warning(store, monkeypatch, caplog):
+    store.save({"model": "claude-sonnet-5-5"})
+    monkeypatch.setenv("MARGINALIA_PROVIDER", "gemini")
+    assert load_config(store=store).model == "gemini-4-argon"
+    assert "not a Gemini model" in caplog.text
+
+
+def test_a_model_we_dont_list_is_left_alone(store, monkeypatch):
+    store.save({"provider": "openai", "model": "gpt-6-astra-2026-09-01"})
+    assert load_config(store=store).model == "gpt-6-astra-2026-09-01"
+    monkeypatch.setenv("MARGINALIA_MODEL", "claude-opus-5-5")  # the environment decides, even if it's odd
+    assert load_config(store=store).model == "claude-opus-5-5"
+
+
+def test_an_unknown_provider_falls_back_to_claude(monkeypatch, caplog):
+    monkeypatch.setenv("MARGINALIA_PROVIDER", "mistral")
+    assert load_config().provider == "anthropic" and "MARGINALIA_PROVIDER" in caplog.text
+
+
+def test_each_provider_reads_its_own_key(store, monkeypatch):
+    kc = Keychain(FakeKeyring())
+    kc.set("sk-ant-claude")
+    kc.set("AIza-gemini", "gemini-api-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-env")
+    for provider, key, source in (
+        ("anthropic", "sk-ant-claude", "keychain"),
+        ("openai", "sk-openai-env", "env"),
+        ("gemini", "AIza-gemini", "keychain"),
+    ):
+        store.save({"provider": provider})
+        c = load_config(store=store, keychain=kc)
+        assert (c.api_key, c.sources["api_key"]) == (key, source)
