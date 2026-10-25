@@ -2,7 +2,11 @@
 
     pip install -e ".[package]"          # plus ".[ocr,voice,openai,gemini]" to bundle those features
     python packaging/build.py            # -> dist/Marginalia.app and dist/Marginalia-<v>-macos.dmg
-                                         #    (Windows: dist/Marginalia-<v>-windows.zip)
+                                         #    (Windows: dist/Marginalia-<v>-windows-setup.exe)
+
+On Windows the installer is compiled with Inno Setup 6 (ISCC on PATH, in its usual folder, or
+named by the ISCC environment variable). Without it you get a .zip of the app instead, which
+runs but can't update itself.
 
 Signing and notarisation happen only when these are set (CI reads them from secrets):
     MACOS_SIGN_IDENTITY   "Developer ID Application: Your Name (TEAMID)"
@@ -87,10 +91,29 @@ def macos() -> Path:
     return dmg
 
 
+def find_iscc() -> str | None:
+    """Inno Setup's compiler: named by ISCC, on PATH, or where its installer puts it."""
+    env = os.environ.get
+    local = env("LOCALAPPDATA")
+    folders = [env("ProgramFiles(x86)"), env("ProgramFiles"), local and Path(local) / "Programs"]
+    candidates = [env("ISCC"), shutil.which("iscc")] + [Path(f) / "Inno Setup 6" / "ISCC.exe" for f in folders if f]
+    found = next((c for c in candidates if c and Path(c).exists()), None)
+    return str(found) if found else None
+
+
 def windows() -> Path:
-    out = DIST / f"Marginalia-{__version__}-windows"
-    shutil.make_archive(str(out), "zip", DIST, "Marginalia")
-    return out.with_suffix(".zip")
+    iscc = find_iscc()
+    if iscc is None:
+        print("Inno Setup not found: making a .zip instead of an installer (it can't update itself).")
+        out = DIST / f"Marginalia-{__version__}-windows"
+        shutil.make_archive(str(out), "zip", DIST, "Marginalia")
+        return out.with_suffix(".zip")
+    icon = ROOT / "packaging" / "build" / "icon.ico"
+    run(
+        iscc, f"/DAppVersion={__version__}", f"/DSourceDir={DIST / 'Marginalia'}", f"/DOutputDir={DIST}",
+        *([f"/DIconFile={icon}"] if icon.exists() else []), str(ROOT / "packaging" / "windows" / "marginalia.iss"),
+    )  # fmt: skip
+    return DIST / f"Marginalia-{__version__}-windows-setup.exe"
 
 
 def main() -> None:
