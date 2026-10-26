@@ -43,6 +43,7 @@ def test_defaults():
     assert c.hotkey_enabled and c.ocr_enabled and c.voice_enabled
     assert not c.demo and not c.hires
     assert c.log_dir == Path.home() / "Marginalia"
+    assert c.user_context == "", "nobody else gets one person's description of themselves"
 
 
 @pytest.mark.parametrize("value,expected", [("1", True), ("yes", True), ("ON", True), ("0", False), ("nope", False)])

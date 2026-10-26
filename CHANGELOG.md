@@ -7,6 +7,9 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 ## [Unreleased]
 
 ### Added
+- Install and update without a terminal: a Windows installer (Start menu entry, no administrator
+  rights needed), **Update now** in the update notice (downloads the release, checks it against
+  GitHub's checksum, restarts into it), and Settings → *Open Marginalia when you log in*.
 - Ask OpenAI's GPT models or Google's Gemini instead of Claude: Settings → Service. Each service
   keeps its own key in the keychain (or `OPENAI_API_KEY` / `GEMINI_API_KEY`). Claude stays the default.
 - Settings window (right-click the orb): model, effort, shortcuts, voice, OCR, journal folder;
@@ -25,6 +28,8 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 - Windows: the setup check reads microphone consent; the app has its own taskbar icon.
 
 ### Changed
+- Settings → *About you* starts empty (it used to describe one particular researcher); answers
+  are pitched at a general reader until you fill it in.
 - On macOS, OCR uses the system's own text recognition (Apple Vision) instead of RapidOCR: it is
   several times faster, and the app is 40% smaller (the download drops from 188 MB to 106 MB).
   Windows and Linux keep RapidOCR.
@@ -40,6 +45,8 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
   keyboard input sources being read off the main thread.
 
 ### Fixed
+- macOS app: the setup check's microphone button did nothing ("Argument 3 is a block").
+- Settings on macOS: help lines overlapped the row below and the columns didn't line up.
 - OCR on macOS 27 failed on every question ("key does not exist"); Apple Vision now reads text again.
 - On Windows, two answers saved within one clock tick shared a screenshot and mixed up their threads.
 - Markers kept pointing at the old spot after you scrolled or switched windows; they now follow

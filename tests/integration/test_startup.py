@@ -390,3 +390,114 @@ def test_a_second_notice_does_not_close_the_first(qtbot, cfg, crashed):
     assert first.isVisible() and c.notice is not first
     for n in c.notices:
         qtbot.addWidget(n)
+
+
+# installing an update ----------------------------------------------------------------------------
+
+
+class FakeUpdater:
+    def __init__(self, problem=None, outcome=None, loses_permissions=False):
+        self._problem, self.outcome, self._loses = problem, outcome, loses_permissions
+        self.applied, self.cleaned, self.cancelled_seen = [], 0, None
+        self.during = lambda: None  # runs mid-download
+
+    def problem(self, release):
+        return self._problem
+
+    def loses_permissions(self):
+        return self._loses
+
+    def prepare(self, release, on_progress=None, cancelled=None):
+        on_progress(50 * 2**20, 100 * 2**20)
+        self.during()
+        self.cancelled_seen = cancelled()
+        if isinstance(self.outcome, BaseException):
+            raise self.outcome
+        return lambda: self.applied.append(release.version)
+
+    def cleanup(self):
+        self.cleaned += 1
+
+
+def updating(qtbot, cfg, monkeypatch, updater, pool=None):
+    c = build(qtbot, cfg, pool=pool)
+    c.updater = updater
+    quits = []
+    monkeypatch.setattr(c, "quit_app", lambda: quits.append(1))
+    with_release(c)
+    c.check_for_updates()
+    if isinstance(c.pool, ManualExecutor):
+        c.pool.run_all()  # the check itself
+    for n in c.notices:
+        qtbot.addWidget(n)
+    return c, quits
+
+
+def test_update_now_downloads_installs_and_quits_into_the_new_version(qtbot, cfg, monkeypatch):
+    updater = FakeUpdater()
+    c, quits = updating(qtbot, cfg, monkeypatch, updater, pool=ManualExecutor())
+    assert "Download…" not in c.notice.buttons
+    c.notice.buttons["Update now"].click()
+    progress = c.update_notice
+    qtbot.addWidget(progress)
+    assert progress.heading.text() == "Updating to 9.9.9"
+    seen = []
+    updater.during = lambda: seen.append(progress.text.text())
+    c.pool.run_all()
+    assert seen == ["Downloading… 50% of 100 MB"]
+    assert updater.applied == ["9.9.9"] and quits == [1]
+    assert not progress.isVisible()
+
+
+def test_a_failed_update_says_why_and_offers_the_download(qtbot, cfg, monkeypatch):
+    from marginalia.selfupdate import UpdateError
+
+    c, quits = updating(qtbot, cfg, monkeypatch, FakeUpdater(outcome=UpdateError("The download failed (offline).")))
+    c.notice.buttons["Update now"].click()
+    for n in c.notices:
+        qtbot.addWidget(n)
+    assert c.notice.heading.text() == "Couldn't update Marginalia"
+    assert "offline" in c.notice.text.text() and "Download…" in c.notice.buttons
+    assert quits == []
+
+
+def test_cancelling_an_update_leaves_the_app_running(qtbot, cfg, monkeypatch):
+    updater = FakeUpdater()
+    c, quits = updating(qtbot, cfg, monkeypatch, updater, pool=ManualExecutor())
+    c.notice.buttons["Update now"].click()
+    qtbot.addWidget(c.update_notice)
+    c.update_notice.buttons["Cancel"].click()
+    c.pool.run_all()
+    assert updater.cancelled_seen is True, "the download sees the cancel"
+    assert updater.applied == [] and quits == []
+    assert updater.cleaned >= 1
+
+
+def test_closing_the_progress_window_cancels_too(qtbot, cfg, monkeypatch):
+    updater = FakeUpdater()
+    c, quits = updating(qtbot, cfg, monkeypatch, updater, pool=ManualExecutor())
+    c.notice.buttons["Update now"].click()
+    qtbot.addWidget(c.update_notice)
+    c.update_notice.close()
+    c.pool.run_all()
+    assert updater.applied == [] and quits == []
+
+
+def test_an_unsigned_mac_build_warns_about_screen_recording(qtbot, cfg, monkeypatch):
+    c, _ = updating(qtbot, cfg, monkeypatch, FakeUpdater(loses_permissions=True), pool=ManualExecutor())
+    c.notice.buttons["Update now"].click()
+    qtbot.addWidget(c.update_notice)
+    assert "Screen Recording again" in c.update_notice.text.text() and "keychain" in c.update_notice.text.text()
+
+
+def test_where_it_cannot_update_itself_it_offers_the_download(qtbot, cfg, monkeypatch):
+    c, _ = updating(qtbot, cfg, monkeypatch, FakeUpdater(problem="This copy runs from Python."))
+    assert "Update now" not in c.notice.buttons and "Download…" in c.notice.buttons
+
+
+def test_the_menu_entry_shows_the_update_again(qtbot, cfg, monkeypatch):
+    c, _ = updating(qtbot, cfg, monkeypatch, FakeUpdater())
+    c.notice.close()
+    c.orb.update_requested.emit()
+    qtbot.addWidget(c.notice)
+    assert c.notice.isVisible() and "Update now" in c.notice.buttons

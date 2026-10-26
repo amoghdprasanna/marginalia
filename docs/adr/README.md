@@ -29,10 +29,11 @@ supersedes it, so the history of *why* survives.
 | [0018](0018-setup-check.md) | A setup check with fix-it buttons | Accepted |
 | [0019](0019-journal-index-and-browser.md) | A journal index, and a browser that reopens threads | Accepted |
 | [0020](0020-local-crash-reports-opt-in-sending.md) | Crash reports: always local, sent only through an issue you review | Accepted |
-| [0021](0021-update-check.md) | Updates: a daily check that tells you, not a self-installer (yet) | Accepted |
+| [0021](0021-update-check.md) | Updates: a daily check that tells you, not a self-installer (yet) | Self-installer superseded by 0028 |
 | [0022](0022-release-process.md) | Release process: SemVer, a changelog, and tag-triggered builds | Accepted |
 | [0023](0023-pyinstaller-app.md) | The desktop app: PyInstaller, signed and notarised when credentials exist | Size and FFmpeg notes superseded by 0026 |
 | [0024](0024-wayland-through-the-portal.md) | Wayland: screenshots and shortcuts through the desktop portal, windows through XWayland | Accepted |
 | [0025](0025-markers-follow-their-content.md) | Markers follow what they point at | Accepted |
 | [0026](0026-apple-vision-ocr-and-a-leaner-app.md) | OCR with Apple Vision on macOS, and a leaner app | Accepted |
 | [0027](0027-more-than-one-model-provider.md) | More than one model provider: Claude, OpenAI and Gemini | Accepted |
+| [0028](0028-installers-login-item-and-in-app-updates.md) | An installed app: a Windows installer, opening at login, and updating from the app | Accepted |

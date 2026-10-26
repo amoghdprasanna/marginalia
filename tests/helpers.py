@@ -11,11 +11,13 @@ import numpy as np
 from PIL import Image
 
 from marginalia.app import Controller, Factories, Services
+from marginalia.autostart import LoginItem
 from marginalia.brain import Answer, Point
 from marginalia.capture import Snapshot
 from marginalia.config import SettingsStore
 from marginalia.doubtlog import DoubtLog
 from marginalia.secrets import Keychain
+from marginalia.selfupdate import Updater
 from marginalia.voice import Recorder, Transcriber
 
 
@@ -271,6 +273,8 @@ def build(
         probes=probes or FakeProbes(),
         state=SettingsStore(cfg.log_dir / "state.json"),
         fetch_release=lambda: None,
+        updater=Updater(frozen=False, workdir=cfg.log_dir),
+        login_item=LoginItem(frozen=False, home=cfg.log_dir),
         frame=frame,
     )
     c = Controller(cfg, services)

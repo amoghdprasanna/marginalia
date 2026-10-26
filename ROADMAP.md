@@ -44,8 +44,9 @@ Goal: someone else can install it.
 - [x] macOS `.app` and `.dmg` with PyInstaller; signs, notarises and staples when credentials exist (ADR 0023)
 - [ ] **You:** an Apple Developer ID and the six repository secrets in `docs/releasing.md`;
       until then builds are ad-hoc signed and only open on the Mac that built them
-- [x] Update check: once a day, announce a newer release, download from the menu (ADR 0021);
-      in-place self-update (Sparkle) once builds are signed
+- [x] Update check: once a day, announce a newer release, download from the menu (ADR 0021)
+- [x] Windows installer, open at login, and **Update now** in the app, checked against GitHub's
+      SHA-256 of the installer (ADR 0028); Sparkle-style signed updates once builds are signed
 - [x] Structured logs: `logging` instead of `print`, JSON lines in `<log dir>/logs` (ADR 0014)
 - [x] Crash reports kept locally; opt-in reporting as a GitHub issue you review (ADR 0020)
 - [x] Release process: SemVer, `CHANGELOG.md`, `scripts/release.py`, tag-triggered builds (ADR 0022)

@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..autostart import LoginItem
 from ..config import BY_KEY, LOG_LEVELS, WHISPER_MODELS, Config, SettingsStore, find_key
 from ..hotkeys import Combo, format_combo, parse_combo, to_text
 from ..providers import PROVIDERS
@@ -154,11 +155,14 @@ class SettingsWindow(QWidget):
     saved = Signal()
     closed = Signal()
 
-    def __init__(self, cfg: Config, store: SettingsStore, keychain: Keychain) -> None:
+    def __init__(
+        self, cfg: Config, store: SettingsStore, keychain: Keychain, login_item: LoginItem | None = None
+    ) -> None:
         super().__init__(None, Qt.Window)
         self.setWindowTitle("Marginalia Settings")
         self.setStyleSheet(DIALOG_STYLE)
         self.store, self.keychain = store, keychain
+        self.login_item = login_item or LoginItem()
         self.fields: dict[str, QWidget] = {}
         self._loading = False
         self.error = QLabel()
@@ -181,6 +185,7 @@ class SettingsWindow(QWidget):
         inner.addWidget(self._keys_group())
         inner.addWidget(self._voice_group())
         inner.addWidget(self._journal_group())
+        inner.addWidget(self._app_group())
         inner.addWidget(self.advanced_toggle, 0, Qt.AlignLeft)
         inner.addWidget(self.advanced)
         inner.addStretch(1)
@@ -216,6 +221,10 @@ class SettingsWindow(QWidget):
     def _form(self, title: str) -> tuple[QGroupBox, QFormLayout]:
         box = QGroupBox(title)
         form = QFormLayout(box)
+        # Spelled out because macOS's defaults differ: fields there stay at their natural width and
+        # the form is centred, so help lines wrapped into overlapping text and labels didn't line up.
+        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
         form.setLabelAlignment(Qt.AlignRight | Qt.AlignTop)
         form.setHorizontalSpacing(12)
         form.setVerticalSpacing(10)
@@ -238,7 +247,7 @@ class SettingsWindow(QWidget):
         col.addLayout(field) if isinstance(field, QHBoxLayout) else col.addWidget(field)
         hint = QLabel(help_text)
         hint.setObjectName("muted")
-        hint.setWordWrap(True)
+        hint.setWordWrap(True)  # fields fill the column (see _form), so it wraps only on a narrow screen
         col.addWidget(hint)
         form.addRow(lab, holder)
         lab.setAlignment(Qt.AlignRight | Qt.AlignTop)
@@ -290,10 +299,10 @@ class SettingsWindow(QWidget):
         self._row(form, "Model", self._choice("model", ()))
         self.thinking_help = self._row(form, "Thinking", self._choice("effort", EFFORT_CHOICES), " ")
         context = QPlainTextEdit()
-        context.setFixedHeight(76)
+        context.setPlaceholderText("Optional. For example: second-year physics student; show the algebra step by step.")
         context.textChanged.connect(self._changed)
         self.fields["user_context"] = context
-        self._row(form, "About you", context, "Answers are pitched at this. Your field, your level.")
+        self._row(form, "About you", context, "Answers are pitched at this: your field, your level. Optional.")
         return box
 
     def provider(self) -> str:
@@ -343,7 +352,7 @@ class SettingsWindow(QWidget):
         return box
 
     def _journal_group(self) -> QGroupBox:
-        box, form = self._form("Journal and updates")
+        box, form = self._form("Journal")
         folder = QLineEdit()
         folder.textChanged.connect(self._changed)
         self.fields["log_dir"] = folder
@@ -354,6 +363,14 @@ class SettingsWindow(QWidget):
         row.addWidget(folder, 1)
         row.addWidget(browse)
         self._row(form, "Folder", row, "Every question, answer and screenshot is saved here.")
+        return box
+
+    def _app_group(self) -> QGroupBox:
+        box, form = self._form("Startup and updates")
+        # Not a setting in the file: the system keeps it, so this shows what will really happen.
+        self.login_box = QCheckBox("Open Marginalia when you log in")
+        self.login_box.toggled.connect(self._changed)
+        self.login_help = self._row(form, "", self.login_box, " ")
         self._row(form, "", self._check("check_updates", "Check for new versions"))
         crash = self._check("crash_reports", "Offer to report crashes")
         self._row(form, "", crash, "You see each report before anything is sent.")
@@ -383,6 +400,12 @@ class SettingsWindow(QWidget):
     def _fit_to_screen(self) -> None:
         """As tall as the content but never taller than the screen; wide enough that nothing is cut
         off, whatever the platform's fonts (Windows' run larger than macOS')."""
+        # "About you" shows three lines of the font in use. Measured here, once the window's style
+        # sheet applies: its font size, padding and border aren't known while the box is built.
+        about = self.fields["user_context"]
+        edges = about.contentsMargins().top() + about.contentsMargins().bottom()
+        margin = 2 * int(about.document().documentMargin())
+        about.setFixedHeight(about.fontMetrics().lineSpacing() * 3 + margin + edges)
         self._content.adjustSize()
         bar = self.scroll.verticalScrollBar().sizeHint().width()
         wide = max(600, self._content.minimumSizeHint().width() + bar + 2 * self.scroll.frameWidth() + 4)
@@ -435,6 +458,10 @@ class SettingsWindow(QWidget):
             if key == "log_dir" and not w.isEnabled():
                 self.browse_btn.setEnabled(False)
         self.key_edit.clear()
+        problem = self.login_item.problem
+        self.login_box.setChecked(self.login_item.enabled())
+        self.login_box.setEnabled(problem is None)
+        self.login_help.setText(problem or "Starts quietly: the orb appears, nothing else opens.")
         self._loading = False
         self._show_provider()
         self.error.hide()
@@ -487,7 +514,7 @@ class SettingsWindow(QWidget):
 
     def dirty(self) -> bool:
         """Is there anything to save?"""
-        if self.key_edit.text().strip():
+        if self.key_edit.text().strip() or self.login_box.isChecked() != self.login_item.enabled():
             return True
         return any(v != getattr(self.cfg, k) for k, v in self.values().items())
 
@@ -522,6 +549,13 @@ class SettingsWindow(QWidget):
             self.error.setText(f"Could not save the key to the keychain: {self.keychain.problem}")
             self.error.show()
             return False
+        if self.login_box.isChecked() != self.login_item.enabled():
+            try:
+                self.login_item.set(self.login_box.isChecked())
+            except OSError as exc:
+                self.error.setText(f"Could not change opening at login: {exc}")
+                self.error.show()
+                return False
         # Save what you changed, and keep what the file already had. Never write a value an
         # environment variable or a command-line switch decided: it would outlive that override.
         stored = self.store.load()
@@ -567,6 +601,9 @@ class SettingsWindow(QWidget):
     def open(self, cfg: Config) -> None:
         self.load(cfg)
         self._fit_to_screen()
+        bring_to_front(self)
+        # Group boxes report their true minimum width only once shown, so measure again (before
+        # anything is painted); the first guess was narrow enough to cut off a help line.
+        self._fit_to_screen()
         screen = self.screen().availableGeometry()
         self.move(screen.center() - self.rect().center())
-        bring_to_front(self)

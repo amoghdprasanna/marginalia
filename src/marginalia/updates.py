@@ -1,7 +1,7 @@
 """Is there a newer release? A once-a-day look at GitHub's latest release (ADR 0021).
 
 Pure apart from `fetch_latest`, whose HTTP opener is injectable. Nothing is downloaded or
-installed here: the app tells you, and "Download" opens the release in your browser.
+installed here; `selfupdate` installs a release in the packaged app (ADR 0028).
 """
 from __future__ import annotations
 
@@ -40,20 +40,35 @@ def is_newer(latest: str, current: str = __version__) -> bool:
     return a is not None and b is not None and a > b
 
 
+# How each platform's installer is named in a release (packaging/build.py makes them).
+INSTALLERS = {"darwin": "-macos.dmg", "win32": "-windows-setup.exe"}
+
+
+@dataclass
+class Asset:
+    """A file attached to a release."""
+
+    name: str
+    url: str
+    size: int = 0
+    digest: str = ""  # "sha256:<hex>", recorded by GitHub at upload; "" for files uploaded before mid-2025
+
+
 @dataclass
 class Release:
     version: str
     url: str  # the release page
     notes: str = ""
-    assets: dict[str, str] = field(default_factory=dict)  # file name -> download URL
+    assets: dict[str, Asset] = field(default_factory=dict)  # by file name
+
+    def installer(self, platform: str = sys.platform) -> Asset | None:
+        wanted = INSTALLERS.get(platform)
+        return next((a for name, a in self.assets.items() if wanted and name.endswith(wanted)), None)
 
     def download_url(self, platform: str = sys.platform) -> str:
         """The installer for this platform if the release has one, else the release page."""
-        wanted = {"darwin": ".dmg", "win32": ".zip"}.get(platform)
-        for name, url in self.assets.items():
-            if wanted and name.endswith(wanted):
-                return url
-        return self.url
+        asset = self.installer(platform)
+        return asset.url if asset else self.url
 
 
 def fetch_latest(url: str = RELEASES_API, opener=urllib.request.urlopen, timeout: float = 5.0) -> Release | None:
@@ -72,7 +87,13 @@ def fetch_latest(url: str = RELEASES_API, opener=urllib.request.urlopen, timeout
     tag = str(data.get("tag_name") or "")
     if parse_version(tag) is None:
         return None
-    assets = {a.get("name", ""): a.get("browser_download_url", "") for a in data.get("assets") or []}
+    assets = {
+        a.get("name", ""): Asset(
+            a.get("name", ""), a.get("browser_download_url", ""), int(a.get("size") or 0), a.get("digest") or ""
+        )
+        for a in data.get("assets") or []
+        if isinstance(a, dict)
+    }
     return Release(tag.lstrip("v"), str(data.get("html_url") or ""), str(data.get("body") or ""), assets)
 
 

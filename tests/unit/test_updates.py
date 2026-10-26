@@ -45,8 +45,9 @@ RELEASE = {
     "html_url": "https://github.com/o/r/releases/tag/v0.3.0",
     "body": "Faster answers.",
     "assets": [
-        {"name": "Marginalia-0.3.0-macos.dmg", "browser_download_url": "https://x/m.dmg"},
-        {"name": "Marginalia-0.3.0-windows.zip", "browser_download_url": "https://x/w.zip"},
+        {"name": "Marginalia-0.3.0-macos.dmg", "browser_download_url": "https://x/m.dmg", "size": 10,
+         "digest": "sha256:ab"},
+        {"name": "Marginalia-0.3.0-windows-setup.exe", "browser_download_url": "https://x/w.exe"},
     ],
 }
 
@@ -55,8 +56,12 @@ def test_fetch_reads_the_release():
     r = fetch_latest(opener=opener_returning(RELEASE))
     assert (r.version, r.notes) == ("0.3.0", "Faster answers.")
     assert r.download_url("darwin") == "https://x/m.dmg"
-    assert r.download_url("win32") == "https://x/w.zip"
+    assert r.download_url("win32") == "https://x/w.exe"
     assert r.download_url("linux") == RELEASE["html_url"]
+    mac = r.installer("darwin")
+    assert (mac.name, mac.size, mac.digest) == ("Marginalia-0.3.0-macos.dmg", 10, "sha256:ab")
+    assert r.installer("win32").digest == "", "files uploaded before GitHub kept digests have none"
+    assert r.installer("linux") is None
 
 
 @pytest.mark.parametrize("data", [{**RELEASE, "prerelease": True}, {**RELEASE, "draft": True}, {"tag_name": "x"}, []])

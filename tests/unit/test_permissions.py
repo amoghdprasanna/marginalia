@@ -126,6 +126,15 @@ def test_mac_probes_answer_without_raising():
     assert p.microphone() in ("authorized", "denied", "not_determined", "restricted", "unknown")
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="asks macOS itself")
+def test_the_microphone_request_knows_its_completion_handler_is_a_block():
+    """Bug: the setup check's microphone button failed with "Argument 3 is a block, but no
+    signature available". Checked without calling it, which would ask for the microphone."""
+    device = permissions.MacProbes()._capture_device()
+    handler = device.requestAccessForMediaType_completionHandler_.__metadata__()["arguments"][3]
+    assert handler.get("callable", {}).get("arguments", ())[1]["type"] == b"Z"
+
+
 # Windows ---------------------------------------------------------------------------------------
 
 

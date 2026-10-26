@@ -72,3 +72,13 @@ def test_units_round_trip():
         x, y = from_units(prep, image, *to_units(prep, image, 300, 200, PER_MILLE), PER_MILLE)
         assert abs(x - 300) < 2 and abs(y - 200) < 2
         assert to_units(prep, image, 300.4, 200.6, PIXELS) == [300, 201]
+
+
+def test_what_you_wrote_about_yourself_is_its_own_paragraph():
+    text = system_prompt("  I study topology.  ")
+    assert "problems.\n\nI study topology.\n\nEach turn" in text
+
+
+def test_nothing_about_you_leaves_no_gap():
+    text = system_prompt("")
+    assert "problems.\n\nEach turn" in text and "{user_context}" not in text

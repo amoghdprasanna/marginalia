@@ -85,11 +85,18 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e ".[package,ocr,voice,openai,gemini]"
+      # Inno Setup builds the installer (ADR 0028); it is no longer preinstalled on every runner image.
+      - run: choco install innosetup --yes --no-progress
       - run: python packaging/build.py
+      - name: The installer was built
+        shell: bash
+        run: ls dist/*-windows-setup.exe
+      - name: Install, update and uninstall the app
+        run: python packaging/windows/smoke_test.py
       - uses: actions/upload-artifact@v4
         with:
           name: windows-app
-          path: dist/*.zip
+          path: dist/*-windows-setup.exe
 
   publish:
     needs: [wheel, macos, windows]

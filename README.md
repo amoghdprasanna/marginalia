@@ -7,7 +7,23 @@ the parts of the screen it's talking about.
 ![Asking](docs/images/ask.png)
 ![Answer with pointers](docs/images/answer.png)
 
-## Run it
+## Install it
+
+No terminal needed: download the latest release from the
+[Releases page](https://github.com/amoghdprasanna/marginalia/releases).
+
+- **macOS** (Apple silicon): open `Marginalia-<version>-macos.dmg` and drag Marginalia into
+  Applications, then open it from there. Until builds are signed with a Developer ID, macOS
+  stops the first launch: go to System Settings → Privacy & Security and click **Open Anyway**.
+- **Windows:** run `Marginalia-<version>-windows-setup.exe`. It installs for you only, so it
+  needs no administrator password, and adds Marginalia to the Start menu. Until the installer
+  is signed, SmartScreen may warn: click **More info → Run anyway**.
+
+To start it with your computer, tick **Open Marginalia when you log in** in Settings (right-click
+the orb). When a new version is out, Marginalia says so and **Update now** downloads it, checks
+it against the checksum GitHub recorded for it, and restarts into it (ADR 0028).
+
+## Run from source
 
 ```bash
 python -m venv .venv
@@ -136,7 +152,7 @@ ruff check .                         # lint
 - **Plan:** [`ROADMAP.md`](ROADMAP.md). **Changes:** [`CHANGELOG.md`](CHANGELOG.md); add a line
   under Unreleased with every user-visible change.
 - **Releases and the app:** `pip install -e ".[package]"` then `python packaging/build.py` builds
-  `dist/Marginalia.app` and a `.dmg` (Windows: a `.zip`). Releasing is `scripts/release.py` plus a
+  `dist/Marginalia.app` and a `.dmg` (Windows: a setup `.exe`, with Inno Setup installed). Releasing is `scripts/release.py` plus a
   tag; see [`docs/releasing.md`](docs/releasing.md), including signing and notarisation.
 - **Logs and crashes:** `<log dir>/logs/marginalia.jsonl` (JSON lines; metrics, never your
   questions) and `<log dir>/crashes/`.

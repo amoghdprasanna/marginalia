@@ -273,3 +273,82 @@ def test_keyboard_focus_stays_visible():
 
     assert "QPushButton:focus" in DIALOG_STYLE and "QCheckBox:focus" in DIALOG_STYLE
     assert "QLineEdit:focus" in DIALOG_STYLE
+
+
+# opening at login --------------------------------------------------------------------------------
+
+
+class FakeLoginItem:
+    def __init__(self, on=False, problem=None, fails=False):
+        self.on, self.problem, self.fails = on, problem, fails
+
+    def enabled(self):
+        return self.on
+
+    def set(self, on):
+        if self.fails:
+            raise OSError("permission denied")
+        self.on = on
+
+
+def login_window(qtbot, store, keychain, item):
+    w = SettingsWindow(load_config(store=store, keychain=keychain), store, keychain, item)
+    qtbot.addWidget(w)
+    return w
+
+
+def test_open_at_login_is_read_from_and_written_to_the_system(qtbot, store, keychain):
+    item = FakeLoginItem(on=True)
+    w = login_window(qtbot, store, keychain, item)
+    assert w.login_box.isChecked() and w.login_box.isEnabled()
+    assert not w.save_btn.isEnabled()
+    w.login_box.setChecked(False)
+    assert w.save_btn.isEnabled()
+    assert w.save()
+    assert not item.on
+    assert store.load() == {}, "it isn't a setting in the file"
+
+
+def test_open_at_login_is_off_and_explained_where_it_cannot_work(qtbot, store, keychain):
+    w = login_window(qtbot, store, keychain, FakeLoginItem(problem="Available in the installed app."))
+    assert not w.login_box.isEnabled() and not w.login_box.isChecked()
+    assert w.login_help.text() == "Available in the installed app."
+
+
+def test_a_refused_login_item_is_reported_and_nothing_is_saved(qtbot, store, keychain):
+    w = login_window(qtbot, store, keychain, FakeLoginItem(fails=True))
+    w.login_box.setChecked(True)
+    w.set_value("effort", "low")
+    assert not w.save()
+    assert "permission denied" in w.error.text()
+    assert store.load() == {}
+
+
+# layout ------------------------------------------------------------------------------------------
+
+
+def test_forms_lay_out_the_same_on_every_platform(window):
+    """Bug: on macOS fields kept their natural width and forms were centred, so help lines wrapped
+    into the row below and the label columns didn't line up between groups."""
+    from PySide6.QtWidgets import QApplication, QFormLayout, QLabel
+
+    forms = window.findChildren(QFormLayout)
+    assert forms and all(f.fieldGrowthPolicy() == QFormLayout.AllNonFixedFieldsGrow for f in forms)
+    assert all(f.formAlignment() & Qt.AlignLeft for f in forms)
+    window.open(window.cfg)
+    for width in (window.width(), 480):  # as opened, and squeezed so help lines wrap
+        window.setMinimumWidth(width)
+        window.resize(width, window.height())
+        QApplication.processEvents()
+        hints = [lab for lab in window.findChildren(QLabel) if lab.objectName() == "muted" and lab.isVisible()]
+        assert hints
+        for hint in hints:
+            assert hint.height() >= hint.heightForWidth(hint.width()), f"cut off at {width}px: {hint.text()}"
+    about = window.fields["user_context"]
+    assert about.height() >= 3 * about.fontMetrics().lineSpacing(), "About you shows three lines"
+    window.close()
+
+
+def test_about_you_starts_empty_with_an_example(window):
+    w = window.fields["user_context"]
+    assert w.toPlainText() == "" and w.placeholderText().startswith("Optional.")
