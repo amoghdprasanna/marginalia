@@ -62,6 +62,8 @@ class Chip(QAbstractButton):
         kf = QFont(self.font())
         kf.setPixelSize(10)
         kf.setWeight(QFont.DemiBold)
+        if not on:  # a key that does nothing isn't worth showing
+            return
         cap = QRectF(self.width() - 32, self.height() / 2 - 10, 20, 20)
         p.setPen(QPen(QColor(255, 255, 255, 40), 1))
         p.setBrush(QColor(255, 255, 255, 10))
@@ -169,7 +171,7 @@ def line_edit(placeholder: str, size: int) -> QLineEdit:
     return e
 
 
-def muted(text: str = "", size: int = 11) -> QLabel:
+def muted(text: str = "", size: int = 12) -> QLabel:
     lab = QLabel(text)
     lab.setStyleSheet(f"color: {MUTED_HEX}; font-size: {size}px; background: transparent;")
     return lab

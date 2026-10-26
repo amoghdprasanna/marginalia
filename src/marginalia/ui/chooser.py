@@ -25,8 +25,8 @@ class ModeChooser(Panel):
     def __init__(self) -> None:
         super().__init__()
         self.radius = 14
-        self.label = muted("Ask about the screen", 11)
-        self.label.setStyleSheet(f"color: {MUTED_HEX}; font-size: 11px; font-weight: 600; background: transparent;")
+        self.label = muted("Ask about the screen", 12)
+        self.label.setStyleSheet(f"color: {MUTED_HEX}; font-size: 12px; font-weight: 600; background: transparent;")
         self.type_btn = Chip("keys", "Type", "T")
         self.voice_btn = Chip("mic", "Speak", "V")
         self.type_btn.setToolTip("Type the question (T or Enter)")
@@ -38,13 +38,14 @@ class ModeChooser(Panel):
         row.addWidget(self.type_btn)
         row.addWidget(self.voice_btn)
         # Why Speak is greyed out, said where you look, not hidden in a tooltip.
-        self.voice_note = muted("", 11)
+        self.voice_note = muted("", 12)
         self.voice_note.setWordWrap(True)
         self.voice_note.hide()
         # The shortcuts, shown each time you use the orb: the way to learn them without a manual.
-        self.tip = muted("", 11)
+        self.tip = muted("", 12)
         self.tip.setWordWrap(True)
         self.tip.hide()
+        self._keys: tuple[str | None, str | None] = (None, None)
         # Everything else the app does, one click away instead of behind a right-click.
         self.journal_btn = link_button("Journal", "Past questions and answers (J)")
         self.settings_btn = link_button("Settings", "Model, shortcuts, voice, API key (,)")
@@ -56,8 +57,8 @@ class ModeChooser(Panel):
         more.addWidget(self.settings_btn)
         more.addStretch(1)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(10, 8, 10, 6)
-        lay.setSpacing(7)
+        lay.setContentsMargins(12, 11, 12, 8)  # room to breathe inside the rounded corners
+        lay.setSpacing(8)
         lay.addWidget(self.label)
         lay.addLayout(row)
         lay.addWidget(self.voice_note)
@@ -72,12 +73,18 @@ class ModeChooser(Panel):
         self.voice_btn.setToolTip("Say the question (V or Space)" if ok else f"Voice is off: {why}")
         self.voice_note.setText(f"Speak is off: {why}." if why and not ok else "")
         self.voice_note.setVisible(not ok and bool(why))
+        self._show_tip()
 
     def set_shortcuts(self, ask: str | None, voice: str | None) -> None:
+        self._keys = (ask, voice)
+        self._show_tip()
+
+    def _show_tip(self) -> None:
+        ask, voice = self._keys
         parts = []
         if ask:
             parts.append(f"<b>{ask}</b> asks from anywhere")
-        if voice:
+        if voice and self.voice_btn.isEnabled():  # don't teach a key that does nothing right now
             parts.append(f"hold <b>{voice}</b> to talk")
         self.tip.setText("Tip: " + ", ".join(parts) + "." if parts else "")
         self.tip.setVisible(bool(parts))
