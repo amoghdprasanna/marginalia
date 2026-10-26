@@ -109,3 +109,10 @@ def test_problems_wrap_and_stay_long_enough_to_read(qtbot, listen):
     assert listen.status.wordWrap()
     qtbot.wait(2800)
     assert listen.isVisible(), "a long message isn't gone before you've read it"
+
+
+def test_a_long_problem_is_shown_whole(listen):
+    """Bug: a problem two or three lines long was cut off at the top and bottom."""
+    listen.show_problem("No sound from the microphone. Check Settings → Privacy → Microphone, or pick another input.")
+    status = listen.status
+    assert status.height() >= status.heightForWidth(status.width())

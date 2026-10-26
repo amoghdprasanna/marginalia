@@ -11,10 +11,12 @@ from PySide6.QtWidgets import (
 from ..pointing import keep_on_screen
 from .paint import draw_qubit
 from .theme import (
+    AMBER,
     EDGE,
     FLOATING,
     SLATE,
     keep_visible,
+    tint,
 )
 
 
@@ -39,6 +41,7 @@ class Orb(QWidget):
         keep_visible(self)
         self.setFixedSize(self.SIZE, self.SIZE)
         self.setCursor(Qt.PointingHandCursor)
+        self.setAttribute(Qt.WA_Hover)  # it answers the pointer, so you know it's clickable
         self.set_hotkeys(hotkey_text, voice_hotkey_text)
         self.update_version: str | None = None
         self._press: QPoint | None = None
@@ -92,10 +95,19 @@ class Orb(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         c = QPointF(self.SIZE / 2, self.SIZE / 2)
-        p.setPen(QPen(EDGE, 1))
-        p.setBrush(SLATE)
+        hot = self.underMouse()
+        p.setPen(QPen(tint(AMBER, 150) if hot else EDGE, 1.5 if hot else 1))
+        p.setBrush(SLATE.lighter(125) if hot else SLATE)
         p.drawEllipse(c, self.SIZE / 2 - 2, self.SIZE / 2 - 2)
         draw_qubit(p, c, 11, self.phase, halo=False)
+
+    def enterEvent(self, e) -> None:  # noqa: N802
+        self.update()
+        super().enterEvent(e)
+
+    def leaveEvent(self, e) -> None:  # noqa: N802
+        self.update()
+        super().leaveEvent(e)
 
     def mousePressEvent(self, e) -> None:  # noqa: N802
         if e.button() == Qt.LeftButton:

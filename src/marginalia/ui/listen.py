@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QElapsedTimer, QPoint, QPointF, QRect, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -15,6 +15,8 @@ from .theme import (
     AMBER,
     TEXT_HEX,
     bring_to_front,
+    fit_height,
+    tint,
 )
 from .widgets import IconButton, Panel, Wave, hints, muted, set_hints
 
@@ -33,8 +35,8 @@ class ListenBox(Panel):
         self.setFixedWidth(400)
         self.status = QLabel()
         self.status.setStyleSheet(f"color: {TEXT_HEX}; font-size: 15px; font-weight: 500; background: transparent;")
-        self.timer_lab = muted("0:00", 11)
-        self.device_lab = muted("", 11)
+        self.timer_lab = muted("0:00", 12)
+        self.device_lab = muted("", 12)
         self.device_lab.hide()
         self.wave = Wave()
         self.send_btn = IconButton("send", "Send now (Enter)", 30)
@@ -133,7 +135,7 @@ class ListenBox(Panel):
         self.wave.hide()
         self.send_btn.hide()
         set_hints(self.hint, ("Orb", "try again"), ("Esc", "close"))
-        self.adjustSize()
+        fit_height(self)
         self.update()
         # `self` as context: Qt cancels the timer if this widget is destroyed first. The session
         # check keeps it from hiding a question asked again since (it may be transcribing by then).
@@ -178,10 +180,8 @@ class ListenBox(Panel):
         p.setRenderHint(QPainter.Antialiasing)
         c = QPointF(27, 25)
         if self._listening:  # a soft disc that swells with the voice
-            glow = QColor(AMBER)
-            glow.setAlpha(46)
             p.setPen(Qt.NoPen)
-            p.setBrush(glow)
+            p.setBrush(tint(AMBER, 46))
             rr = 13 + min(self.level * 220, 7)
             p.drawEllipse(c, rr, rr)
         draw_qubit(p, c, 9, self.phase, halo=False)

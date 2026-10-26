@@ -21,20 +21,48 @@ from PySide6.QtWidgets import (
 )
 
 from .paint import draw_qubit
-from .theme import AMBER, AMBER_HEX, ERROR_HEX, MUTED_HEX, SLATE_HEX, TEXT, TEXT_HEX
+from .theme import (
+    AMBER,
+    AMBER_DOWN_HEX,
+    AMBER_HEX,
+    AMBER_HOVER_HEX,
+    ERROR_HEX,
+    FILL_BUTTON,
+    FILL_BUTTON_HOVER,
+    FILL_CARD,
+    FILL_FIELD,
+    LINE,
+    MUTED_HEX,
+    SLATE_HEX,
+    TEXT,
+    TEXT_HEX,
+    white,
+)
 from .widgets import IconButton, Panel, line_edit, muted
 
+# The same three states as the windows' buttons (theme.DIALOG_STYLE): hover lightens, pressing
+# darkens, keyboard focus draws an amber ring (a light one on the amber button).
 LINK_STYLE = (
     f"QToolButton {{ color: {MUTED_HEX}; background: transparent; border: none; font-size: 12px;"
     " padding: 3px 6px; border-radius: 6px; }"
-    f"QToolButton:hover {{ color: {AMBER_HEX}; background: rgba(255,255,255,12); }}"
+    f"QToolButton:hover {{ color: {AMBER_HEX}; background: {white(FILL_FIELD)}; }}"
+    f"QToolButton:pressed {{ background: {white(FILL_CARD)}; }}"
+    f"QToolButton:focus {{ color: {AMBER_HEX}; border: 1px solid {AMBER_HEX}; }}"
 )
 ACTION_STYLE = (
-    "QPushButton { color: %s; background: rgba(255,255,255,16); border: 1px solid rgba(255,255,255,30);"
+    f"QPushButton {{ color: {TEXT_HEX}; background: {white(FILL_BUTTON)}; border: 1px solid {white(LINE)};"
     " border-radius: 8px; padding: 6px 14px; font-size: 13px; }"
-    f"QPushButton:hover {{ border-color: {AMBER_HEX}; }}"
-    f"QPushButton#primary {{ color: {SLATE_HEX}; background: {AMBER_HEX}; border: none; font-weight: 600; }}"
-) % TEXT_HEX
+    f"QPushButton:hover {{ background: {white(FILL_BUTTON_HOVER)}; }}"
+    f"QPushButton:pressed {{ background: {white(FILL_CARD)}; }}"
+    # The ring is a border 1 px wider than the usual one: take that px from the padding, so
+    # focusing a button doesn't make it grow (and squash its text).
+    f"QPushButton:focus {{ border: 2px solid {AMBER_HEX}; padding: 5px 13px; }}"
+    f"QPushButton#primary {{ color: {SLATE_HEX}; background: {AMBER_HEX}; border: 1px solid {AMBER_HEX};"
+    " font-weight: 600; }"
+    f"QPushButton#primary:hover {{ background: {AMBER_HOVER_HEX}; }}"
+    f"QPushButton#primary:pressed {{ background: {AMBER_DOWN_HEX}; }}"
+    f"QPushButton#primary:focus {{ border: 2px solid {TEXT_HEX}; padding: 5px 13px; }}"
+)
 
 SLOW_S = 3  # after this long, show the seconds ticking so a slow answer doesn't look stuck
 
@@ -73,7 +101,7 @@ class AnswerBubble(Panel):
         self.close_btn.setStyleSheet(
             f"QToolButton {{ color: {MUTED_HEX}; background: transparent; border: none; font-size: 13px;"
             " border-radius: 13px; }"
-            f"QToolButton:hover {{ color: {TEXT_HEX}; background: rgba(255,255,255,20); }}"
+            f"QToolButton:hover {{ color: {TEXT_HEX}; background: {white(FILL_BUTTON_HOVER)}; }}"
         )
         self.close_btn.clicked.connect(self.dismiss)
 
@@ -92,7 +120,7 @@ class AnswerBubble(Panel):
         self.body.setStyleSheet(
             f"QTextBrowser {{ background: transparent; border: none; color: {TEXT_HEX}; font-size: 14px; }}"
             "QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }"
-            "QScrollBar::handle:vertical { background: rgba(255,255,255,60); border-radius: 4px; min-height: 24px; }"
+            f"QScrollBar::handle:vertical {{ background: {white(60)}; border-radius: 4px; min-height: 24px; }}"
             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
         )
         pal = self.body.palette()
@@ -130,8 +158,7 @@ class AnswerBubble(Panel):
         self.follow_wrap.setObjectName("followWrap")
         self.follow_wrap.setAttribute(Qt.WA_StyledBackground)
         self.follow_wrap.setStyleSheet(
-            "#followWrap { background: rgba(255,255,255,14); border: 1px solid rgba(255,255,255,22);"
-            " border-radius: 10px; }"
+            f"#followWrap {{ background: {white(FILL_FIELD)}; border: 1px solid {white(LINE)}; border-radius: 10px; }}"
         )
         fl = QHBoxLayout(self.follow_wrap)
         fl.setContentsMargins(12, 4, 4, 4)

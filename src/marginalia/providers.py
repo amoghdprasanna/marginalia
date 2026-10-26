@@ -95,6 +95,11 @@ PROVIDERS: dict[str, Provider] = {
 DEFAULT_PROVIDER = "anthropic"
 
 
+def model_name(model: str) -> str:
+    """"Claude Opus 5.5" for claude-opus-5-5; a model we don't list keeps its id."""
+    return next((name for p in PROVIDERS.values() for mid, name, _ in p.models if mid == model), model)
+
+
 def provider_of_model(model: str) -> str | None:
     """Which provider lists this model, or None for a model we don't know (any name is allowed)."""
     return next((p.key for p in PROVIDERS.values() if model in p.model_ids), None)

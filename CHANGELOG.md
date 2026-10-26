@@ -28,6 +28,19 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 - Windows: the setup check reads microphone consent; the app has its own taskbar icon.
 
 ### Changed
+- Settings is a sidebar of topics, one page each (AI model, Shortcuts, Voice and reading, General,
+  Advanced), instead of one long scrolling form. Fields that do nothing while their switch is off
+  are greyed out; the journal folder shows as `~/…`; Remove appears only when there's a key.
+- The setup check marks each row with a shape as well as a colour (tick, "!", dash), and highlights
+  the next thing to fix rather than *Done*.
+- The journal list shows each question above a quieter date line; answers name the model in words;
+  an empty journal is a single centred message with nothing to press.
+- Colours: one set of tokens checked for contrast and colour blindness. Text fields and checkboxes
+  have edges you can see (3.5:1, was 1.4:1); "ready" is a mint and errors a warm red, so they no
+  longer look alike to deuteranopes; buttons show hover, pressed and focus as distinct states;
+  drop-downs share one arrow; tooltips and pop-up lists are styled to match.
+- Disabled buttons look disabled (a disabled Save was a dim orange); the smallest text is 12 px;
+  the orb lights up under the pointer; the chooser no longer teaches the voice key while voice is off.
 - Settings → *About you* starts empty (it used to describe one particular researcher); answers
   are pitched at a general reader until you fill it in.
 - On macOS, OCR uses the system's own text recognition (Apple Vision) instead of RapidOCR: it is
@@ -45,6 +58,13 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
   keyboard input sources being read off the main thread.
 
 ### Fixed
+- Long messages in the listen box and in notices were cut off or surrounded by empty bands; the
+  setup check had an empty band above its buttons.
+- A focused button grew by 2 px and squashed its label (the bubble's *Try again*).
+- Settings: an error now opens the page of the field it's about and clears once you change
+  something; an empty journal folder is refused instead of being saved as the current directory;
+  checkbox help lines line up with the checkbox text on macOS.
+- The journal counted "1 threads".
 - macOS app: the setup check's microphone button did nothing ("Argument 3 is a block").
 - Settings on macOS: help lines overlapped the row below and the columns didn't line up.
 - OCR on macOS 27 failed on every question ("key does not exist"); Apple Vision now reads text again.

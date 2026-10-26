@@ -14,14 +14,21 @@ from .paint import draw_icon
 from .theme import (
     AMBER,
     AMBER_HEX,
+    DISABLED,
     EDGE,
+    FILL_BUTTON,
+    FILL_CARD,
+    FILL_HOVER,
     FLOATING,
+    MUTED,
     MUTED_HEX,
     SLATE,
     SLATE_HEX,
     TEXT,
     TEXT_HEX,
+    TEXT_SOFT_HEX,
     keep_visible,
+    tint,
 )
 
 
@@ -49,12 +56,12 @@ class Chip(QAbstractButton):
         p.setRenderHint(QPainter.Antialiasing)
         on = self.isEnabled()
         hot = on and (self.underMouse() or self.hasFocus())
-        bg = QColor(AMBER) if hot else QColor(255, 255, 255)
-        bg.setAlpha(42 if hot else (16 if on else 6))
-        p.setPen(QPen(QColor(255, 178, 36, 90) if hot else EDGE, 1))
+        down = hot and self.isDown()
+        bg = tint(AMBER, 28 if down else 42) if hot else tint("#FFFFFF", FILL_BUTTON if on else FILL_CARD)
+        p.setPen(QPen(tint(AMBER, 160 if self.hasFocus() else 90) if hot else EDGE, 1))
         p.setBrush(bg)
         p.drawRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 10, 10)
-        fg = AMBER if hot else (TEXT if on else QColor(MUTED_HEX))
+        fg = AMBER if hot else (TEXT if on else DISABLED)
         draw_icon(p, self.icon, QRectF(13, self.height() / 2 - 9, 18, 18), fg)
         p.setPen(fg)
         p.setFont(self.font())
@@ -62,11 +69,13 @@ class Chip(QAbstractButton):
         kf = QFont(self.font())
         kf.setPixelSize(10)
         kf.setWeight(QFont.DemiBold)
+        if not on:  # a key that does nothing isn't worth showing
+            return
         cap = QRectF(self.width() - 32, self.height() / 2 - 10, 20, 20)
-        p.setPen(QPen(QColor(255, 255, 255, 40), 1))
-        p.setBrush(QColor(255, 255, 255, 10))
+        p.setPen(QPen(tint("#FFFFFF", 40), 1))
+        p.setBrush(tint("#FFFFFF", FILL_HOVER))
         p.drawRoundedRect(cap, 5, 5)
-        p.setPen(QColor(MUTED_HEX))
+        p.setPen(MUTED)
         p.setFont(kf)
         p.drawText(cap, Qt.AlignCenter, self.key)
 
@@ -97,9 +106,9 @@ class IconButton(QAbstractButton):
         else:
             if hot:
                 p.setPen(Qt.NoPen)
-                p.setBrush(QColor(255, 178, 36, 40))
+                p.setBrush(tint(AMBER, 40))
                 p.drawEllipse(r)
-            fg = AMBER if hot else (QColor(MUTED_HEX) if self.isEnabled() else QColor(255, 255, 255, 50))
+            fg = AMBER if hot else (MUTED if self.isEnabled() else DISABLED)
         pad = self.width() * 0.24
         draw_icon(p, self.icon, r.adjusted(pad, pad, -pad, -pad), fg)
 
@@ -131,7 +140,7 @@ class Wave(QWidget):
         bw = max(2.0, step * 0.5)
         mid = self.height() / 2
         for i, v in enumerate(self.levels):
-            c = QColor(AMBER) if self.live else QColor(MUTED_HEX)
+            c = QColor(AMBER) if self.live else QColor(MUTED)
             c.setAlpha(int(90 + 165 * (i / self.BARS)))  # newest bars brightest
             h = max(3.0, v * self.height())
             p.setBrush(c)
@@ -164,12 +173,12 @@ def line_edit(placeholder: str, size: int) -> QLineEdit:
         f" selection-background-color: {AMBER_HEX}; selection-color: {SLATE_HEX}; }}"
     )
     pal = e.palette()
-    pal.setColor(QPalette.PlaceholderText, QColor(MUTED_HEX))
+    pal.setColor(QPalette.PlaceholderText, MUTED)
     e.setPalette(pal)
     return e
 
 
-def muted(text: str = "", size: int = 11) -> QLabel:
+def muted(text: str = "", size: int = 12) -> QLabel:
     lab = QLabel(text)
     lab.setStyleSheet(f"color: {MUTED_HEX}; font-size: {size}px; background: transparent;")
     return lab
@@ -185,4 +194,4 @@ def hints(*pairs: tuple[str, str]) -> QLabel:
 
 def set_hints(lab: QLabel, *pairs: tuple[str, str]) -> None:
     dot = f"<span style='color:{MUTED_HEX}'>&nbsp;&nbsp;\u00b7&nbsp;&nbsp;</span>"
-    lab.setText(dot.join(f"<span style='color:#C4CADB; font-weight:600'>{k}</span>&nbsp;{v}" for k, v in pairs))
+    lab.setText(dot.join(f"<span style='color:{TEXT_SOFT_HEX}; font-weight:600'>{k}</span>&nbsp;{v}" for k, v in pairs))

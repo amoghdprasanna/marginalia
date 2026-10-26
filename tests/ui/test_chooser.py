@@ -68,3 +68,11 @@ def test_why_speak_is_off_is_said_out_loud(chooser):
     assert chooser.voice_note.isVisibleTo(chooser) and "faster-whisper" in chooser.voice_note.text()
     chooser.set_voice_available(True)
     assert not chooser.voice_note.isVisibleTo(chooser)
+
+
+def test_the_tip_does_not_teach_a_voice_key_that_does_nothing(chooser):
+    chooser.set_shortcuts("Ctrl+Option+Space", "Ctrl+Option+V")
+    chooser.set_voice_available(False, "no microphone found")
+    assert "Ctrl+Option+Space" in chooser.tip.text() and "Ctrl+Option+V" not in chooser.tip.text()
+    chooser.set_voice_available(True)
+    assert "Ctrl+Option+V" in chooser.tip.text()

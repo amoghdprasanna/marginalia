@@ -231,8 +231,59 @@ def test_save_is_enabled_only_when_something_changed(window):
 
 def test_advanced_settings_are_tucked_away(window):
     assert not window.advanced.isVisibleTo(window)
-    window.advanced_toggle.click()
-    assert window.advanced.isVisibleTo(window) and window.advanced_toggle.text().startswith("Hide")
+    assert window.nav.item(window.nav.count() - 1).text() == "Advanced", "the last page"
+    window.nav.setCurrentRow(window.nav.count() - 1)
+    assert window.advanced.isVisibleTo(window)
+
+
+def test_one_page_per_topic_from_a_sidebar(window):
+    names = [window.nav.item(i).text() for i in range(window.nav.count())]
+    assert names == ["AI model", "Shortcuts", "Voice and reading", "General", "Advanced"]
+    window.nav.setCurrentRow(1)
+    assert window.fields["hotkey"].isVisibleTo(window) and not window.fields["provider"].isVisibleTo(window)
+    window.open(window.cfg)
+    assert window.nav.currentRow() == 0, "opens on the model and its key, where every 'Open Settings' leads"
+    window.close()
+
+
+def test_fields_that_do_nothing_while_their_switch_is_off_are_greyed_out(window):
+    window.fields["hotkey_enabled"].setChecked(False)
+    assert not window.fields["hotkey"].isEnabled() and not window.fields["voice_hotkey"].isEnabled()
+    window.fields["hotkey_enabled"].setChecked(True)
+    window.fields["voice_enabled"].setChecked(False)
+    assert window.fields["hotkey"].isEnabled()
+    assert not window.fields["voice_hotkey"].isEnabled() and not window.fields["whisper_model"].isEnabled()
+    window.fields["voice_enabled"].setChecked(True)
+    assert window.fields["voice_hotkey"].isEnabled() and window.fields["whisper_model"].isEnabled()
+
+
+def test_a_switch_does_not_unlock_a_field_the_environment_pins(qtbot, store, keychain, monkeypatch):
+    monkeypatch.setenv("MARGINALIA_WHISPER_MODEL", "tiny.en")
+    w = SettingsWindow(load_config(store=store, keychain=keychain), store, keychain)
+    qtbot.addWidget(w)
+    w.fields["voice_enabled"].setChecked(False)
+    w.fields["voice_enabled"].setChecked(True)
+    assert not w.fields["whisper_model"].isEnabled()
+
+
+def test_the_journal_folder_reads_from_home_and_saves_in_full(qtbot, store, keychain, monkeypatch, tmp_path):
+    from pathlib import Path
+
+    for var in ("HOME", "USERPROFILE"):  # what ~ means, on macOS and Linux, and on Windows
+        monkeypatch.setenv(var, str(tmp_path))
+    monkeypatch.delenv("MARGINALIA_LOG_DIR")  # conftest's; the settings file decides here
+    store.save({"log_dir": str(tmp_path / "Notes" / "Marginalia")})
+    w = SettingsWindow(load_config(store=store, keychain=keychain), store, keychain)
+    qtbot.addWidget(w)
+    assert w.fields["log_dir"].text() == str(Path("~") / "Notes" / "Marginalia")
+    assert w.values()["log_dir"] == tmp_path / "Notes" / "Marginalia" and not w.dirty()
+
+
+def test_remove_shows_only_when_there_is_a_key_to_remove(window, keychain):
+    assert not window.key_remove.isVisibleTo(window)
+    keychain.set("sk-ant-api03-abcdefghijwxyz")
+    window.load(load_config(store=window.store, keychain=keychain))
+    assert window.key_remove.isVisibleTo(window)
 
 
 def test_a_model_set_elsewhere_is_shown_and_kept(qtbot, store, keychain):
@@ -254,9 +305,69 @@ def test_no_key_yet_links_to_where_you_get_one(window):
 
 def test_the_window_fits_the_screen_without_clipping(qtbot, window):
     window.open(window.cfg)
-    window.advanced_toggle.click()
+    window.nav.setCurrentRow(window.nav.count() - 1)
     assert window.height() <= window.screen().availableGeometry().height()
     assert window._content.minimumSizeHint().width() <= window.scroll.viewport().width(), "nothing cut off on the right"
+
+
+def test_on_a_narrow_screen_labels_go_above_their_fields(qtbot, window, monkeypatch):
+    """Windows' fonts made the form too wide to sit beside the sidebar on an 800 px screen."""
+    from PySide6.QtCore import QRect
+    from PySide6.QtWidgets import QFormLayout
+
+    def screen_of(width):
+        screen = type("Screen", (), {"availableGeometry": lambda self: QRect(0, 0, width, 800)})()
+        monkeypatch.setattr(window, "screen", lambda: screen)
+
+    screen_of(4000)
+    window.open(window.cfg)
+    beside = window.needed_width()  # with labels beside fields, in this platform's fonts
+    screen_of(beside + 39)  # one pixel too narrow for that (the window keeps 40 px clear of the edges)
+    window.open(window.cfg)
+    forms = window.findChildren(QFormLayout)
+    assert all(f.rowWrapPolicy() == QFormLayout.WrapAllRows for f in forms)
+    assert window.width() < beside
+    assert window._content.minimumSizeHint().width() <= window.scroll.viewport().width(), "nothing cut off"
+    screen_of(beside + 40)
+    window.open(window.cfg)
+    assert all(f.rowWrapPolicy() == QFormLayout.DontWrapRows for f in forms), "beside them where there's room"
+    window.close()
+
+
+def test_a_problem_is_shown_on_the_page_of_its_field(qtbot, window):
+    window.nav.setCurrentRow(0)
+    window.fields["hotkey"].set_value("<ctrl>+<alt>+v")
+    window.fields["voice_hotkey"].set_value("<ctrl>+<alt>+v")
+    assert not window.save()
+    assert window.nav.currentRow() == 1, "taken to Shortcuts, where the clash is"
+    assert "different" in window.error.text() and window.error.isVisibleTo(window)
+
+
+def test_an_error_goes_away_once_you_change_something(window):
+    window.fields["log_dir"].setText("")
+    assert not window.save() and window.error.isVisibleTo(window)
+    assert window.nav.currentRow() == 3, "taken to General, where the folder is"
+    window.fields["log_dir"].setText("~/Notes")
+    assert not window.error.isVisibleTo(window)
+
+
+def test_an_empty_journal_folder_is_refused_not_saved_as_the_current_directory(window, store):
+    """Bug: an empty field became Path("."), which isn't empty, so it was saved."""
+    window.fields["log_dir"].setText("   ")
+    assert not window.save()
+    assert "folder" in window.error.text() and "log_dir" not in store.load()
+
+
+def test_a_checkbox_help_line_starts_under_its_words(window):
+    from PySide6.QtWidgets import QStyle, QStyleOptionButton
+
+    window.open(window.cfg)
+    for box, hint in window._check_hints:
+        opt = QStyleOptionButton()
+        box.initStyleOption(opt)
+        words = box.style().subElementRect(QStyle.SE_CheckBoxContents, opt, box).left()
+        assert hint.contentsMargins().left() == words > 0, box.text()
+    window.close()
 
 
 def test_checked_boxes_show_a_tick():
@@ -336,14 +447,16 @@ def test_forms_lay_out_the_same_on_every_platform(window):
     assert forms and all(f.fieldGrowthPolicy() == QFormLayout.AllNonFixedFieldsGrow for f in forms)
     assert all(f.formAlignment() & Qt.AlignLeft for f in forms)
     window.open(window.cfg)
-    for width in (window.width(), 480):  # as opened, and squeezed so help lines wrap
-        window.setMinimumWidth(width)
-        window.resize(width, window.height())
-        QApplication.processEvents()
-        hints = [lab for lab in window.findChildren(QLabel) if lab.objectName() == "muted" and lab.isVisible()]
-        assert hints
-        for hint in hints:
-            assert hint.height() >= hint.heightForWidth(hint.width()), f"cut off at {width}px: {hint.text()}"
+    for page in range(window.nav.count()):
+        window.nav.setCurrentRow(page)
+        for width in (window.width(), 640):  # as opened, and squeezed so help lines wrap
+            window.setMinimumWidth(width)
+            window.resize(width, window.height())
+            QApplication.processEvents()
+            hints = [lab for lab in window.findChildren(QLabel) if lab.objectName() == "muted" and lab.isVisible()]
+            assert hints
+            for hint in hints:
+                assert hint.height() >= hint.heightForWidth(hint.width()), f"cut off at {width}px: {hint.text()}"
     about = window.fields["user_context"]
     assert about.height() >= 3 * about.fontMetrics().lineSpacing(), "About you shows three lines"
     window.close()

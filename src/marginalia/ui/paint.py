@@ -8,7 +8,10 @@ from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPen, QPixmap
 
 from .theme import (
     AMBER,
+    EDGE,
     HALO,
+    SLATE_HEX,
+    tint,
 )
 
 
@@ -21,14 +24,10 @@ def draw_qubit(p: QPainter, c: QPointF, r: float, phase: float, halo: bool = Tru
         p.drawEllipse(c, r, r)
     p.setPen(QPen(AMBER, max(2.0, r / 5.5)))
     p.drawEllipse(c, r, r)
-    eq = QColor(AMBER)
-    eq.setAlpha(120)
-    p.setPen(QPen(eq, 1.2))
+    p.setPen(QPen(tint(AMBER, 120), 1.2))
     p.drawEllipse(c, r, r * 0.34)
-    dot = QColor(AMBER)
-    dot.setAlpha(255 if math.sin(phase) >= 0 else 120)
     p.setPen(Qt.NoPen)
-    p.setBrush(dot)
+    p.setBrush(tint(AMBER, 255 if math.sin(phase) >= 0 else 120))
     p.drawEllipse(QPointF(c.x() + r * math.cos(phase), c.y() + r * 0.34 * math.sin(phase)), r / 4.4, r / 4.4)
 
 
@@ -77,8 +76,8 @@ def app_icon_image(size: int) -> QImage:
     p.setRenderHint(QPainter.Antialiasing)
     margin = size * 0.09  # the macOS icon grid leaves a margin around the shape
     disc = QRectF(margin, margin, size - 2 * margin, size - 2 * margin)
-    p.setPen(QPen(QColor(255, 255, 255, 40), max(1.0, size / 256)))
-    p.setBrush(QColor(27, 32, 49))
+    p.setPen(QPen(EDGE, max(1.0, size / 256)))
+    p.setBrush(QColor(SLATE_HEX))
     p.drawEllipse(disc)
     draw_qubit(p, QPointF(size / 2, size / 2), disc.width() * 0.3, 0.9, halo=False)
     p.end()

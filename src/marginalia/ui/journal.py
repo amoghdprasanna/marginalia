@@ -6,9 +6,10 @@ a follow-up is emitted, and the controller answers it about the saved screenshot
 from __future__ import annotations
 
 from PIL import Image
-from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QDesktopServices,
+    QFont,
     QGuiApplication,
     QImage,
     QKeySequence,
@@ -27,14 +28,17 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSplitter,
+    QStyle,
+    QStyledItemDelegate,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
 
 from ..journal import Entry, Journal, Thread, to_image_px
+from ..providers import model_name
 from .paint import draw_qubit
-from .theme import DIALOG_STYLE, bring_to_front
+from .theme import DIALOG_STYLE, FILL_HOVER, FILL_SELECTED, MUTED, MUTED_HEX, TEXT, bring_to_front, tint
 
 
 def pil_to_pixmap(img: Image.Image) -> QPixmap:
@@ -53,14 +57,22 @@ class ShotView(QWidget):
         super().__init__()
         self.pixmap: QPixmap | None = None
         self.points: list[tuple[float, float, str]] = []  # image px
+        self.missing = ""  # what to say where the picture would be
+        self.empty = False  # no thread at all: `missing` is the window's message, title then text
         self.setMinimumHeight(180)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip("Double-click to open the full screenshot")
 
-    def show_image(self, img: Image.Image | None, points: list[tuple[float, float, str]]) -> None:
+    def show_image(
+        self, img: Image.Image | None, points: list[tuple[float, float, str]], missing: str = "Screenshot not found"
+    ) -> None:
         self.pixmap = pil_to_pixmap(img) if img is not None else None
         self.points = points
+        self.missing = missing
+        self.empty = False
+        self.setCursor(Qt.PointingHandCursor if img is not None else Qt.ArrowCursor)
+        self.setToolTip("Double-click to open the full screenshot" if img is not None else "")
         self.update()
 
     def image_rect(self) -> QRectF:
@@ -74,9 +86,27 @@ class ShotView(QWidget):
     def paintEvent(self, _e) -> None:  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.SmoothPixmapTransform)
+        if self.pixmap is None and self.empty:  # the whole window's empty state: the mark, then what to do
+            p.setRenderHint(QPainter.Antialiasing)
+            title, _, more = self.missing.partition("\n")
+            top = self.height() / 2 - 70
+            draw_qubit(p, QPointF(self.width() / 2, top), 20, 0.9, halo=False)
+            box = QRectF((self.width() - 420) / 2, top + 40, 420, 200)
+            f = QFont(self.font())
+            f.setPixelSize(16)
+            f.setWeight(QFont.DemiBold)
+            p.setFont(f)
+            p.setPen(TEXT)
+            p.drawText(box, Qt.AlignHCenter | Qt.AlignTop, title)
+            f.setPixelSize(13)
+            f.setWeight(QFont.Normal)
+            p.setFont(f)
+            p.setPen(MUTED)
+            p.drawText(box.adjusted(0, 30, 0, 0), Qt.AlignHCenter | Qt.AlignTop | Qt.TextWordWrap, more)
+            return
         if self.pixmap is None:
-            p.setPen(Qt.gray)
-            p.drawText(self.rect(), Qt.AlignCenter, "Screenshot not found")
+            p.setPen(MUTED)
+            p.drawText(self.rect(), Qt.AlignCenter, self.missing)
             return
         r = self.image_rect()
         p.drawPixmap(r, self.pixmap, QRectF(self.pixmap.rect()))
@@ -88,11 +118,55 @@ class ShotView(QWidget):
         self.opened.emit()
 
 
-def conversation_markdown(thread: Thread) -> str:
+def conversation_markdown(thread: Thread, shown: bool = False) -> str:
+    """The thread as Markdown: to copy, or (`shown`) to read in the window, where each answer's
+    date and model are a quiet line in words ("Claude Opus 5.5", not its id)."""
     parts = []
     for e in thread.entries:
-        parts.append(f"**{e.question}**\n\n{e.answer}\n\n<sub>{e.when:%d %b %Y, %H:%M} · {e.model}</sub>")
+        if shown:
+            when = f"{e.when:%d %b %Y, %H:%M} · {model_name(e.model)}"
+            meta = f"<span style='color:{MUTED_HEX}; font-size:12px'>{when}</span>"
+        else:
+            meta = f"<sub>{e.when:%d %b %Y, %H:%M} · {e.model}</sub>"
+        parts.append(f"**{e.question}**\n\n{e.answer}\n\n{meta}")
     return "\n\n---\n\n".join(parts)
+
+
+class ThreadDelegate(QStyledItemDelegate):
+    """A thread in the list: its first question, then a quieter line with when and how long."""
+
+    PAD = 10
+
+    def sizeHint(self, option, index):  # noqa: N802
+        return QSize(option.rect.width(), 2 * option.fontMetrics.height() + 2 * self.PAD + 2)
+
+    def paint(self, p: QPainter, option, index) -> None:
+        title, _, meta = index.data(Qt.DisplayRole).partition("\n")
+        r = option.rect.adjusted(4, 2, -4, -2)
+        p.save()
+        p.setRenderHint(QPainter.Antialiasing)
+        if option.state & QStyle.State_Selected:
+            p.setPen(Qt.NoPen)
+            p.setBrush(tint("#FFFFFF", FILL_SELECTED))
+            p.drawRoundedRect(r, 6, 6)
+        elif option.state & QStyle.State_MouseOver:
+            p.setPen(Qt.NoPen)
+            p.setBrush(tint("#FFFFFF", FILL_HOVER))
+            p.drawRoundedRect(r, 6, 6)
+        text = r.adjusted(self.PAD, self.PAD - 1, -self.PAD, -self.PAD)
+        f = QFont(option.font)
+        f.setWeight(QFont.DemiBold if option.state & QStyle.State_Selected else QFont.Normal)
+        p.setFont(f)
+        p.setPen(TEXT)
+        line = p.fontMetrics().height()
+        p.drawText(text.adjusted(0, 0, 0, -line), Qt.AlignLeft | Qt.AlignTop,
+                   p.fontMetrics().elidedText(title, Qt.ElideRight, text.width()))  # fmt: skip
+        small = QFont(option.font)
+        small.setPixelSize(12)
+        p.setFont(small)
+        p.setPen(MUTED)
+        p.drawText(text.adjusted(0, line + 1, 0, 0), Qt.AlignLeft | Qt.AlignTop, meta)
+        p.restore()
 
 
 def set_markdown(view: QTextBrowser, markdown: str) -> None:
@@ -130,6 +204,8 @@ class JournalWindow(QWidget):
         self._debounce.timeout.connect(self.refresh)
         self.search.textChanged.connect(self._debounce.start)
         self.list = QListWidget()
+        self.list.setItemDelegate(ThreadDelegate(self.list))
+        self.list.setMouseTracking(True)  # hover highlight
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list.setTextElideMode(Qt.ElideRight)
         self.list.currentItemChanged.connect(self._on_select)
@@ -137,7 +213,7 @@ class JournalWindow(QWidget):
         self.count.setObjectName("muted")
         left = QWidget()
         ll = QVBoxLayout(left)
-        ll.setContentsMargins(0, 0, 0, 0)
+        ll.setContentsMargins(0, 0, 6, 0)
         ll.addWidget(self.search)
         ll.addWidget(self.list, 1)
         ll.addWidget(self.count)
@@ -148,6 +224,7 @@ class JournalWindow(QWidget):
         self.body.setOpenExternalLinks(True)
         self.status = QLabel()
         self.status.setObjectName("muted")
+        self.status.hide()  # shown only with something to say, so it leaves no gap
         self.ask = QLineEdit()
         self.ask.setPlaceholderText("Ask more about this screenshot (Enter)")
         self.ask.returnPressed.connect(self._send)
@@ -164,13 +241,16 @@ class JournalWindow(QWidget):
         row.addWidget(self.ask, 1)
         row.addWidget(self.send)
         row.addWidget(self.copy)
+        self.ask_row = QWidget()
+        self.ask_row.setLayout(row)
+        row.setContentsMargins(0, 0, 0, 0)
         right = QWidget()
         rl = QVBoxLayout(right)
-        rl.setContentsMargins(0, 0, 0, 0)
+        rl.setContentsMargins(6, 0, 0, 0)
         rl.addWidget(self.shot, 3)
         rl.addWidget(self.body, 4)
         rl.addWidget(self.status)
-        rl.addLayout(row)
+        rl.addWidget(self.ask_row)
 
         split = QSplitter()
         split.addWidget(left)
@@ -198,7 +278,8 @@ class JournalWindow(QWidget):
             self.list.addItem(item)
         self.list.blockSignals(False)
         total = len(self.journal.threads())
-        self.count.setText(f"{len(threads)} of {total} threads" if self.search.text().strip() else f"{total} threads")
+        noun = "thread" if total == 1 else "threads"
+        self.count.setText(f"{len(threads)} of {total} {noun}" if self.search.text().strip() else f"{total} {noun}")
         rows = [i for i in range(self.list.count()) if self.list.item(i).data(Qt.UserRole).id == keep]
         if rows:
             self.list.setCurrentRow(rows[0])
@@ -212,16 +293,22 @@ class JournalWindow(QWidget):
 
     def show_thread(self, thread: Thread | None) -> None:
         self.thread = thread
+        # Nothing to show: no conversation box, no box to ask in, no buttons; one message, centred.
+        self.ask_row.setVisible(thread is not None)
+        self.body.setVisible(thread is not None)
         if thread is None:
-            self.shot.show_image(None, [])
             query = self.search.text().strip()
             # An empty view says why it's empty and what to do about it.
-            self.body.setMarkdown(
-                f"No question or answer mentions “{query}”. Try fewer or different words."
+            message = (
+                f"Nothing mentions “{query}”\nTry fewer or different words."
                 if query
-                else "**Nothing here yet.**\n\nClick the orb and ask about something on your screen. "
-                "Every question and answer lands here with its screenshot, so you can find it and ask more later."
+                else "Nothing here yet.\nClick the orb and ask about something on your screen. Every question "
+                "and answer lands here with its screenshot, so you can find it and ask more later."
             )
+            self.shot.show_image(None, [], missing=message)
+            self.shot.empty = True
+            self.shot.update()
+            self.body.setPlainText(message)  # what a screen reader reads
             self._set_enabled(False)
             self.copy.setEnabled(False)
             return
@@ -231,10 +318,14 @@ class JournalWindow(QWidget):
         if img is not None:
             points = [(*to_image_px(last, img.size, x, y), label) for x, y, label in last.points]
         self.shot.show_image(img, points)
-        set_markdown(self.body, conversation_markdown(thread))
-        self.status.setText("")
+        set_markdown(self.body, conversation_markdown(thread, shown=True))
+        self._say("")
         self._set_enabled(img is not None and not self._busy)
         self.copy.setEnabled(True)
+
+    def _say(self, text: str) -> None:
+        self.status.setText(text)
+        self.status.setVisible(bool(text))
 
     # asking -----------------------------------------------------------------------------------
 
@@ -250,13 +341,13 @@ class JournalWindow(QWidget):
     def show_thinking(self, question: str) -> None:
         self._busy = True
         self._set_enabled(False)
-        self.status.setText(f"Reading the saved screen for “{question}”…")
+        self._say(f"Reading the saved screen for “{question}”…")
 
     def show_partial(self, question: str, text: str) -> None:
         if self.thread is None:
             return
-        set_markdown(self.body, conversation_markdown(self.thread) + f"\n\n---\n\n**{question}**\n\n{text}")
-        self.status.setText("Writing…")
+        set_markdown(self.body, conversation_markdown(self.thread, shown=True) + f"\n\n---\n\n**{question}**\n\n{text}")
+        self._say("Writing…")
 
     def show_answer(self, entry: Entry) -> None:
         self._busy = False
@@ -265,7 +356,7 @@ class JournalWindow(QWidget):
 
     def show_error(self, message: str) -> None:
         self._busy = False
-        self.status.setText(message)
+        self._say(message)
         self._set_enabled(self.thread is not None)
 
     def _copy(self) -> None:
@@ -273,7 +364,7 @@ class JournalWindow(QWidget):
             return
         QGuiApplication.clipboard().setText(conversation_markdown(self.thread))
         n = len(self.thread.entries)
-        self.status.setText(f"Copied {n} question{'s' if n != 1 else ''} as Markdown")
+        self._say(f"Copied {n} question{'s' if n != 1 else ''} as Markdown")
 
     def _open_shot(self) -> None:
         if self.thread is not None:
