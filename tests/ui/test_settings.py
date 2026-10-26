@@ -310,6 +310,24 @@ def test_the_window_fits_the_screen_without_clipping(qtbot, window):
     assert window._content.minimumSizeHint().width() <= window.scroll.viewport().width(), "nothing cut off on the right"
 
 
+def test_on_a_narrow_screen_labels_go_above_their_fields(qtbot, window, monkeypatch):
+    """Windows' fonts made the form too wide to sit beside the sidebar on an 800 px screen."""
+    from PySide6.QtCore import QRect
+    from PySide6.QtWidgets import QFormLayout
+
+    narrow = type("Screen", (), {"availableGeometry": lambda self: QRect(0, 0, 560, 800)})()
+    monkeypatch.setattr(window, "screen", lambda: narrow)
+    window.open(window.cfg)
+    forms = window.findChildren(QFormLayout)
+    assert all(f.rowWrapPolicy() == QFormLayout.WrapAllRows for f in forms)
+    assert window.width() <= 520
+    assert window._content.minimumSizeHint().width() <= window.scroll.viewport().width(), "nothing cut off"
+    monkeypatch.undo()
+    window.open(window.cfg)
+    assert all(f.rowWrapPolicy() == QFormLayout.DontWrapRows for f in forms), "beside them where there's room"
+    window.close()
+
+
 def test_checked_boxes_show_a_tick():
     from pathlib import Path
 

@@ -445,13 +445,32 @@ class SettingsWindow(QWidget):
         edges = about.contentsMargins().top() + about.contentsMargins().bottom()
         margin = 2 * int(about.document().documentMargin())
         about.setFixedHeight(about.fontMetrics().lineSpacing() * 3 + margin + edges)
-        self._content.adjustSize()
-        bar = self.scroll.verticalScrollBar().sizeHint().width()
-        side = NAV_WIDTH + 20
-        wide = max(MIN_WIDTH, side + self._content.minimumSizeHint().width() + bar + 2 * self.scroll.frameWidth() + 4)
         room = self.screen().availableGeometry()
+        frame = NAV_WIDTH + 20 + self.scroll.verticalScrollBar().sizeHint().width() + 2 * self.scroll.frameWidth() + 4
+        # Labels beside their fields if that fits the screen; on a narrow one, above them.
+        self._wrap_labels(False)
+        if frame + self._content.minimumSizeHint().width() > room.width() - 40:
+            self._wrap_labels(True)
+        self.setMinimumWidth(min(MIN_WIDTH, room.width() - 40))
+        wide = max(MIN_WIDTH, frame + self._content.minimumSizeHint().width())
         want = self._content.sizeHint().height() + 70  # the buttons row and margins
         self.resize(min(wide, room.width() - 40), min(want, room.height() - 40))
+
+    def _wrap_labels(self, above: bool) -> None:
+        for form in self.findChildren(QFormLayout):
+            form.setRowWrapPolicy(QFormLayout.WrapAllRows if above else QFormLayout.DontWrapRows)
+            form.setLabelAlignment(Qt.AlignLeft if above else Qt.AlignRight | Qt.AlignTop)
+            for row in range(form.rowCount()):
+                item = form.itemAt(row, QFormLayout.LabelRole)
+                if item is not None and isinstance(item.widget(), QLabel):
+                    label = item.widget()
+                    label.setAlignment((Qt.AlignLeft if above else Qt.AlignRight) | Qt.AlignTop)
+                    label.setMinimumWidth(0 if above else LABEL_WIDTH)
+                    label.setVisible(bool(label.text()) or not above)  # no blank line over a checkbox
+            # Pages not on show keep their old size cached until told: tell them, card and page.
+            form.parentWidget().updateGeometry()
+            form.parentWidget().parentWidget().updateGeometry()
+        self._content.adjustSize()
 
     # values -----------------------------------------------------------------------------------
 
