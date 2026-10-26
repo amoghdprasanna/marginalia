@@ -118,7 +118,7 @@ def test_colours_live_in_the_theme():
         f"{path.name}:{n}"
         for path in ui.glob("*.py")
         if path.name != "theme.py"
-        for n, line in enumerate(path.read_text().splitlines(), 1)
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
         if literal.search(line)
     ]
     assert not found
