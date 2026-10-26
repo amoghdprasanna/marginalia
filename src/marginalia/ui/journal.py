@@ -8,7 +8,6 @@ from __future__ import annotations
 from PIL import Image
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
-    QColor,
     QDesktopServices,
     QFont,
     QGuiApplication,
@@ -39,7 +38,7 @@ from PySide6.QtWidgets import (
 from ..journal import Entry, Journal, Thread, to_image_px
 from ..providers import model_name
 from .paint import draw_qubit
-from .theme import DIALOG_STYLE, MUTED_HEX, TEXT_HEX, bring_to_front
+from .theme import DIALOG_STYLE, FILL_HOVER, FILL_SELECTED, MUTED, MUTED_HEX, TEXT, bring_to_front, tint
 
 
 def pil_to_pixmap(img: Image.Image) -> QPixmap:
@@ -97,16 +96,16 @@ class ShotView(QWidget):
             f.setPixelSize(16)
             f.setWeight(QFont.DemiBold)
             p.setFont(f)
-            p.setPen(QColor(TEXT_HEX))
+            p.setPen(TEXT)
             p.drawText(box, Qt.AlignHCenter | Qt.AlignTop, title)
             f.setPixelSize(13)
             f.setWeight(QFont.Normal)
             p.setFont(f)
-            p.setPen(QColor(MUTED_HEX))
+            p.setPen(MUTED)
             p.drawText(box.adjusted(0, 30, 0, 0), Qt.AlignHCenter | Qt.AlignTop | Qt.TextWordWrap, more)
             return
         if self.pixmap is None:
-            p.setPen(QColor(MUTED_HEX))
+            p.setPen(MUTED)
             p.drawText(self.rect(), Qt.AlignCenter, self.missing)
             return
         r = self.image_rect()
@@ -148,24 +147,24 @@ class ThreadDelegate(QStyledItemDelegate):
         p.setRenderHint(QPainter.Antialiasing)
         if option.state & QStyle.State_Selected:
             p.setPen(Qt.NoPen)
-            p.setBrush(QColor(255, 255, 255, 26))
+            p.setBrush(tint("#FFFFFF", FILL_SELECTED))
             p.drawRoundedRect(r, 6, 6)
         elif option.state & QStyle.State_MouseOver:
             p.setPen(Qt.NoPen)
-            p.setBrush(QColor(255, 255, 255, 10))
+            p.setBrush(tint("#FFFFFF", FILL_HOVER))
             p.drawRoundedRect(r, 6, 6)
         text = r.adjusted(self.PAD, self.PAD - 1, -self.PAD, -self.PAD)
         f = QFont(option.font)
         f.setWeight(QFont.DemiBold if option.state & QStyle.State_Selected else QFont.Normal)
         p.setFont(f)
-        p.setPen(QColor(TEXT_HEX))
+        p.setPen(TEXT)
         line = p.fontMetrics().height()
         p.drawText(text.adjusted(0, 0, 0, -line), Qt.AlignLeft | Qt.AlignTop,
                    p.fontMetrics().elidedText(title, Qt.ElideRight, text.width()))  # fmt: skip
         small = QFont(option.font)
         small.setPixelSize(12)
         p.setFont(small)
-        p.setPen(QColor(MUTED_HEX))
+        p.setPen(MUTED)
         p.drawText(text.adjusted(0, line + 1, 0, 0), Qt.AlignLeft | Qt.AlignTop, meta)
         p.restore()
 
@@ -279,7 +278,8 @@ class JournalWindow(QWidget):
             self.list.addItem(item)
         self.list.blockSignals(False)
         total = len(self.journal.threads())
-        self.count.setText(f"{len(threads)} of {total} threads" if self.search.text().strip() else f"{total} threads")
+        noun = "thread" if total == 1 else "threads"
+        self.count.setText(f"{len(threads)} of {total} {noun}" if self.search.text().strip() else f"{total} {noun}")
         rows = [i for i in range(self.list.count()) if self.list.item(i).data(Qt.UserRole).id == keep]
         if rows:
             self.list.setCurrentRow(rows[0])

@@ -334,6 +334,42 @@ def test_on_a_narrow_screen_labels_go_above_their_fields(qtbot, window, monkeypa
     window.close()
 
 
+def test_a_problem_is_shown_on_the_page_of_its_field(qtbot, window):
+    window.nav.setCurrentRow(0)
+    window.fields["hotkey"].set_value("<ctrl>+<alt>+v")
+    window.fields["voice_hotkey"].set_value("<ctrl>+<alt>+v")
+    assert not window.save()
+    assert window.nav.currentRow() == 1, "taken to Shortcuts, where the clash is"
+    assert "different" in window.error.text() and window.error.isVisibleTo(window)
+
+
+def test_an_error_goes_away_once_you_change_something(window):
+    window.fields["log_dir"].setText("")
+    assert not window.save() and window.error.isVisibleTo(window)
+    assert window.nav.currentRow() == 3, "taken to General, where the folder is"
+    window.fields["log_dir"].setText("~/Notes")
+    assert not window.error.isVisibleTo(window)
+
+
+def test_an_empty_journal_folder_is_refused_not_saved_as_the_current_directory(window, store):
+    """Bug: an empty field became Path("."), which isn't empty, so it was saved."""
+    window.fields["log_dir"].setText("   ")
+    assert not window.save()
+    assert "folder" in window.error.text() and "log_dir" not in store.load()
+
+
+def test_a_checkbox_help_line_starts_under_its_words(window):
+    from PySide6.QtWidgets import QStyle, QStyleOptionButton
+
+    window.open(window.cfg)
+    for box, hint in window._check_hints:
+        opt = QStyleOptionButton()
+        box.initStyleOption(opt)
+        words = box.style().subElementRect(QStyle.SE_CheckBoxContents, opt, box).left()
+        assert hint.contentsMargins().left() == words > 0, box.text()
+    window.close()
+
+
 def test_checked_boxes_show_a_tick():
     from pathlib import Path
 

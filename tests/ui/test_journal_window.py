@@ -156,3 +156,12 @@ def test_a_thread_names_its_model_in_words(qtbot, tmp_path):
     assert "Claude Sonnet 5.5" in w.body.toPlainText() and "claude-sonnet-5-5" not in w.body.toPlainText()
     assert w.ask_row.isVisibleTo(w) and not w.status.isVisibleTo(w), "no empty status line leaving a gap"
     w.list.viewport().grab()  # the two-line rows paint without error
+
+
+def test_one_thread_is_not_one_threads(qtbot, tmp_path):
+    log = DoubtLog(tmp_path)
+    log.add("q", "a", Image.new("RGB", (40, 25)), "m")
+    w = JournalWindow(Journal(tmp_path))
+    qtbot.addWidget(w)
+    w.refresh()
+    assert w.count.text() == "1 thread"

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-from .theme import DIALOG_STYLE, bring_to_front
+from .theme import DIALOG_STYLE, bring_to_front, fit_height
 
 
 class Notice(QWidget):
@@ -47,7 +47,7 @@ class Notice(QWidget):
             action()
 
     def open(self) -> None:
-        self.adjustSize()
+        fit_height(self)
         screen = self.screen().availableGeometry()
         self.move(screen.center() - self.rect().center())
         bring_to_front(self)

@@ -26,6 +26,8 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSpinBox,
     QStackedWidget,
+    QStyle,
+    QStyleOptionButton,
     QVBoxLayout,
     QWidget,
 )
@@ -35,7 +37,7 @@ from ..config import BY_KEY, LOG_LEVELS, WHISPER_MODELS, Config, SettingsStore, 
 from ..hotkeys import Combo, format_combo, parse_combo, to_text
 from ..providers import PROVIDERS
 from ..secrets import Keychain, mask
-from .theme import CHECK_INDENT, DIALOG_STYLE, bring_to_front
+from .theme import AMBER_HEX, DIALOG_STYLE, bring_to_front
 
 # Qt key -> our key name, for keys whose name isn't their ASCII character.
 _QT_KEYS = {
@@ -181,6 +183,7 @@ class SettingsWindow(QWidget):
         self.login_item = login_item or LoginItem()
         self.fields: dict[str, QWidget] = {}
         self._locked: set[str] = set()
+        self._check_hints: list[tuple[QCheckBox, QLabel]] = []
         self._loading = False
         self.error = QLabel()
         self.error.setObjectName("error")
@@ -296,8 +299,10 @@ class SettingsWindow(QWidget):
         hint = QLabel(help_text)
         hint.setObjectName("muted")
         hint.setWordWrap(True)  # fields fill the column (see _form), so it wraps only on a narrow screen
-        if isinstance(field, QCheckBox):  # under the box's words, not under the box
-            hint.setContentsMargins(CHECK_INDENT, 0, 0, 0)
+        # macOS's style shifts a checkbox placed straight in a form by 2 px (room for its focus ring),
+        # but not one inside a holder; WA_LayoutUsesWidgetRect (set in _check) places both alike.
+        if isinstance(field, QCheckBox):  # under the box's words, not under the box: see _indent_hints
+            self._check_hints.append((field, hint))
         col.addWidget(hint)
         form.addRow(lab, holder)
         lab.setAlignment(Qt.AlignRight | Qt.AlignTop)
@@ -318,6 +323,7 @@ class SettingsWindow(QWidget):
 
     def _check(self, key: str, text: str) -> QCheckBox:
         w = QCheckBox(text)
+        w.setAttribute(Qt.WA_LayoutUsesWidgetRect)  # see _row
         w.toggled.connect(self._changed)
         self.fields[key] = w
         return w
@@ -416,6 +422,7 @@ class SettingsWindow(QWidget):
         self._row(form, "Journal folder", row, "Every question, answer and screenshot is saved here.")
         # Not a setting in the file: the system keeps it, so this shows what will really happen.
         self.login_box = QCheckBox("Open Marginalia when you log in")
+        self.login_box.setAttribute(Qt.WA_LayoutUsesWidgetRect)
         self.login_box.toggled.connect(self._changed)
         self.login_help = self._row(form, "", self.login_box, " ")
         self._row(form, "", self._check("check_updates", "Check for new versions"))
@@ -445,6 +452,7 @@ class SettingsWindow(QWidget):
         edges = about.contentsMargins().top() + about.contentsMargins().bottom()
         margin = 2 * int(about.document().documentMargin())
         about.setFixedHeight(about.fontMetrics().lineSpacing() * 3 + margin + edges)
+        self._indent_hints()
         room = self.screen().availableGeometry()
         # Labels beside their fields if that fits the screen; on a narrow one, above them.
         self._wrap_labels(False)
@@ -454,6 +462,14 @@ class SettingsWindow(QWidget):
         wide = max(MIN_WIDTH, self.needed_width())
         want = self._content.sizeHint().height() + 70  # the buttons row and margins
         self.resize(min(wide, room.width() - 40), min(want, room.height() - 40))
+
+    def _indent_hints(self) -> None:
+        """Start each checkbox's help line where its words start, as the style draws them (box,
+        border and spacing differ by platform, and are only known once styled)."""
+        for box, hint in self._check_hints:
+            opt = QStyleOptionButton()
+            box.initStyleOption(opt)
+            hint.setContentsMargins(box.style().subElementRect(QStyle.SE_CheckBoxContents, opt, box).left(), 0, 0, 0)
 
     def needed_width(self) -> int:
         """The narrowest the window can be without cutting anything off, laid out as it is now."""
@@ -563,9 +579,8 @@ class SettingsWindow(QWidget):
         elif self.keychain.problem:
             self.key_status.setText(f"No keychain here ({self.keychain.problem}). Use {p.env} instead.")
         else:
-            self.key_status.setText(
-                f'No key yet. Create one at <a href="{p.console}" style="color:#FFB224">{site}</a>, then paste it here.'
-            )
+            link = f'<a href="{p.console}" style="color:{AMBER_HEX}">{site}</a>'
+            self.key_status.setText(f"No key yet. Create one at {link}, then paste it here.")
         self.key_remove.setEnabled(source == "keychain")
         self.key_remove.setVisible(source == "keychain")  # nothing to remove: no button to wonder about
 
@@ -598,41 +613,49 @@ class SettingsWindow(QWidget):
     def _changed(self, *_args) -> None:
         if not self._loading:
             self.save_btn.setEnabled(self.dirty())  # a Save that does nothing teaches you to distrust it
+            self.error.hide()  # it was about what you had; you've changed it since
 
-    def validate(self, values: dict[str, Any]) -> str | None:
+    def validate(self, values: dict[str, Any]) -> tuple[str, str] | None:
+        """What's wrong, as (the field it's about, what to say), or None."""
         for key in ("hotkey", "voice_hotkey"):
             if values[key]:
                 try:
                     parse_combo(values[key])
                 except ValueError as exc:
-                    return str(exc)
+                    return key, str(exc)
         if values["hotkey"] and values["hotkey"] == values["voice_hotkey"]:
-            return "The two shortcuts must be different."
+            return "voice_hotkey", "The two shortcuts must be different."
         if not values["model"]:
-            return "Choose a model."
-        if not str(values["log_dir"]).strip():
-            return "Choose a folder for the journal."
+            return "model", "Choose a model."
+        if not self.fields["log_dir"].text().strip():  # values() would have made it Path("."): here
+            return "log_dir", "Choose a folder for the journal."
         return None
+
+    def _fail(self, widget: QWidget, message: str) -> bool:
+        """Say what's wrong, on the page of the field it's about, with that field focused."""
+        for page in range(self.pages.count()):
+            if self.pages.widget(page).isAncestorOf(widget):
+                self.nav.setCurrentRow(page)
+        if not isinstance(widget, HotkeyEdit):  # focusing one starts recording keys: not what you asked
+            widget.setFocus()
+        self.error.setText(message)
+        self.error.show()
+        return False
 
     def save(self) -> bool:
         values = self.values()
         problem = self.validate(values)
         if problem:
-            self.error.setText(problem)
-            self.error.show()
-            return False
+            key, message = problem
+            return self._fail(self.fields[key], message)
         new_key = self.key_edit.text().strip()
         if new_key and not self.keychain.set(new_key, PROVIDERS[self.provider()].account):
-            self.error.setText(f"Could not save the key to the keychain: {self.keychain.problem}")
-            self.error.show()
-            return False
+            return self._fail(self.key_edit, f"Could not save the key to the keychain: {self.keychain.problem}")
         if self.login_box.isChecked() != self.login_item.enabled():
             try:
                 self.login_item.set(self.login_box.isChecked())
             except OSError as exc:
-                self.error.setText(f"Could not change opening at login: {exc}")
-                self.error.show()
-                return False
+                return self._fail(self.login_box, f"Could not change opening at login: {exc}")
         # Save what you changed, and keep what the file already had. Never write a value an
         # environment variable or a command-line switch decided: it would outlive that override.
         stored = self.store.load()
