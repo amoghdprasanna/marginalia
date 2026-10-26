@@ -135,3 +135,24 @@ def test_find_focuses_search_and_escape_closes(qtbot, window):
     assert window.search.selectedText() == window.search.text()
     shortcuts[QKeySequence(Qt.Key_Escape).toString()].activated.emit()
     assert not window.isVisible()
+
+
+def test_an_empty_journal_shows_one_message_and_nothing_to_press(qtbot, tmp_path):
+    w = JournalWindow(Journal(tmp_path))
+    qtbot.addWidget(w)
+    w.refresh()
+    assert not w.ask_row.isVisibleTo(w) and not w.body.isVisibleTo(w)
+    assert w.shot.empty and w.shot.missing.startswith("Nothing here yet")
+    w.shot.resize(600, 400)
+    w.shot.grab()  # paints the mark and the message without error
+
+
+def test_a_thread_names_its_model_in_words(qtbot, tmp_path):
+    log = DoubtLog(tmp_path)
+    log.add("q", "a", Image.new("RGB", (40, 25)), "claude-sonnet-5-5")
+    w = JournalWindow(Journal(tmp_path))
+    qtbot.addWidget(w)
+    w.refresh()
+    assert "Claude Sonnet 5.5" in w.body.toPlainText() and "claude-sonnet-5-5" not in w.body.toPlainText()
+    assert w.ask_row.isVisibleTo(w) and not w.status.isVisibleTo(w), "no empty status line leaving a gap"
+    w.list.viewport().grab()  # the two-line rows paint without error
