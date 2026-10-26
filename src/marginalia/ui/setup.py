@@ -10,9 +10,9 @@ from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from ..permissions import MISSING, OFF, OK, Check
-from .theme import AMBER, DIALOG_STYLE, MUTED_HEX, OK_HEX, SLATE_HEX, bring_to_front
+from .theme import AMBER, DIALOG_STYLE, FILL_HOVER, LINE, MUTED, OK_HEX, SLATE_HEX, bring_to_front, fit_height, white
 
-COLORS = {OK: QColor(OK_HEX), MISSING: AMBER, OFF: QColor(MUTED_HEX)}
+COLORS = {OK: QColor(OK_HEX), MISSING: AMBER, OFF: MUTED}
 WORDS = {OK: "Ready", MISSING: "Needs you", OFF: "Off"}
 
 
@@ -31,7 +31,7 @@ class Dot(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         c = QPointF(9, 10)  # centred on the title's first line
-        color = COLORS.get(self.status, QColor(MUTED_HEX))
+        color = COLORS.get(self.status, MUTED)
         p.setPen(Qt.NoPen)
         p.setBrush(color)
         p.drawEllipse(c, 8, 8)
@@ -94,7 +94,7 @@ class SetupWindow(QWidget):
         self.howto.setTextFormat(Qt.RichText)
         self.howto.setObjectName("howto")
         self.howto.setStyleSheet(
-            "#howto { background: rgba(255,255,255,10); border: 1px solid rgba(255,255,255,24);"
+            f"#howto {{ background: {white(FILL_HOVER)}; border: 1px solid {white(LINE)};"
             " border-radius: 10px; padding: 10px 12px; }"
         )
         self.grid = QGridLayout()
@@ -175,10 +175,10 @@ class SetupWindow(QWidget):
         self.howto.setText(how_to_ask(ask_key, voice_key))
         # From a terminal, restarting Marginalia doesn't help: the terminal itself must restart.
         self.restart.setVisible(host == "Marginalia" and any(c.key == "screen" and c.status != OK for c in checks))
-        self.adjustSize()
+        fit_height(self)
 
     def open(self) -> None:
-        self.adjustSize()
+        fit_height(self)
         screen = self.screen().availableGeometry()
         self.move(screen.center() - self.rect().center())
         bring_to_front(self)

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QPointF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen
+from PySide6.QtGui import QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import (
     QMenu,
     QWidget,
@@ -16,6 +16,7 @@ from .theme import (
     FLOATING,
     SLATE,
     keep_visible,
+    tint,
 )
 
 
@@ -95,10 +96,7 @@ class Orb(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         c = QPointF(self.SIZE / 2, self.SIZE / 2)
         hot = self.underMouse()
-        edge = QColor(AMBER) if hot else EDGE
-        if hot:
-            edge.setAlpha(150)
-        p.setPen(QPen(edge, 1.5 if hot else 1))
+        p.setPen(QPen(tint(AMBER, 150) if hot else EDGE, 1.5 if hot else 1))
         p.setBrush(SLATE.lighter(125) if hot else SLATE)
         p.drawEllipse(c, self.SIZE / 2 - 2, self.SIZE / 2 - 2)
         draw_qubit(p, c, 11, self.phase, halo=False)

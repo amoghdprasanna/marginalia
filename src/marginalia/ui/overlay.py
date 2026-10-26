@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QElapsedTimer, QPoint, QPointF, QRect, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPen
+from PySide6.QtGui import QFont, QFontMetricsF, QPainter, QPen
 from PySide6.QtWidgets import (
     QWidget,
 )
@@ -17,6 +17,7 @@ from .theme import (
     PILL,
     TEXT,
     keep_visible,
+    tint,
 )
 
 
@@ -103,9 +104,7 @@ class PointerOverlay(QWidget):
             pos = (1 - k) ** 2 * self.origin + 2 * (1 - k) * k * ctrl + k * k * target
 
             if local < 1.0:  # fading trail while travelling
-                trail = QColor(AMBER)
-                trail.setAlpha(int(140 * (1 - k)))
-                p.setPen(QPen(trail, 2, Qt.DotLine))
+                p.setPen(QPen(tint(AMBER, int(140 * (1 - k))), 2, Qt.DotLine))
                 p.setBrush(Qt.NoBrush)
                 steps = 24
                 prev = self.origin
@@ -117,9 +116,7 @@ class PointerOverlay(QWidget):
 
             since = (local - 1.0) * self.TRAVEL
             if 0 <= since < 0.6:  # arrival pulse
-                pulse = QColor(AMBER)
-                pulse.setAlpha(int(200 * (1 - since / 0.6)))
-                p.setPen(QPen(pulse, 2))
+                p.setPen(QPen(tint(AMBER, int(200 * (1 - since / 0.6))), 2))
                 p.setBrush(Qt.NoBrush)
                 rr = 15 + 22 * (since / 0.6)
                 p.drawEllipse(pos, rr, rr)
