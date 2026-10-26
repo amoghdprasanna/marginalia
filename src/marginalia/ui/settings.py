@@ -10,20 +10,22 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFileDialog,
     QFormLayout,
-    QGroupBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -33,7 +35,7 @@ from ..config import BY_KEY, LOG_LEVELS, WHISPER_MODELS, Config, SettingsStore, 
 from ..hotkeys import Combo, format_combo, parse_combo, to_text
 from ..providers import PROVIDERS
 from ..secrets import Keychain, mask
-from .theme import DIALOG_STYLE, bring_to_front
+from .theme import CHECK_INDENT, DIALOG_STYLE, bring_to_front
 
 # Qt key -> our key name, for keys whose name isn't their ASCII character.
 _QT_KEYS = {
@@ -127,6 +129,15 @@ class HotkeyEdit(QLineEdit):
 CLI_FLAGS = {"hotkey_enabled": "--no-hotkey", "ocr_enabled": "--no-ocr", "voice_enabled": "--no-voice"}
 
 
+def home_relative(path: Path) -> str:
+    """~/Documents/Marginalia rather than /Users/you/Documents/Marginalia: shorter, and the part
+    you'd recognise comes first."""
+    try:
+        return str(Path("~") / path.relative_to(Path.home()))
+    except ValueError:
+        return str(path)
+
+
 def _locked(widget: QWidget, why: str) -> None:
     widget.setEnabled(False)
     widget.setToolTip(why)
@@ -146,7 +157,12 @@ EFFORT_CHOICES = (
     ("max", "Maximum", "As deep as it goes; slowest and priciest."),
 )
 LOG_CHOICES = tuple((v, v.capitalize(), "") for v in LOG_LEVELS)
-LABEL_WIDTH = 118  # one label column for every group, so the fields line up down the window
+LABEL_WIDTH = 118  # one label column on every page, so the fields don't jump when you switch
+NAV_WIDTH = 168
+MIN_WIDTH = 760  # the sidebar, plus the 600 the form had on its own
+# A switch and the fields that only matter while it is on: those are greyed out while it's off.
+DEPENDS_ON = {"hotkey": ("hotkey_enabled",), "voice_hotkey": ("hotkey_enabled", "voice_enabled"),
+              "whisper_model": ("voice_enabled",)}  # fmt: skip
 
 
 class SettingsWindow(QWidget):
@@ -164,30 +180,34 @@ class SettingsWindow(QWidget):
         self.store, self.keychain = store, keychain
         self.login_item = login_item or LoginItem()
         self.fields: dict[str, QWidget] = {}
+        self._locked: set[str] = set()
         self._loading = False
         self.error = QLabel()
         self.error.setObjectName("error")
         self.error.setWordWrap(True)
         self.error.hide()
 
+        # One page per topic, picked from a sidebar: each fits without scrolling, and you see every
+        # topic at once instead of scrolling a long form to find one. Advanced is the last page.
+        self.nav = QListWidget()
+        self.nav.setObjectName("nav")
+        self.nav.setFixedWidth(NAV_WIDTH)
+        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.nav.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.pages = QStackedWidget()
+        for build in (self._model_group, self._keys_group, self._voice_group, self._general_group):
+            self._add_page(build())
         self.advanced = self._advanced_group()
-        self.advanced.hide()
-        self.advanced_toggle = QPushButton("Show advanced settings")
-        self.advanced_toggle.setObjectName("link")
-        self.advanced_toggle.setCursor(Qt.PointingHandCursor)
-        self.advanced_toggle.clicked.connect(self._toggle_advanced)
+        self._add_page(self.advanced)
+        self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
+        self.nav.setCurrentRow(0)
+        for key in ("hotkey_enabled", "voice_enabled"):
+            self.fields[key].toggled.connect(self._update_dependents)
 
         content = QWidget()
         inner = QVBoxLayout(content)
-        inner.setContentsMargins(18, 16, 18, 4)
-        inner.setSpacing(12)
-        inner.addWidget(self._model_group())
-        inner.addWidget(self._keys_group())
-        inner.addWidget(self._voice_group())
-        inner.addWidget(self._journal_group())
-        inner.addWidget(self._app_group())
-        inner.addWidget(self.advanced_toggle, 0, Qt.AlignLeft)
-        inner.addWidget(self.advanced)
+        inner.setContentsMargins(22, 18, 22, 8)
+        inner.addWidget(self.pages)
         inner.addStretch(1)
         # Scrolls on a small screen; the buttons stay put below it, always reachable.
         self.scroll = QScrollArea()
@@ -195,14 +215,19 @@ class SettingsWindow(QWidget):
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._content = content
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 16)
-        lay.setSpacing(10)
-        lay.addWidget(self.scroll, 1)
-        self.error.setContentsMargins(18, 0, 18, 0)
-        lay.addWidget(self.error)
+        side = QWidget()
+        side.setObjectName("sidebar")
+        side_lay = QVBoxLayout(side)
+        side_lay.setContentsMargins(10, 18, 10, 10)
+        side_lay.addWidget(self.nav)
+        right = QVBoxLayout()
+        right.setContentsMargins(0, 0, 0, 16)
+        right.setSpacing(10)
+        right.addWidget(self.scroll, 1)
+        self.error.setContentsMargins(22, 0, 22, 0)
+        right.addWidget(self.error)
         buttons = QHBoxLayout()
-        buttons.setContentsMargins(18, 0, 18, 0)
+        buttons.setContentsMargins(22, 0, 22, 0)
         buttons.addStretch(1)
         self.cancel_btn = QPushButton("Cancel")
         self.save_btn = QPushButton("Save")
@@ -212,23 +237,45 @@ class SettingsWindow(QWidget):
         self.save_btn.clicked.connect(self.save)
         buttons.addWidget(self.cancel_btn)
         buttons.addWidget(self.save_btn)
-        lay.addLayout(buttons)
-        self.setMinimumWidth(600)
+        right.addLayout(buttons)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        lay.addWidget(side)
+        lay.addLayout(right, 1)
+        self.setMinimumWidth(MIN_WIDTH)
         self.load(cfg)
 
     # building ---------------------------------------------------------------------------------
 
-    def _form(self, title: str) -> tuple[QGroupBox, QFormLayout]:
-        box = QGroupBox(title)
-        form = QFormLayout(box)
+    def _add_page(self, page: QWidget) -> None:
+        self.nav.addItem(page.objectName())
+        self.pages.addWidget(page)
+
+    def _form(self, title: str) -> tuple[QWidget, QFormLayout]:
+        """A page: its title, then its rows on a card."""
+        page = QWidget()
+        page.setObjectName(title)  # the sidebar's name for it
+        heading = QLabel(title)
+        heading.setObjectName("heading")
+        card = QFrame()
+        card.setObjectName("card")
+        form = QFormLayout(card)
         # Spelled out because macOS's defaults differ: fields there stay at their natural width and
         # the form is centred, so help lines wrapped into overlapping text and labels didn't line up.
         form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
         form.setLabelAlignment(Qt.AlignRight | Qt.AlignTop)
         form.setHorizontalSpacing(12)
-        form.setVerticalSpacing(10)
-        return box, form
+        form.setVerticalSpacing(12)
+        form.setContentsMargins(14, 14, 14, 14)
+        col = QVBoxLayout(page)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(10)
+        col.addWidget(heading)
+        col.addWidget(card)
+        col.addStretch(1)
+        return page, form
 
     def _row(self, form: QFormLayout, label: str, field, help_text: str = "") -> QLabel | None:
         """A labelled row, with a line of help under the field when the label alone isn't enough.
@@ -241,6 +288,7 @@ class SettingsWindow(QWidget):
             form.addRow(lab, field)
             return None
         holder = QWidget()
+        holder.setObjectName("row")
         col = QVBoxLayout(holder)
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(3)
@@ -248,6 +296,8 @@ class SettingsWindow(QWidget):
         hint = QLabel(help_text)
         hint.setObjectName("muted")
         hint.setWordWrap(True)  # fields fill the column (see _form), so it wraps only on a narrow screen
+        if isinstance(field, QCheckBox):  # under the box's words, not under the box
+            hint.setContentsMargins(CHECK_INDENT, 0, 0, 0)
         col.addWidget(hint)
         form.addRow(lab, holder)
         lab.setAlignment(Qt.AlignRight | Qt.AlignTop)
@@ -272,7 +322,7 @@ class SettingsWindow(QWidget):
         self.fields[key] = w
         return w
 
-    def _model_group(self) -> QGroupBox:
+    def _model_group(self) -> QWidget:
         box, form = self._form("AI model")
         service = self._choice("provider", PROVIDER_CHOICES)
         service.currentIndexChanged.connect(self._provider_changed)
@@ -290,6 +340,7 @@ class SettingsWindow(QWidget):
         row.addWidget(self.key_edit, 1)
         row.addWidget(self.key_remove)
         holder = QWidget()
+        holder.setObjectName("row")
         col = QVBoxLayout(holder)
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(3)
@@ -328,7 +379,7 @@ class SettingsWindow(QWidget):
         self._show_provider()
         self._changed()
 
-    def _keys_group(self) -> QGroupBox:
+    def _keys_group(self) -> QWidget:
         box, form = self._form("Shortcuts")
         self._row(form, "", self._check("hotkey_enabled", "Shortcuts work in any app"))
         ask, voice = HotkeyEdit(), HotkeyEdit()
@@ -339,7 +390,7 @@ class SettingsWindow(QWidget):
         self._row(form, "Hold to talk", voice, "Click a box, then press the keys. Backspace clears it.")
         return box
 
-    def _voice_group(self) -> QGroupBox:
+    def _voice_group(self) -> QWidget:
         box, form = self._form("Voice and reading")
         self._row(form, "", self._check("voice_enabled", "Ask by voice"), "Speech is transcribed on this computer.")
         speech = QComboBox()
@@ -351,8 +402,8 @@ class SettingsWindow(QWidget):
         self._row(form, "", self._check("ocr_enabled", "Read text on screen"), "Sharper pointing at small print.")
         return box
 
-    def _journal_group(self) -> QGroupBox:
-        box, form = self._form("Journal")
+    def _general_group(self) -> QWidget:
+        box, form = self._form("General")
         folder = QLineEdit()
         folder.textChanged.connect(self._changed)
         self.fields["log_dir"] = folder
@@ -362,11 +413,7 @@ class SettingsWindow(QWidget):
         row = QHBoxLayout()
         row.addWidget(folder, 1)
         row.addWidget(browse)
-        self._row(form, "Folder", row, "Every question, answer and screenshot is saved here.")
-        return box
-
-    def _app_group(self) -> QGroupBox:
-        box, form = self._form("Startup and updates")
+        self._row(form, "Journal folder", row, "Every question, answer and screenshot is saved here.")
         # Not a setting in the file: the system keeps it, so this shows what will really happen.
         self.login_box = QCheckBox("Open Marginalia when you log in")
         self.login_box.toggled.connect(self._changed)
@@ -376,7 +423,7 @@ class SettingsWindow(QWidget):
         self._row(form, "", crash, "You see each report before anything is sent.")
         return box
 
-    def _advanced_group(self) -> QGroupBox:
+    def _advanced_group(self) -> QWidget:
         box, form = self._form("Advanced")
         tokens = QSpinBox()
         tokens.setRange(*BY_KEY["max_tokens"].bounds)
@@ -389,14 +436,6 @@ class SettingsWindow(QWidget):
         self._row(form, "", self._check("save_cases", "Save questions as eval cases"))
         return box
 
-    def _toggle_advanced(self) -> None:
-        show = not self.advanced.isVisible()
-        self.advanced.setVisible(show)
-        self.advanced_toggle.setText("Hide advanced settings" if show else "Show advanced settings")
-        self._fit_to_screen()
-        if show:
-            QTimer.singleShot(0, self, lambda: self.scroll.ensureWidgetVisible(self.advanced))
-
     def _fit_to_screen(self) -> None:
         """As tall as the content but never taller than the screen; wide enough that nothing is cut
         off, whatever the platform's fonts (Windows' run larger than macOS')."""
@@ -408,7 +447,8 @@ class SettingsWindow(QWidget):
         about.setFixedHeight(about.fontMetrics().lineSpacing() * 3 + margin + edges)
         self._content.adjustSize()
         bar = self.scroll.verticalScrollBar().sizeHint().width()
-        wide = max(600, self._content.minimumSizeHint().width() + bar + 2 * self.scroll.frameWidth() + 4)
+        side = NAV_WIDTH + 20
+        wide = max(MIN_WIDTH, side + self._content.minimumSizeHint().width() + bar + 2 * self.scroll.frameWidth() + 4)
         room = self.screen().availableGeometry()
         want = self._content.sizeHint().height() + 70  # the buttons row and margins
         self.resize(min(wide, room.width() - 40), min(want, room.height() - 40))
@@ -435,6 +475,9 @@ class SettingsWindow(QWidget):
             w.setPlainText(str(value))
         elif isinstance(w, HotkeyEdit):
             w.set_value(str(value))
+        elif isinstance(w, QLineEdit) and key == "log_dir":
+            w.setText(home_relative(Path(value)))
+            w.setCursorPosition(0)  # the start of a long path says where it is; its end is cut off
         elif isinstance(w, QLineEdit):
             w.setText(str(value))
 
@@ -443,6 +486,7 @@ class SettingsWindow(QWidget):
         self.cfg = cfg
         self._loading = True
         self.browse_btn.setEnabled(True)
+        self._locked = set()
         self.set_value("provider", cfg.provider)
         self._fill_models(cfg.provider, cfg.model)
         for key, w in self.fields.items():
@@ -455,8 +499,11 @@ class SettingsWindow(QWidget):
                 _locked(w, f"Set by {env} in your environment or .env file; remove it there to edit here.")
             elif source == "command line":
                 _locked(w, f"Set by {CLI_FLAGS.get(key, 'a command-line switch')} for this run.")
+            if not w.isEnabled():
+                self._locked.add(key)
             if key == "log_dir" and not w.isEnabled():
                 self.browse_btn.setEnabled(False)
+        self._update_dependents()
         self.key_edit.clear()
         problem = self.login_item.problem
         self.login_box.setChecked(self.login_item.enabled())
@@ -466,6 +513,12 @@ class SettingsWindow(QWidget):
         self._show_provider()
         self.error.hide()
         self._changed()
+
+    def _update_dependents(self, *_args) -> None:
+        """Grey out what does nothing while its switch is off (a locked field stays locked)."""
+        for key, switches in DEPENDS_ON.items():
+            on = all(self.fields[s].isChecked() for s in switches)
+            self.fields[key].setEnabled(on and key not in self._locked)
 
     def _show_provider(self) -> None:
         """The key field, its status and the thinking help, for the service now chosen."""
@@ -491,6 +544,7 @@ class SettingsWindow(QWidget):
                 f'No key yet. Create one at <a href="{p.console}" style="color:#FFB224">{site}</a>, then paste it here.'
             )
         self.key_remove.setEnabled(source == "keychain")
+        self.key_remove.setVisible(source == "keychain")  # nothing to remove: no button to wonder about
 
     def values(self) -> dict[str, Any]:
         """What the form says now, typed like Config fields."""
@@ -598,8 +652,10 @@ class SettingsWindow(QWidget):
         self.closed.emit()
         super().closeEvent(e)
 
-    def open(self, cfg: Config) -> None:
+    def open(self, cfg: Config, page: int = 0) -> None:
+        """Show `cfg`, on the first page (the model and its key) unless told otherwise."""
         self.load(cfg)
+        self.nav.setCurrentRow(page)
         self._fit_to_screen()
         bring_to_front(self)
         # Group boxes report their true minimum width only once shown, so measure again (before
