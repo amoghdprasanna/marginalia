@@ -315,12 +315,15 @@ def test_on_a_narrow_screen_labels_go_above_their_fields(qtbot, window, monkeypa
     from PySide6.QtCore import QRect
     from PySide6.QtWidgets import QFormLayout
 
-    narrow = type("Screen", (), {"availableGeometry": lambda self: QRect(0, 0, 560, 800)})()
+    window.open(window.cfg)
+    beside = window.needed_width()  # with labels beside fields, in this platform's fonts
+    # A screen one pixel too narrow for that (the window keeps 40 px clear of the edges).
+    narrow = type("Screen", (), {"availableGeometry": lambda self: QRect(0, 0, beside + 39, 800)})()
     monkeypatch.setattr(window, "screen", lambda: narrow)
     window.open(window.cfg)
     forms = window.findChildren(QFormLayout)
     assert all(f.rowWrapPolicy() == QFormLayout.WrapAllRows for f in forms)
-    assert window.width() <= 520
+    assert window.width() < beside
     assert window._content.minimumSizeHint().width() <= window.scroll.viewport().width(), "nothing cut off"
     monkeypatch.undo()
     window.open(window.cfg)
