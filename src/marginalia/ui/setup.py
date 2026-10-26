@@ -5,28 +5,60 @@ orb menu. It only displays checks and emits which one to fix; permissions.Fixer 
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from ..permissions import MISSING, OFF, OK, Check
-from .theme import AMBER, DIALOG_STYLE, MUTED_HEX, bring_to_front
+from .theme import AMBER, DIALOG_STYLE, MUTED_HEX, OK_HEX, SLATE_HEX, bring_to_front
 
-COLORS = {OK: QColor(110, 204, 140), MISSING: AMBER, OFF: QColor(MUTED_HEX)}
+COLORS = {OK: QColor(OK_HEX), MISSING: AMBER, OFF: QColor(MUTED_HEX)}
+WORDS = {OK: "Ready", MISSING: "Needs you", OFF: "Off"}
 
 
 class Dot(QWidget):
+    """A check's state as a shape as well as a colour (a tick, a "!", a dash, a "?"), so it reads
+    without telling green from amber."""
+
     def __init__(self, status: str) -> None:
         super().__init__()
         self.status = status
-        self.setFixedSize(12, 18)
+        self.setFixedSize(18, 20)
+        self.setAccessibleName(WORDS.get(status, "Not sure"))
+        self.setToolTip(self.accessibleName())
 
     def paintEvent(self, _e) -> None:  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
+        c = QPointF(9, 10)  # centred on the title's first line
+        color = COLORS.get(self.status, QColor(MUTED_HEX))
         p.setPen(Qt.NoPen)
-        p.setBrush(COLORS.get(self.status, QColor(MUTED_HEX)))
-        p.drawEllipse(1, 5, 10, 10)  # centred on the title's first line
+        p.setBrush(color)
+        p.drawEllipse(c, 8, 8)
+        pen = QPen(QColor(SLATE_HEX), 1.8)
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        p.setPen(pen)
+        if self.status == OK:
+            p.drawPolyline([QPointF(5.5, 10.2), QPointF(8, 12.6), QPointF(12.6, 7.6)])
+        elif self.status == MISSING:
+            p.drawLine(QPointF(9, 6), QPointF(9, 10.6))
+            p.drawPoint(QPointF(9, 13.6))
+        elif self.status == OFF:
+            p.drawLine(QPointF(5.5, 10), QPointF(12.5, 10))
+        else:
+            f = self.font()
+            f.setPixelSize(11)
+            f.setBold(True)
+            p.setFont(f)
+            p.drawText(QRectF(1, 2, 16, 16), Qt.AlignCenter, "?")
+
+
+def emphasise(button: QPushButton, on: bool) -> None:
+    """Make this the highlighted (amber) button, or an ordinary one."""
+    button.setObjectName("primary" if on else "")
+    button.style().unpolish(button)
+    button.style().polish(button)
 
 
 def how_to_ask(ask_key: str | None, voice_key: str | None) -> str:
@@ -87,6 +119,7 @@ class SetupWindow(QWidget):
         lay.addWidget(self.intro)
         lay.addLayout(self.grid)
         lay.addWidget(self.howto)
+        lay.addStretch(1)  # any spare height goes here, not between the title and the rows
         lay.addLayout(buttons)
         self.checks: list[Check] = []
         self.buttons: dict[str, QPushButton] = {}
@@ -100,6 +133,7 @@ class SetupWindow(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         self.buttons.clear()
+        ready = not any(c.required and c.status != OK for c in checks)
         for row, check in enumerate(checks):
             title = QLabel(check.title)
             title.setStyleSheet("font-weight: 600;")
@@ -117,13 +151,16 @@ class SetupWindow(QWidget):
             self.grid.addWidget(holder, row, 1)
             if check.action and check.status != OK:
                 btn = QPushButton(check.action)
+                # The highlighted button is your next step: the first thing that's required and missing.
+                emphasise(btn, not ready and check.required and not any(
+                    b.objectName() == "primary" for b in self.buttons.values()))
                 btn.clicked.connect(lambda _=False, c=check: self.fix_requested.emit(c))
                 self.buttons[check.key] = btn
                 self.grid.addWidget(btn, row, 2, Qt.AlignTop)
         self.grid.setColumnStretch(1, 1)
-        ready = not any(c.required and c.status != OK for c in checks)
         self.title.setText("You're all set" if ready else "A few things before you start")
         self.close_btn.setText("Start using Marginalia" if ready else "Done")
+        emphasise(self.close_btn, ready)
         screen_missing = any(c.key == "screen" and c.status != OK for c in checks)
         if screen_missing and host != "Marginalia":
             self.intro.setText(
