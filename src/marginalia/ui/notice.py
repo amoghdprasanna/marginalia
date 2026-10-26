@@ -20,8 +20,7 @@ class Notice(QWidget):
         self.heading = heading = QLabel(title)
         heading.setStyleSheet("font-size: 15px; font-weight: 600;")
         heading.setWordWrap(True)
-        self.text = QLabel(text)
-        self.text.setObjectName("muted")
+        self.text = QLabel(text)  # the message itself: body text, not a muted aside
         self.text.setWordWrap(True)
         self.text.setTextInteractionFlags(Qt.TextSelectableByMouse)
         row = QHBoxLayout()
@@ -37,7 +36,7 @@ class Notice(QWidget):
             self.buttons[label] = b
         lay = QVBoxLayout(self)
         lay.setContentsMargins(20, 18, 20, 16)
-        lay.setSpacing(10)
+        lay.setSpacing(12)
         lay.addWidget(heading)
         lay.addWidget(self.text)
         lay.addLayout(row)

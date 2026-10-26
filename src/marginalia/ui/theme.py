@@ -19,37 +19,49 @@ HALO = QColor(10, 12, 22, 120)
 PILL = QColor(27, 32, 49, 228)
 TEXT_HEX, MUTED_HEX, AMBER_HEX, SLATE_HEX = "#ECEFF7", "#9BA3BC", "#FFB224", "#1B2031"
 ERROR_HEX = "#FF8A80"  # only for "this went wrong"; amber stays the colour of the answer's markers
+OK_HEX = "#6ECC8C"  # the setup check's "ready"
+DISABLED_HEX = "#6B7290"  # clearly fainter than muted text, so "can't use this" never looks like "secondary"
+SIDEBAR_HEX = "#161A28"  # a shade under the slate: the Settings sidebar
+CHECK_SIZE, CHECK_SPACING = 15, 8
+CHECK_INDENT = CHECK_SIZE + CHECK_SPACING  # where a checkbox's words start: its help line lines up there
 
 CHECK_ICON = (Path(__file__).parent / "assets" / "check.svg").as_posix()
 
 # Ordinary windows (Settings, Setup, Journal): the same slate and amber, with native layout.
 DIALOG_STYLE = f"""
 QWidget {{ background: {SLATE_HEX}; color: {TEXT_HEX}; font-size: 13px; }}
-QGroupBox {{ border: 1px solid rgba(255,255,255,30); border-radius: 10px; margin-top: 14px;
-    padding: 12px 10px 8px; }}
-QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 4px; color: {MUTED_HEX}; font-weight: 600; }}
+QFrame#card {{ background: rgba(255,255,255,6); border: 1px solid rgba(255,255,255,24); border-radius: 10px; }}
+QFrame#card QLabel, QFrame#card QCheckBox, QFrame#card QWidget#row {{ background: transparent; }}
+QLabel#heading {{ font-size: 17px; font-weight: 600; padding-left: 2px; }}
+QWidget#sidebar {{ background: {SIDEBAR_HEX}; border-right: 1px solid rgba(255,255,255,20); }}
+QListWidget#nav {{ background: transparent; border: none; padding: 0; outline: 0; }}
+QListWidget#nav::item {{ padding: 7px 10px; margin: 1px 0; border-radius: 6px; color: {TEXT_HEX}; }}
+QListWidget#nav::item:hover {{ background: rgba(255,255,255,10); }}
+QListWidget#nav::item:selected {{ background: rgba(255,255,255,26); color: {TEXT_HEX}; font-weight: 600; }}
 QLineEdit, QPlainTextEdit, QComboBox, QSpinBox, QListWidget, QTextBrowser {{
     background: rgba(255,255,255,12); border: 1px solid rgba(255,255,255,30); border-radius: 7px;
     padding: 5px 8px; selection-background-color: {AMBER_HEX}; selection-color: {SLATE_HEX}; }}
 QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus {{ border-color: {AMBER_HEX}; }}
 QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QCheckBox:disabled,
-QPlainTextEdit:disabled {{ color: {MUTED_HEX}; }}
+QPlainTextEdit:disabled {{ color: {DISABLED_HEX}; }}
 QComboBox QAbstractItemView {{ background: {SLATE_HEX}; selection-background-color: rgba(255,178,36,60); }}
 QPushButton {{ background: rgba(255,255,255,16); border: 1px solid rgba(255,255,255,30); border-radius: 7px;
     padding: 6px 14px; }}
 QPushButton:hover {{ border-color: {AMBER_HEX}; }}
 QPushButton:focus {{ border: 2px solid {AMBER_HEX}; }}
+QPushButton#primary {{ background: {AMBER_HEX}; color: {SLATE_HEX}; border: none; font-weight: 600; }}
+QPushButton#primary:hover {{ background: #FFC152; }}
+QPushButton#primary:focus {{ border: 2px solid {TEXT_HEX}; }}
+QCheckBox {{ spacing: {CHECK_SPACING}px; }}
 QCheckBox:focus {{ color: {AMBER_HEX}; }}
-QPushButton:disabled {{ color: {MUTED_HEX}; }}
-QPushButton:default:disabled, QPushButton#primary:disabled {{ background: rgba(255,178,36,70); color: {SLATE_HEX}; }}
+QPushButton:disabled, QPushButton#primary:disabled {{ background: rgba(255,255,255,6); color: {DISABLED_HEX};
+    border: 1px solid rgba(255,255,255,16); font-weight: normal; }}
 QPushButton#link {{ background: transparent; border: none; color: {AMBER_HEX}; padding: 2px 0; }}
 QPushButton#link:hover {{ text-decoration: underline; }}
-QPushButton#primary:focus {{ border: 2px solid {TEXT_HEX}; }}
-QPushButton#primary {{ background: {AMBER_HEX}; color: {SLATE_HEX}; border: none; font-weight: 600; }}
 QLabel#muted {{ color: {MUTED_HEX}; font-size: 12px; }}
 QLabel#error {{ color: {ERROR_HEX}; }}
-QCheckBox::indicator {{ width: 15px; height: 15px; border: 1px solid rgba(255,255,255,90); border-radius: 4px;
-    background: rgba(255,255,255,10); }}
+QCheckBox::indicator {{ width: {CHECK_SIZE}px; height: {CHECK_SIZE}px; border: 1px solid rgba(255,255,255,90);
+    border-radius: 4px; background: rgba(255,255,255,10); }}
 QCheckBox::indicator:checked {{ background: {AMBER_HEX}; border-color: {AMBER_HEX}; image: url({CHECK_ICON}); }}
 QCheckBox::indicator:checked:disabled {{ background: rgba(255,178,36,90); }}
 QScrollArea {{ border: none; }}
@@ -57,7 +69,7 @@ QScrollBar:vertical {{ background: transparent; width: 8px; margin: 0; }}
 QScrollBar::handle:vertical {{ background: rgba(255,255,255,60); border-radius: 4px; min-height: 24px; }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
 QListWidget::item {{ padding: 6px 4px; }}
-QListWidget::item:selected {{ background: rgba(255,178,36,50); color: {TEXT_HEX}; }}
+QListWidget::item:selected {{ background: rgba(255,255,255,22); color: {TEXT_HEX}; }}
 """
 
 FLOATING = Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
