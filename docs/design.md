@@ -84,6 +84,26 @@ These are the rules the UI follows, with where each shows up. Check a UI change 
 - An empty journal is one centred message under the qubit mark: what will appear here and how to
   make it appear. A search with no results says so, and what to try.
 
+## The notebook panel (`extension/`, ADR 0029)
+
+The Chrome side panel follows the same rules, with the same tokens (`extension/src/ui/theme.css`).
+- One state at a time, each a sentence and at most one thing to press: *Allow access*, *Reload
+  tab*, the server setting with *Copy*, or the list of errors. Nothing is offered that does nothing
+  yet: there is no *Explain* until the desktop bridge answers.
+- Errors look like Jupyter's: the cell's `[14]` count, a red bar where Jupyter draws its blue
+  one, the exception in red and the rest in body text. Red stays only for errors.
+- Atkinson Hyperlegible Next and Mono, bundled with the extension: they keep `l`/`1`/`I` and
+  `0`/`O` apart, which tracebacks need.
+- **Ket**, the qubit, is the one playful thing. It shows what the panel is doing as a state on the
+  Bloch sphere: precessing while it reads or the kernel is busy, upright in |0⟩ when the notebook
+  is clean, knocked off with a red dot when a cell raised, lying on the equator asleep when there
+  is nothing to read. It leans toward the pointer; a click measures it (Born-rule odds, the
+  outcome shown as `|0⟩`/`|1⟩`); three quick clicks drive a Rabi flop. Inside the sphere the
+  vector is faint and under the face, so it never crosses Ket's eyes. Reduced motion keeps the
+  states and drops the movement. Its animation loop stops when Ket is still.
+- Checked at 360 px, Chrome's default side-panel width: nothing wraps mid-identifier (the config
+  lines scroll instead), tracebacks wrap rather than hide their end.
+
 ## Tokens (`ui/theme.py`)
 
 Every colour is a token in `theme.py`; no other UI module writes a colour literal (a test checks).

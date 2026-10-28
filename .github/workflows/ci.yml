@@ -61,3 +61,45 @@ jobs:
       # Only the dev extra: the suite must pass without OCR or voice installed, like a fresh user's machine.
       - run: pip install -e ".[dev]"
       - run: pytest -rs --cov=marginalia --cov-report=term-missing  # -rs: name every skipped test and why
+
+  extension:
+    # The Chrome extension for notebooks (ADR 0029): types, lint, formatting, unit tests, build.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: extension/.nvmrc
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run test:coverage
+      - run: npm run build
+
+  extension-e2e:
+    # Loads the built extension into Chromium against real Jupyter Notebook servers.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: extension/.nvmrc
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: extension/playwright-report/
+

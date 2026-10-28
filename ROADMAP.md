@@ -55,3 +55,21 @@ Goal: someone else can install it.
 - [x] Windows: CI, microphone consent check, taskbar icon, UTF-8 file handling, `.zip` build
 - [x] Wayland: Screenshot and GlobalShortcuts portals, windows through XWayland (ADR 0024)
 - [ ] **You (or a tester):** first real run on Windows, GNOME and KDE Wayland; tests use fakes there
+
+## Stage 6: Notebooks in the browser (in progress)
+Goal: help with a Jupyter notebook open in Chrome (UMD's cluster through Open OnDemand), from its
+real cells, not a screenshot. See ADR 0029.
+- [x] Chrome extension in `extension/` (WXT, React, strict TypeScript), asks only for UMD and
+      local Jupyter, once
+- [x] Reads the open notebook through Jupyter's own app object; lists cells that raised, with
+      where and why; *Go to cell*; updates as cells run; survives reloads
+- [x] Ket, the qubit, in the panel and the toolbar icon
+- [x] Unit tests and an e2e suite against real Notebook 7.6.3 servers; CI runs both
+- [ ] **You:** turn on `expose_app_in_browser` on the cluster and confirm the panel reads a real
+      notebook there
+- [ ] Bridge to the desktop app over native messaging (ADR 0030): *Explain* an error with
+      Marginalia's model and keychain
+- [ ] *Fix*: a proposed change to a cell as a diff, applied only when you click *Apply*, undone
+      with one Ctrl+Z
+- [ ] Tests: pytest + testbook for the notebook's functions, and a Playwright "runs clean" check
+      in its own browser profile
