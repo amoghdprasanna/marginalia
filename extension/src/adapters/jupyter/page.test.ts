@@ -41,7 +41,7 @@ describe('startPage', () => {
     const cells = snap?.payload.cells as { outputs: unknown[]; source?: unknown }[];
     expect(cells[0]?.outputs).toEqual([]);
     expect(cells[1]?.outputs).toHaveLength(1);
-    expect(cells[1]?.source).toBeUndefined();
+    expect(cells[1]?.source).toBe('x = 1');
   });
 
   it('sends again only when something changed', () => {
@@ -127,7 +127,7 @@ describe('reveal', () => {
     const { posted, deliver } = setup({ jupyterapp: app });
     deliver(makeMessage('notebook/reveal', { index: 0, cellId: 'c' }));
     expect(notebook.activeCellIndex).toBe(2);
-    expect(notebook.scrolledTo).toBe(notebook.widgets[2]);
+    expect(notebook.scrolledTo).toEqual(notebook.widgets[2]);
     expect(posted.at(-1)).toMatchObject({ type: 'notebook/revealed', payload: { ok: true } });
   });
 
@@ -157,5 +157,78 @@ describe('readCells', () => {
     const out = readCells(cells);
     expect(out[0]).toBeNull();
     expect(out[1]).toMatchObject({ id: 'b' });
+  });
+});
+
+describe('apply', () => {
+  const applied = (posted: { type: string }[]) =>
+    posted.filter((m): m is MessageOf<'notebook/applied'> => m.type === 'notebook/applied').at(-1)
+      ?.payload;
+
+  it('replaces a cell when it still holds what Claude saw', () => {
+    const { app, sources } = fakeApp([codeCell('a', 1), codeCell('b', 2)]);
+    const { posted, deliver } = setup({ jupyterapp: app });
+    deliver(
+      makeMessage('notebook/apply', {
+        requestId: 'r1',
+        op: { kind: 'replace', index: 1, cellId: 'b', expected: 'x = 1', source: 'x = 2' },
+      }),
+    );
+    expect(sources()).toEqual(['x = 1', 'x = 2']);
+    expect(applied(posted)).toEqual({ requestId: 'r1', ok: true, cellId: 'b' });
+  });
+
+  it('refuses a stale edit and leaves the cell alone', () => {
+    const { app, sources } = fakeApp([codeCell('a', 1)]);
+    const { posted, deliver } = setup({ jupyterapp: app });
+    deliver(
+      makeMessage('notebook/apply', {
+        requestId: 'r2',
+        op: { kind: 'replace', index: 0, cellId: 'a', expected: 'something else', source: 'boom' },
+      }),
+    );
+    expect(sources()).toEqual(['x = 1']);
+    expect(applied(posted)).toMatchObject({ ok: false, error: 'stale' });
+  });
+
+  it('inserts a cell before the failing one, and deleting it undoes that', () => {
+    const { app, sources, notebook } = fakeApp([codeCell('a', 1), codeCell('b', 2)]);
+    const { posted, deliver } = setup({ jupyterapp: app });
+    deliver(
+      makeMessage('notebook/apply', {
+        requestId: 'r3',
+        op: { kind: 'insert_before', index: 1, cellId: 'b', source: '%pip install qutip' },
+      }),
+    );
+    expect(sources()).toEqual(['x = 1', '%pip install qutip', 'x = 1']);
+    expect(notebook.activeCellIndex).toBe(1);
+    const added = applied(posted)?.cellId;
+    expect(added).toBe('added-1');
+    deliver(
+      makeMessage('notebook/apply', {
+        requestId: 'r4',
+        op: { kind: 'delete', cellId: added ?? '', expected: '%pip install qutip' },
+      }),
+    );
+    expect(sources()).toEqual(['x = 1', 'x = 1']);
+  });
+
+  it('finds the cell by id after cells moved, and says when it is gone', () => {
+    const { app, sources } = fakeApp([codeCell('a', 1), codeCell('b', 2)]);
+    const { posted, deliver } = setup({ jupyterapp: app });
+    deliver(
+      makeMessage('notebook/apply', {
+        requestId: 'r5',
+        op: { kind: 'replace', index: 0, cellId: 'b', expected: 'x = 1', source: 'moved' },
+      }),
+    );
+    expect(sources()).toEqual(['x = 1', 'moved']);
+    deliver(
+      makeMessage('notebook/apply', {
+        requestId: 'r6',
+        op: { kind: 'replace', index: 0, cellId: 'zzz', expected: 'x', source: 'y' },
+      }),
+    );
+    expect(applied(posted)).toMatchObject({ ok: false, error: 'gone' });
   });
 });

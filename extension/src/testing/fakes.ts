@@ -21,13 +21,51 @@ export function fakeTransport() {
   };
 }
 
-/** The objects window.jupyterapp leads to, shaped like Notebook 7's. */
+/** The objects window.jupyterapp leads to, shaped like Notebook 7's, with an editable shared model. */
 export function fakeApp(cells: Record<string, unknown>[], path = 'work/control.ipynb') {
-  const models = cells.map((json) => ({ id: json.id, toJSON: () => structuredClone(json) }));
+  let added = 0;
+  const makeModel = (json: Record<string, unknown>) => {
+    const state = {
+      json: structuredClone(json),
+      source: typeof json.source === 'string' ? json.source : '',
+    };
+    return {
+      id: json.id,
+      toJSON: () => ({ ...structuredClone(state.json), source: state.source }),
+      sharedModel: {
+        getSource: () => state.source,
+        setSource: (s: string) => {
+          state.source = s;
+        },
+      },
+    };
+  };
+  const models = cells.map(makeModel);
+  const cellList = {
+    get length() {
+      return models.length;
+    },
+    get: (i: number) => models[i],
+  };
   const notebook = {
-    model: { cells: { length: models.length, get: (i: number) => models[i] } },
+    model: {
+      cells: cellList,
+      sharedModel: {
+        insertCell(index: number, cell: { cell_type: 'code'; source: string }) {
+          const id = `added-${String(++added)}`;
+          const m = makeModel({ ...cell, id, outputs: [], metadata: {}, execution_count: null });
+          models.splice(index, 0, m);
+          return { id };
+        },
+        deleteCell(index: number) {
+          models.splice(index, 1);
+        },
+      },
+    },
     activeCellIndex: 0,
-    widgets: models.map((m) => ({ cell: m })),
+    get widgets() {
+      return models.map((m) => ({ cell: m }));
+    },
     scrolledTo: null as unknown,
     scrollToCell(cell: unknown) {
       this.scrolledTo = cell;
@@ -38,5 +76,6 @@ export function fakeApp(cells: Record<string, unknown>[], path = 'work/control.i
     context: { path },
     sessionContext: { kernelDisplayName: 'Python 3.13 (Conda)', kernelDisplayStatus: 'idle' },
   };
-  return { app: { shell: { currentWidget: panel as unknown } }, panel, notebook };
+  const sources = () => models.map((m) => m.sharedModel.getSource());
+  return { app: { shell: { currentWidget: panel as unknown } }, panel, notebook, sources };
 }

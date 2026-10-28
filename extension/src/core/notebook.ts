@@ -15,10 +15,11 @@ const ErrorOutput = z.object({
 
 const Source = z.union([z.string(), z.array(z.string())]);
 
+const AnyCell = z.object({ cell_type: z.string(), source: Source.optional() });
+
 const CodeCell = z.object({
   cell_type: z.literal('code'),
   id: z.string().optional(),
-  // Optional: the page script leaves the source behind (src/adapters/jupyter/page.ts).
   source: Source.optional(),
   execution_count: z.number().int().nullable().optional(),
   outputs: z.array(z.unknown()),
@@ -36,17 +37,31 @@ export interface CellError {
   evalue: string;
   /** The traceback as plain text, colour codes removed. */
   traceback: string;
-  /** Where it was raised, as IPython names it: "Cell In[14], line 3" or "File ~/x.py:12, in f()". */
+  /** The notebook line that led to it, as IPython names it: "Cell In[14], line 3". */
   where: string | null;
-  /** The source line IPython marked with an arrow in the last frame, e.g. "x = a @ b". */
+  /** The source line IPython marked in that frame, e.g. "x = a @ b". */
   line: string | null;
+  /** The library frame that raised it, when that's not the notebook: "File h5py/h5f.pyx:106, in open()". */
+  raisedIn: string | null;
+  /** The cell's source when it ran (what a fix starts from). */
+  source: string;
+}
+
+/** Every cell's kind and source, in order: the context a fix is asked with. */
+export interface CellText {
+  kind: string;
+  source: string;
 }
 
 export interface NotebookSummary {
   cellCount: number;
   codeCellCount: number;
   errors: CellError[];
+  cells: CellText[];
 }
+
+const sourceText = (s: string | string[] | undefined) =>
+  Array.isArray(s) ? s.join('') : (s ?? '');
 
 // ESC [ ... final byte: covers the SGR colour codes IPython writes, and any other CSI.
 // eslint-disable-next-line no-control-regex
@@ -72,25 +87,48 @@ export function tidy(traceback: string): string {
 const FRAME = /^(Cell In\s*\[\d*\],\s*line \d+|File \S.*?(?::\d+)?(?:, in .+)?)\s*$/;
 const ARROW = /^\s*-+>\s*\d+\s(.*)$/;
 
+interface Frame {
+  where: string;
+  line: string | null;
+}
+
 /**
  * IPython 8+ tracebacks list frames as `Cell In[14], line 3` or
  * `File ~/lib/x.py:12, in f(a)`, each followed by numbered source lines with
- * `---->` on the one that ran. The last frame is where it was raised.
+ * `---->` on the one that ran.
  */
-export function locate(traceback: string): { where: string | null; line: string | null } {
-  let where: string | null = null;
-  let line: string | null = null;
+export function frames(traceback: string): Frame[] {
+  const out: Frame[] = [];
   for (const raw of traceback.split('\n')) {
     const frame = FRAME.exec(raw.trim());
     if (frame?.[1] !== undefined) {
-      where = frame[1];
-      line = null;
+      out.push({ where: frame[1], line: null });
       continue;
     }
     const arrow = ARROW.exec(raw);
-    if (arrow?.[1] !== undefined && where !== null) line = arrow[1].trim() || null;
+    const last = out.at(-1);
+    if (arrow?.[1] !== undefined && last !== undefined) last.line = arrow[1].trim() || null;
   }
-  return { where, line };
+  return out;
+}
+
+/**
+ * Where to look: the last frame in the notebook (that's the line you can change), and the
+ * library frame that raised, if the last frame isn't yours.
+ */
+export function locate(traceback: string): {
+  where: string | null;
+  line: string | null;
+  raisedIn: string | null;
+} {
+  const all = frames(traceback);
+  const last = all.at(-1);
+  const mine = all.filter((f) => f.where.startsWith('Cell In')).at(-1) ?? last;
+  return {
+    where: mine?.where ?? null,
+    line: mine?.line ?? null,
+    raisedIn: last !== undefined && last !== mine ? last.where : null,
+  };
 }
 
 /** The error that stopped the cell: a run raises at most once, so it is the last one. */
@@ -106,8 +144,15 @@ function errorOf(outputs: readonly unknown[]): z.infer<typeof ErrorOutput> | nul
 /** Counts the cells and lists every code cell whose outputs hold an error. */
 export function summarize(cells: readonly unknown[]): NotebookSummary {
   const errors: CellError[] = [];
+  const texts: CellText[] = [];
   let codeCellCount = 0;
   cells.forEach((raw, index) => {
+    const any = AnyCell.safeParse(raw);
+    texts.push(
+      any.success
+        ? { kind: any.data.cell_type, source: sourceText(any.data.source) }
+        : { kind: 'unknown', source: '' },
+    );
     const code = CodeCell.safeParse(raw);
     if (!code.success) return;
     codeCellCount += 1;
@@ -122,7 +167,8 @@ export function summarize(cells: readonly unknown[]): NotebookSummary {
       evalue: stripAnsi(err.evalue),
       traceback,
       ...locate(traceback),
+      source: sourceText(code.data.source),
     });
   });
-  return { cellCount: cells.length, codeCellCount, errors };
+  return { cellCount: cells.length, codeCellCount, errors, cells: texts };
 }

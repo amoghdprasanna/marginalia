@@ -37,6 +37,31 @@ export const PageProblem = z.enum([
 ]);
 export type PageProblem = z.infer<typeof PageProblem>;
 
+const Code = z.string().max(500_000);
+const RequestId = z.string().min(1).max(64);
+
+/**
+ * An edit the panel asks for, always after you press Apply or Undo. `expected` is what the
+ * cell held when the edit was made: if it changed since, the page refuses (stale).
+ */
+export const EditOp = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('replace'),
+    index: z.number().int().nonnegative(),
+    cellId: Name.nullable(),
+    expected: Code,
+    source: Code,
+  }),
+  z.object({
+    kind: z.literal('insert_before'),
+    index: z.number().int().nonnegative(),
+    cellId: Name.nullable(),
+    source: Code,
+  }),
+  z.object({ kind: z.literal('delete'), cellId: Name, expected: Code }),
+]);
+export type EditOp = z.infer<typeof EditOp>;
+
 const Message = z.discriminatedUnion('type', [
   /** Content script -> panel, on connect: what kind of Jupyter page this is. */
   envelope(
@@ -73,6 +98,19 @@ const Message = z.discriminatedUnion('type', [
     'notebook/reveal',
     z.object({ index: z.number().int().nonnegative(), cellId: Name.nullable() }),
   ),
+  /** Panel -> page: make this edit. */
+  envelope('notebook/apply', z.object({ requestId: RequestId, op: EditOp })),
+  /** Page -> panel. `cellId` is the cell that was changed or inserted, for Undo. */
+  envelope(
+    'notebook/applied',
+    z.object({
+      requestId: RequestId,
+      ok: z.boolean(),
+      cellId: Name.nullable().optional(),
+      error: z.enum(['stale', 'gone', 'unavailable']).optional(),
+      detail: z.string().max(500).optional(),
+    }),
+  ),
   envelope(
     'notebook/revealed',
     z.object({ ok: z.boolean(), detail: z.string().max(500).optional() }),
@@ -101,8 +139,13 @@ export const FROM_PAGE: ReadonlySet<MessageType> = new Set([
   'page/status',
   'notebook/snapshot',
   'notebook/revealed',
+  'notebook/applied',
 ]);
 /** What the page script accepts. */
-export const TO_PAGE: ReadonlySet<MessageType> = new Set(['notebook/watch', 'notebook/reveal']);
+export const TO_PAGE: ReadonlySet<MessageType> = new Set([
+  'notebook/watch',
+  'notebook/reveal',
+  'notebook/apply',
+]);
 /** What a panel may ask the page for (watching is the content script's job). */
-export const FROM_PANEL: ReadonlySet<MessageType> = new Set(['notebook/reveal']);
+export const FROM_PANEL: ReadonlySet<MessageType> = new Set(['notebook/reveal', 'notebook/apply']);

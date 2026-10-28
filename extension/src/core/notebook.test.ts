@@ -18,21 +18,34 @@ describe('tidy', () => {
 });
 
 describe('locate', () => {
-  it('finds the last frame and the line it marked', () => {
+  it('points at the notebook line, and names the library frame that raised', () => {
     const text = stripAnsi(MATMUL_TRACEBACK.join('\n'));
     expect(locate(text)).toEqual({
-      where: 'File ~/work/control.py:12, in evolve(h, psi)',
-      line: 'return h @ psi',
+      where: 'Cell In[14], line 3',
+      line: 'c = evolve(a, b)',
+      raisedIn: 'File ~/work/control.py:12, in evolve(h, psi)',
     });
   });
 
-  it('names a notebook cell frame', () => {
+  it('has no library frame when the notebook raised it', () => {
     const text = stripAnsi(MATMUL_TRACEBACK.slice(0, 3).join('\n'));
-    expect(locate(text)).toEqual({ where: 'Cell In[14], line 3', line: 'c = evolve(a, b)' });
+    expect(locate(text)).toEqual({
+      where: 'Cell In[14], line 3',
+      line: 'c = evolve(a, b)',
+      raisedIn: null,
+    });
+  });
+
+  it('falls back to the last frame outside the notebook', () => {
+    expect(locate('File h5py/h5f.pyx:106, in h5py.h5f.open()\nOSError: x')).toEqual({
+      where: 'File h5py/h5f.pyx:106, in h5py.h5f.open()',
+      line: null,
+      raisedIn: null,
+    });
   });
 
   it('gives nothing for a traceback it does not recognise', () => {
-    expect(locate('KeyboardInterrupt')).toEqual({ where: null, line: null });
+    expect(locate('KeyboardInterrupt')).toEqual({ where: null, line: null, raisedIn: null });
   });
 });
 
@@ -54,9 +67,13 @@ describe('summarize', () => {
       executionCount: 14,
       ename: 'ValueError',
       evalue: 'matmul: mismatch',
-      where: 'File ~/work/control.py:12, in evolve(h, psi)',
+      where: 'Cell In[14], line 3',
+      raisedIn: 'File ~/work/control.py:12, in evolve(h, psi)',
+      source: 'x = 1',
     });
     expect(s.errors[0]?.traceback).not.toContain('\u001b');
+    expect(s.cells.map((c) => c.kind)).toEqual(['markdown', 'code', 'code', 'code']);
+    expect(s.cells[0]?.source).toBe('# Utilities');
   });
 
   it('skips what is not a cell instead of failing', () => {
