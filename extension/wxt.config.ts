@@ -37,7 +37,8 @@ export default defineConfig({
     description:
       'Shows which cells in your Jupyter notebook raised an error, and fixes them with Claude when you say so.',
     key: PUBLIC_KEY,
-    minimum_chrome_version: '116',
+    // 135: light-dark(), interpolate-size and the styleable <select> need no fallbacks.
+    minimum_chrome_version: '135',
     // nativeMessaging: the desktop helper that asks Claude (docs/adr/0030).
     permissions: ['sidePanel', 'storage', 'scripting', 'nativeMessaging'],
     host_permissions: e2e ? ['http://127.0.0.1/*'] : [],

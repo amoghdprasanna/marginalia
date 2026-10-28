@@ -42,7 +42,7 @@ test('Fix with Claude proposes a diff, Apply changes the cell, Undo puts it back
   const before = await sources(page);
 
   await panel.getByRole('button', { name: 'Fix with Claude' }).click();
-  await expect(panel.getByText('Claude is reading the notebook')).toBeVisible();
+  await expect(panel.getByText(/Claude is reading 4 cells/)).toBeVisible();
   await expect(panel.getByText('psi has 3 rows but h is 4 by 4.')).toBeVisible();
   const diff = panel.locator('.diff');
   await expect(diff.locator('figcaption')).toHaveText('Change to cell 4');
@@ -115,7 +115,7 @@ test('the model menu picks who answers, and the proposal says who did', async ({
   await menu.selectOption({ label: 'Claude Fast' });
 
   await panel.getByRole('button', { name: 'Fix with Claude' }).click();
-  await expect(panel.getByText('Proposed by Claude Fast')).toBeVisible();
+  await expect(panel.getByText('Claude Fast suggests')).toBeVisible();
 
   // Remembered: a new panel starts on the same model.
   await panel.reload();

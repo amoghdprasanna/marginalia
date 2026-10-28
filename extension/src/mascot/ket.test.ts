@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   BELL,
+  COLORS,
   ICON_SIZES,
   iconArt,
   ket,
@@ -46,7 +47,7 @@ describe('ket', () => {
       ket({ face: 'worried', alarm }).find((s) => s.part === 'needle' && s.fill !== undefined)
         ?.fill;
     expect(dot(true)).toBe('#F2735F');
-    expect(dot(false)).toBe('#1B2031');
+    expect(dot(false)).toBe(COLORS.ink);
   });
 
   it('keeps each part together, so the panel can animate it as one group', () => {

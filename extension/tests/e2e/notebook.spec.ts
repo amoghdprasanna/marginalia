@@ -13,16 +13,16 @@ test('lists the cell that raised, with where and why', async ({ context, openPan
   await openNotebook(page, EXPOSED, 'control.ipynb');
   const panel = await openPanel(page);
 
-  await expect(panel.getByRole('heading', { name: '1 cell raised an error' })).toBeVisible();
-  await expect(panel.locator('.file')).toHaveText('control.ipynb');
-  const card = panel.locator('.item');
-  await expect(card.getByRole('heading', { name: 'ValueError' })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: '1 error' })).toBeVisible();
+  await expect(panel.locator('.notebook')).toHaveText('control.ipynb');
+  const card = panel.locator('.note');
+  await expect(card.locator('.ename')).toHaveText('ValueError');
   await expect(card).toContainText('size 3 is different from 4');
   await expect(card).toContainText('Cell In[3], line 3');
-  await expect(card.locator('.item-line')).toHaveText('h @ psi');
-  await expect(card.locator('.chip')).toHaveText('Cell 4');
+  await expect(card.locator('.source-line')).toHaveText('h @ psi');
+  await expect(card.getByRole('button', { name: 'Go to cell 4' })).toHaveText('4');
   // The traceback stays folded until you ask for it.
-  await expect(card.locator('.details')).toHaveCount(0);
+  await expect(card.locator('.details')).toBeHidden();
   await card.getByRole('button', { name: 'Details' }).click();
   await expect(card.locator('.details pre')).toContainText('Traceback (most recent call last)');
 });
@@ -32,7 +32,7 @@ test('Go to cell selects that cell in the notebook', async ({ context, openPanel
   await openNotebook(page, EXPOSED, 'control.ipynb');
   const panel = await openPanel(page);
 
-  await panel.getByRole('button', { name: 'Go to cell' }).click();
+  await panel.getByRole('button', { name: 'Go to cell', exact: true }).click();
   await expect
     .poll(() =>
       page.evaluate(
@@ -75,21 +75,21 @@ test('a new error shows up as soon as the cell runs', async ({ context, openPane
     await app.commands.execute('notebook:run-cell');
   });
 
-  await expect(panel.getByRole('heading', { name: '1 cell raised an error' })).toBeVisible({
+  await expect(panel.getByRole('heading', { name: '1 error' })).toBeVisible({
     timeout: 30_000,
   });
-  await expect(panel.locator('.item')).toContainText('ZeroDivisionError');
+  await expect(panel.locator('.note')).toContainText('ZeroDivisionError');
 });
 
 test('reconnects after the notebook tab reloads', async ({ context, openPanel }) => {
   const page = await context.newPage();
   await openNotebook(page, EXPOSED, 'control.ipynb');
   const panel = await openPanel(page);
-  await expect(panel.getByRole('heading', { name: '1 cell raised an error' })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: '1 error' })).toBeVisible();
 
   await page.reload();
   await expect(page.locator('.jp-Notebook .jp-Cell').first()).toBeVisible({ timeout: 30_000 });
-  await expect(panel.getByRole('heading', { name: '1 cell raised an error' })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: '1 error' })).toBeVisible();
   await expect(panel.getByText('Reload to connect')).toHaveCount(0);
 });
 

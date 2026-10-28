@@ -3,9 +3,9 @@ import { browser } from 'wxt/browser';
 import { CHECK_COMMAND, EXPECTED_ID, INSTALL_COMMAND } from '@/src/adapters/helper';
 import { SERVER_CONFIG_LINES } from '@/src/core/access';
 import { diffLines, hunks } from '@/src/core/diff';
-import { sitePattern } from '@/src/core/site';
 import type { CellError } from '@/src/core/notebook';
-import { useClaude, type Claude, type ClaudeStatus, type NotebookContext } from './claude';
+import { sitePattern } from '@/src/core/site';
+import { useClaude, type Claude, type NotebookContext } from './claude';
 import { useNotebook, type Notebook } from './connection';
 import { appliedText, fixKey, type FixState, type Proposal } from './fixes';
 import { Icon } from './icons';
@@ -30,9 +30,11 @@ function moodOf(view: View, claude: Claude): Mood {
       return 'awake';
     case 'problem':
       return view.problem === 'no-notebook' ? 'awake' : 'worried';
-    case 'ready':
-      if (view.summary.errors.length > 0) return 'worried';
+    case 'ready': {
+      const open = view.summary.errors.filter((e) => claude.fixes[fixKey(e)]?.kind !== 'applied');
+      if (open.length > 0) return 'worried';
       return view.kernel.status === 'busy' ? 'thinking' : 'happy';
+    }
   }
 }
 
@@ -56,7 +58,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   return (
     <button
       type="button"
-      className="btn ghost"
+      className="btn quiet"
       onClick={() => {
         void navigator.clipboard.writeText(text).then(() => {
           setCopied(true);
@@ -86,22 +88,72 @@ function CodeBlock({ file, text }: { file: string; text: string }) {
 }
 
 function Header({ view, claude }: { view: View; claude: Claude }) {
-  const ready = view.kind === 'ready' ? splitPath(view.path) : null;
+  const file = view.kind === 'ready' ? splitPath(view.path) : null;
   return (
     <header className="header">
-      <Ket mood={moodOf(view, claude)} celebrate={claude.landed} />
+      <Ket mood={moodOf(view, claude)} size={72} celebrate={claude.landed} />
       <div className="header-text">
-        <h1 className="brand">Marginalia</h1>
-        {ready !== null ? (
-          <p className="file" title={view.kind === 'ready' ? view.path : undefined}>
-            <Icon name="notebook" />
-            <span>{ready.name}</span>
-          </p>
+        {file !== null ? (
+          <>
+            <h1 className="notebook" title={view.kind === 'ready' ? view.path : undefined}>
+              {file.name}
+            </h1>
+            {file.folder !== null && <p className="folder">{file.folder}</p>}
+          </>
         ) : (
-          <p className="file muted">Jupyter notebooks</p>
+          <>
+            <h1 className="notebook">Marginalia</h1>
+            <p className="folder">Reads your Jupyter notebook and fixes errors with Claude.</p>
+          </>
         )}
       </div>
     </header>
+  );
+}
+
+function ModelMenu({ claude }: { claude: Claude }) {
+  const { status, model } = claude;
+  if (status.kind === 'checking') return <span className="status-claude muted">Connecting…</span>;
+  if (status.kind === 'unavailable')
+    return (
+      <span className="status-claude warn" title={status.message}>
+        <Icon name="sparkle" />
+        Claude not connected
+      </span>
+    );
+  if (!status.hasKey)
+    return (
+      <span className="status-claude warn">
+        <Icon name="sparkle" />
+        No Claude key
+      </span>
+    );
+  if (status.models.length === 0)
+    return (
+      <span className="status-claude">
+        <Icon name="sparkle" />
+        {status.modelName}
+      </span>
+    );
+  const note = status.models.find((m) => m.id === model)?.note;
+  return (
+    <label className="status-claude" title={note}>
+      <Icon name="sparkle" />
+      <span className="visually-hidden">Model for fixes</span>
+      <select
+        className="model-select"
+        value={model ?? status.defaultModel}
+        onChange={(e) => {
+          claude.setModel(e.target.value);
+        }}
+      >
+        {status.models.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -116,67 +168,27 @@ function StatusBar({ view, claude }: { view: View; claude: Claude }) {
       </>
     );
   } else if (view.kind === 'needs-setting') left = 'Needs a server setting';
-  else if (view.kind === 'needs-permission') left = 'Not allowed yet';
+  else if (view.kind === 'needs-permission') left = 'No sites allowed yet';
   else if (view.kind === 'reading') left = 'Reading';
   else if (view.kind === 'not-jupyter' || view.kind === 'other-site') left = 'Nothing to read';
   return (
     <footer className="statusbar">
       <span className="status-left">{left}</span>
-      <ClaudeBadge claude={claude} />
+      <ModelMenu claude={claude} />
     </footer>
   );
 }
 
-function ClaudeBadge({ claude }: { claude: Claude }) {
-  const { status, model } = claude;
-  if (status.kind === 'checking') return <span className="badge muted">Connecting to Claude</span>;
-  if (status.kind === 'unavailable')
-    return (
-      <span className="badge warn" title={status.message}>
-        <Icon name="sparkle" />
-        Claude not connected
-      </span>
-    );
-  if (!status.hasKey)
-    return (
-      <span className="badge warn">
-        <Icon name="sparkle" />
-        No Claude key
-      </span>
-    );
-  if (status.models.length === 0)
-    return (
-      <span className="badge">
-        <Icon name="sparkle" />
-        {status.modelName}
-      </span>
-    );
-  const note = status.models.find((m) => m.id === model)?.note;
+function Note({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <label className="badge model" title={note}>
-      <Icon name="sparkle" />
-      <span className="visually-hidden">Model for fixes</span>
-      <select
-        value={model ?? status.defaultModel}
-        onChange={(e) => {
-          claude.setModel(e.target.value);
-        }}
-      >
-        {status.models.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.name}
-          </option>
-        ))}
-      </select>
-      <Icon name="chevron" className="select-chevron" />
-    </label>
+    <section className="message">
+      <h2 className="message-title">{title}</h2>
+      {children}
+    </section>
   );
 }
 
-/**
- * Add a site by its address. Chrome then asks you about that one site; nothing else is
- * granted.
- */
+/** Add a site by its address. Chrome then asks you about that one site; nothing else is granted. */
 function SiteForm({
   onAdd,
   label,
@@ -236,11 +248,75 @@ function SiteForm({
   );
 }
 
-function Note({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * Shown above the list while Claude can't be asked: what's wrong, turned into steps, and
+ * Check again. Each problem has its own fix.
+ */
+function ConnectClaude({ claude }: { claude: Claude }) {
+  const { status } = claude;
+  if (status.kind === 'checking') return null;
+  if (status.kind === 'ready' && status.hasKey) return null;
+  let title = 'Connect Claude';
+  let body: ReactNode;
+  if (status.kind === 'ready') {
+    title = 'Add your Claude key';
+    body = (
+      <p>
+        Marginalia&rsquo;s helper is connected but has no Claude API key. Add one in
+        Marginalia&rsquo;s Settings on this computer, under AI model, then check again.
+      </p>
+    );
+  } else if (status.problem === 'missing') {
+    body = (
+      <>
+        <p>
+          Fixes come from Marginalia on this computer, with the Claude key from its keychain, so no
+          key lives in the browser. Run this once in a terminal, in the Python environment
+          Marginalia is installed in (in a source checkout, prefix it with <code>.venv/bin/</code>
+          ):
+        </p>
+        <CodeBlock file="Terminal" text={INSTALL_COMMAND} />
+      </>
+    );
+  } else if (status.problem === 'forbidden') {
+    const id = browser.runtime.id;
+    body =
+      id === EXPECTED_ID ? (
+        <>
+          <p>
+            The helper on this computer was set up for another copy of Marginalia. Set it up again:
+          </p>
+          <CodeBlock file="Terminal" text={INSTALL_COMMAND} />
+        </>
+      ) : (
+        <p>
+          The helper only answers Marginalia&rsquo;s own id, and this copy has a different one (
+          <code>{id}</code>), usually because it was reloaded from an older build. In{' '}
+          <code>chrome://extensions</code>, remove Marginalia, then Load unpacked the{' '}
+          <code>extension/.output/chrome-mv3</code> folder again.
+        </p>
+      );
+  } else {
+    body = (
+      <>
+        <p>The helper started, then stopped. This shows what went wrong:</p>
+        <CodeBlock file="Terminal" text={CHECK_COMMAND} />
+      </>
+    );
+  }
   return (
-    <section className="note">
-      <h2 className="title">{title}</h2>
-      {children}
+    <section className="connect" aria-labelledby="connect-title">
+      <h2 className="connect-title" id="connect-title">
+        <Icon name="sparkle" />
+        {title}
+      </h2>
+      {body}
+      {status.kind === 'unavailable' && <p className="fine">Chrome said: {status.message}</p>}
+      <div className="actions">
+        <button type="button" className="btn primary" onClick={claude.recheck}>
+          Check again
+        </button>
+      </div>
     </section>
   );
 }
@@ -249,13 +325,13 @@ function Diff({ proposal }: { proposal: Proposal }) {
   const { kind, source } = proposal.reply.fix;
   const lines =
     kind === 'insert_before' ? diffLines('', source) : diffLines(proposal.expected, source);
-  const caption =
-    kind === 'insert_before'
-      ? `New cell before cell ${String(proposal.cellNumber)}`
-      : `Change to cell ${String(proposal.cellNumber)}`;
   return (
     <figure className="diff">
-      <figcaption>{caption}</figcaption>
+      <figcaption>
+        {kind === 'insert_before'
+          ? `New cell before cell ${String(proposal.cellNumber)}`
+          : `Change to cell ${String(proposal.cellNumber)}`}
+      </figcaption>
       <pre>
         {hunks(lines).map((l, i) =>
           l.kind === 'skip' ? (
@@ -279,109 +355,64 @@ function Diff({ proposal }: { proposal: Proposal }) {
   );
 }
 
-/**
- * Shown above everything while Claude can't be asked: what's wrong, in Chrome's terms turned
- * into steps, and Check again. Each problem has its own fix.
- */
-function ConnectClaude({ status, onCheck }: { status: ClaudeStatus; onCheck: () => void }) {
-  if (status.kind === 'checking') return null;
-  if (status.kind === 'ready' && status.hasKey) return null;
-  let title = 'Connect Claude';
-  let body: ReactNode;
-  if (status.kind === 'ready') {
-    title = 'Add your Claude key';
-    body = (
-      <p>
-        Marginalia&rsquo;s helper is connected, but it has no Claude API key. Add one in
-        Marginalia&rsquo;s Settings on this Mac, under AI model, then check again.
-      </p>
-    );
-  } else if (status.problem === 'missing') {
-    body = (
-      <>
-        <p>
-          Fixes come from Marginalia on this Mac, with the Claude key from its keychain, so no key
-          lives in the browser. Chrome can&rsquo;t find Marginalia&rsquo;s helper yet. Run this once
-          in Terminal, in the Python environment Marginalia is installed in (in a source checkout,
-          prefix it with <code>.venv/bin/</code>):
-        </p>
-        <CodeBlock file="Terminal" text={INSTALL_COMMAND} />
-      </>
-    );
-  } else if (status.problem === 'forbidden') {
-    const id = browser.runtime.id;
-    body =
-      id === EXPECTED_ID ? (
-        <>
-          <p>The helper on this Mac was set up for another copy of Marginalia. Set it up again:</p>
-          <CodeBlock file="Terminal" text={INSTALL_COMMAND} />
-        </>
-      ) : (
-        <p>
-          The helper only answers Marginalia&rsquo;s own id, and this copy of the extension has a
-          different one (<code>{id}</code>), usually because it was reloaded from an older build. In{' '}
-          <code>chrome://extensions</code>, remove Marginalia, then choose Load unpacked and pick
-          the <code>extension/.output/chrome-mv3</code> folder again.
-        </p>
-      );
-  } else {
-    body = (
-      <>
-        <p>The helper started, then stopped. This shows what went wrong:</p>
-        <CodeBlock file="Terminal" text={CHECK_COMMAND} />
-      </>
-    );
-  }
-  return (
-    <section className="connect" aria-labelledby="connect-title">
-      <h2 className="connect-title" id="connect-title">
-        <Icon name="sparkle" />
-        {title}
-      </h2>
-      {body}
-      {status.kind === 'unavailable' && (
-        <p className="muted small">Chrome said: {status.message}</p>
-      )}
-      <div className="actions">
-        <button type="button" className="btn primary" onClick={onCheck}>
-          Check again
-        </button>
-      </div>
-    </section>
-  );
-}
-
 /** "Claude Sonnet 5.5" for an id the helper listed; the id itself otherwise. */
 function modelName(claude: Claude, id: string): string {
   if (claude.status.kind !== 'ready') return id;
   return claude.status.models.find((m) => m.id === id)?.name ?? id;
 }
 
+/** Claude's reasoning: three lines, and the rest on request. */
+function Reasoning({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 220;
+  return (
+    <div className="reasoning">
+      <p className={long && !open ? 'clamp-3' : undefined}>{text}</p>
+      {long && (
+        <button
+          type="button"
+          className="link"
+          aria-expanded={open}
+          onClick={() => {
+            setOpen((o) => !o);
+          }}
+        >
+          {open ? 'Less' : 'More'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function FixArea({
   state,
   claude,
   fkey,
+  cells,
   onAsk,
 }: {
   state: FixState;
   claude: Claude;
   fkey: string;
+  cells: number;
   onAsk: () => void;
 }) {
-  const since = state.kind === 'asking' ? state.since : null;
-  const seconds = useSeconds(since);
+  const seconds = useSeconds(state.kind === 'asking' ? state.since : null);
   switch (state.kind) {
     case 'idle':
       return null;
     case 'asking':
       return (
-        <div className="fix" role="status">
-          <p className="working">
-            <span className="pulse" aria-hidden="true" />
-            Claude is reading the notebook{seconds >= 3 ? ` (${String(seconds)} s)` : '…'}
+        <div className="suggestion asking" role="status">
+          <p className="suggestion-by">
+            <Icon name="sparkle" />
+            Claude is reading {cells} {cells === 1 ? 'cell' : 'cells'}
+            {seconds >= 2 ? ` (${String(seconds)} s)` : '…'}
           </p>
+          <span className="skeleton" aria-hidden="true" />
+          <span className="skeleton short" aria-hidden="true" />
           <div className="actions">
-            <button type="button" className="btn ghost" onClick={() => claude.stop(fkey)}>
+            <button type="button" className="btn quiet" onClick={() => claude.stop(fkey)}>
               Stop
             </button>
           </div>
@@ -392,64 +423,58 @@ function FixArea({
       const { reply } = state.proposal;
       const busy = state.kind === 'applying';
       return (
-        <div className="fix">
-          <p className="fix-summary">{reply.summary}</p>
-          <p className="fix-why">{reply.explanation}</p>
-          <p className="muted small">Proposed by {modelName(claude, reply.model)}</p>
-          {reply.fix.kind === 'none' ? (
-            <div className="actions">
+        <div className="suggestion">
+          <p className="suggestion-by">
+            <Icon name="sparkle" />
+            {modelName(claude, reply.model)} suggests
+          </p>
+          <p className="suggestion-summary">{reply.summary}</p>
+          <Reasoning text={reply.explanation} />
+          {reply.fix.kind !== 'none' && <Diff proposal={state.proposal} />}
+          <div className="actions">
+            {reply.fix.kind === 'none' ? (
               <button type="button" className="btn" onClick={onAsk}>
                 Ask again
               </button>
-              <button type="button" className="btn ghost" onClick={() => claude.dismiss(fkey)}>
-                Dismiss
+            ) : (
+              <button
+                type="button"
+                className="btn primary"
+                aria-busy={busy}
+                disabled={busy}
+                onClick={() => claude.apply(fkey)}
+              >
+                {busy && <span className="spinner" aria-hidden="true" />}
+                {busy ? 'Applying' : 'Apply'}
               </button>
-            </div>
-          ) : (
-            <>
-              <Diff proposal={state.proposal} />
-              <div className="actions">
-                <button
-                  type="button"
-                  className="btn primary"
-                  disabled={busy}
-                  onClick={() => claude.apply(fkey)}
-                >
-                  {busy ? 'Applying…' : 'Apply'}
-                </button>
-                <button
-                  type="button"
-                  className="btn ghost"
-                  disabled={busy}
-                  onClick={() => claude.dismiss(fkey)}
-                >
-                  Dismiss
-                </button>
-              </div>
-            </>
-          )}
+            )}
+            <button
+              type="button"
+              className="btn quiet"
+              disabled={busy}
+              onClick={() => claude.dismiss(fkey)}
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       );
     }
     case 'applied':
     case 'undoing':
       return (
-        <div className="fix done" role="status">
-          <p className="applied">
-            <Icon name="check" />
-            {appliedText(state.proposal)}
-          </p>
-          <div className="actions">
-            <button
-              type="button"
-              className="btn ghost"
-              disabled={state.kind === 'undoing'}
-              onClick={() => claude.undo(fkey)}
-            >
-              <Icon name="undo" />
-              {state.kind === 'undoing' ? 'Undoing…' : 'Undo'}
-            </button>
-          </div>
+        <div className="outcome ok" role="status">
+          <Icon name="check" />
+          <p>{appliedText(state.proposal)}</p>
+          <button
+            type="button"
+            className="btn quiet"
+            disabled={state.kind === 'undoing'}
+            onClick={() => claude.undo(fkey)}
+          >
+            <Icon name="undo" />
+            {state.kind === 'undoing' ? 'Undoing' : 'Undo'}
+          </button>
         </div>
       );
     case 'failed':
@@ -459,25 +484,23 @@ function FixArea({
         state.problem === 'exited'
       )
         return (
-          <div className="fix failed" role="alert">
-            <p className="fix-error">
-              Claude isn&rsquo;t connected. The steps are at the top of the panel.
-            </p>
+          <div className="outcome bad" role="alert">
+            <p>Claude isn&rsquo;t connected. The steps are at the top of the panel.</p>
           </div>
         );
       return (
-        <div className="fix failed" role="alert">
-          <p className="fix-error">{state.message}</p>
-          {state.action === 'settings' && (
-            <p className="fix-why">Open Marginalia&rsquo;s Settings on this Mac, under AI model.</p>
-          )}
-          <div className="actions">
+        <div className="outcome bad" role="alert">
+          <p>
+            {state.message}
+            {state.action === 'settings' && ' Open Marginalia’s Settings, under AI model.'}
+          </p>
+          <div className="outcome-actions">
             {state.action !== 'settings' && (
               <button type="button" className="btn" onClick={onAsk}>
                 {state.problem === 'stale' ? 'Ask again' : 'Try again'}
               </button>
             )}
-            <button type="button" className="btn ghost" onClick={() => claude.dismiss(fkey)}>
+            <button type="button" className="btn quiet" onClick={() => claude.dismiss(fkey)}>
               Dismiss
             </button>
           </div>
@@ -486,7 +509,7 @@ function FixArea({
   }
 }
 
-function ErrorItem({
+function ErrorNote({
   error,
   context,
   nb,
@@ -502,69 +525,89 @@ function ErrorItem({
   const state = claude.fixes[fkey] ?? { kind: 'idle' };
   const ask = () => claude.ask(error, context);
   const ready = claude.status.kind === 'ready' && claude.status.hasKey;
-  const canAsk = state.kind === 'idle';
   const detailsId = `details-${fkey}`;
+  const cell = error.index + 1;
+  const fixed = state.kind === 'applied' || state.kind === 'undoing';
   return (
-    <li className="item">
-      <div className="item-head">
-        <Icon name="error" className="item-icon" />
-        <h3 className="item-title">{error.ename}</h3>
-        <span className="chip">Cell {error.index + 1}</span>
-      </div>
-      {error.evalue !== '' && <p className="item-msg">{error.evalue}</p>}
-      {error.where !== null && (
-        <div className="item-where">
-          <span>{error.where}</span>
-          {error.line !== null && <code className="item-line">{error.line}</code>}
-          {error.raisedIn !== null && <span className="muted">Raised in {error.raisedIn}</span>}
-        </div>
-      )}
-      <div className="actions">
-        {canAsk && (
+    <li className="note" data-fixed={fixed ? '' : undefined}>
+      <button
+        type="button"
+        className="marker"
+        onClick={() => nb.reveal(error.index, error.cellId)}
+        aria-label={`Go to cell ${String(cell)}`}
+        title={`Go to cell ${String(cell)}`}
+      >
+        {fixed ? <Icon name="check" /> : cell}
+      </button>
+      <div className="note-body">
+        <p className="ename">{error.ename}</p>
+        {error.evalue !== '' && (
+          <h3 className="evalue clamp-2" title={error.evalue}>
+            {error.evalue}
+          </h3>
+        )}
+        {error.line !== null && (
+          <code className="source-line" title={error.where ?? undefined}>
+            {error.line}
+          </code>
+        )}
+        <div className="actions">
+          {state.kind === 'idle' && (
+            <button
+              type="button"
+              className="btn primary"
+              onClick={ask}
+              disabled={!ready}
+              title={
+                ready ? undefined : 'Connect Claude first: the steps are at the top of the panel.'
+              }
+            >
+              <Icon name="sparkle" />
+              Fix with Claude
+            </button>
+          )}
           <button
             type="button"
-            className="btn primary"
-            onClick={ask}
-            disabled={!ready}
-            title={
-              ready ? undefined : 'Connect Claude first: the steps are at the top of the panel.'
-            }
+            className="btn quiet"
+            onClick={() => nb.reveal(error.index, error.cellId)}
           >
-            <Icon name="sparkle" />
-            Fix with Claude
+            <Icon name="goto" />
+            Go to cell
           </button>
-        )}
-        <button
-          type="button"
-          className="btn ghost"
-          onClick={() => nb.reveal(error.index, error.cellId)}
-        >
-          <Icon name="goto" />
-          Go to cell
-        </button>
-        <button
-          type="button"
-          className="btn ghost disclose"
-          aria-expanded={open}
-          aria-controls={detailsId}
-          onClick={() => {
-            setOpen((o) => !o);
-          }}
-        >
-          <Icon name="chevron" />
-          Details
-        </button>
-      </div>
-      {open && (
-        <div className="details" id={detailsId}>
+          <button
+            type="button"
+            className="btn quiet disclose"
+            aria-expanded={open}
+            aria-controls={detailsId}
+            onClick={() => {
+              setOpen((o) => !o);
+            }}
+          >
+            <Icon name="chevron" />
+            Details
+          </button>
+        </div>
+        <div className="details" id={detailsId} hidden={!open}>
+          {error.where !== null && (
+            <p className="fine">
+              {error.where}
+              {error.raisedIn !== null && `, raised in ${error.raisedIn}`}
+            </p>
+          )}
           <pre>{error.traceback}</pre>
           <CopyButton
             text={`${error.ename}: ${error.evalue}\n\n${error.traceback}`}
             label="Copy error"
           />
         </div>
-      )}
-      <FixArea state={state} claude={claude} fkey={fkey} onAsk={ask} />
+        <FixArea
+          state={state}
+          claude={claude}
+          fkey={fkey}
+          cells={context.summary.cellCount}
+          onAsk={ask}
+        />
+      </div>
     </li>
   );
 }
@@ -573,13 +616,13 @@ function Body({ nb, claude }: { nb: Notebook; claude: Claude }) {
   const { view } = nb;
   switch (view.kind) {
     case 'checking':
-      return <p className="muted">Looking at this tab…</p>;
+      return <p className="fine">Looking at this tab…</p>;
     case 'needs-permission':
       return (
-        <Note title="Read your notebooks">
+        <Note title="Choose where Marginalia may read">
           <p>
-            Marginalia reads Jupyter notebooks only on sites you allow, and Chrome asks you first.
-            Jupyter on this computer, or through an SSH tunnel, is on localhost.
+            It reads Jupyter notebooks only on sites you allow, and Chrome asks you first. Jupyter
+            on this computer, or through an SSH tunnel, is on localhost.
           </p>
           <div className="actions">
             <button type="button" className="btn primary" onClick={nb.allow}>
@@ -624,13 +667,13 @@ function Body({ nb, claude }: { nb: Notebook; claude: Claude }) {
             these lines to this file on the server, then start Jupyter again.
           </p>
           <CodeBlock file={CONFIG_FILE} text={CONFIG_TEXT} />
-          <p className="muted small">
+          <p className="fine">
             Restarting the kernel isn&rsquo;t enough: the server reads this file when it starts.
           </p>
         </Note>
       );
     case 'reading':
-      return <p className="muted">Reading the notebook…</p>;
+      return <p className="fine">Reading the notebook…</p>;
     case 'problem':
       if (view.problem === 'no-notebook')
         return (
@@ -651,7 +694,7 @@ function Body({ nb, claude }: { nb: Notebook; claude: Claude }) {
               ? 'The server setting is on, but the page never made the notebook available. Reload the tab; if it happens again, the server may be older than Notebook 7.'
               : 'Its notebook didn’t have the shape Marginalia expects, so reading stopped. Reloading may help.'}
           </p>
-          {view.detail !== null && <p className="muted small">{view.detail}</p>}
+          {view.detail !== null && <p className="fine">{view.detail}</p>}
           <div className="actions">
             <button type="button" className="btn primary" onClick={nb.reload}>
               Reload tab
@@ -669,30 +712,30 @@ function Body({ nb, claude }: { nb: Notebook; claude: Claude }) {
       if (errors.length === 0)
         return (
           <Note title="No cell has an error">
-            <p className="muted">
-              {codeCellCount} code {codeCellCount === 1 ? 'cell' : 'cells'}. An error shows up here
-              as soon as a cell raises one.
+            <p>
+              {codeCellCount} code {codeCellCount === 1 ? 'cell' : 'cells'}, all clear. An error
+              shows up here as soon as a cell raises one.
             </p>
           </Note>
         );
       return (
         <section>
-          <h2 className="title">
-            {errors.length} {errors.length === 1 ? 'cell raised an error' : 'cells raised errors'}
-          </h2>
-          <p className="muted small lede">
-            Claude proposes a change; nothing in the notebook changes until you press Apply.
-          </p>
+          <div className="list-head">
+            <h2 className="list-title">
+              {errors.length} {errors.length === 1 ? 'error' : 'errors'}
+            </h2>
+            <p className="fine">Nothing changes in the notebook until you press Apply.</p>
+          </div>
           {nb.revealProblem !== null && (
             <p className="reveal-problem" role="status">
               {nb.revealProblem}
             </p>
           )}
-          <ul className="items">
+          <ol className="thread">
             {errors.map((e) => (
-              <ErrorItem key={fixKey(e)} error={e} context={context} nb={nb} claude={claude} />
+              <ErrorNote key={fixKey(e)} error={e} context={context} nb={nb} claude={claude} />
             ))}
-          </ul>
+          </ol>
         </section>
       );
     }
@@ -706,9 +749,7 @@ export function App() {
     <div className="app">
       <Header view={nb.view} claude={claude} />
       <main className="main">
-        {nb.view.kind === 'ready' && (
-          <ConnectClaude status={claude.status} onCheck={claude.recheck} />
-        )}
+        {nb.view.kind === 'ready' && <ConnectClaude claude={claude} />}
         <Body nb={nb} claude={claude} />
       </main>
       <StatusBar view={nb.view} claude={claude} />

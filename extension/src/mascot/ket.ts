@@ -1,5 +1,6 @@
 /**
- * Ket, Marginalia's mascot: an original round, fluffy lamb with a soft, hand-made clay look,
+ * Ket, Marginalia's mascot: an enormous round fleece with a small dark face peeking out,
+ * placid half-lidded eyes and stubby legs, in a soft hand-made clay look,
  * on a 100×100 canvas. Its collar bell is a little Bloch sphere: the bell's needle is the
  * qubit's state, so a click "measures" it with the Born rule.
  *
@@ -10,13 +11,15 @@
 export const VIEW = 100;
 
 export const COLORS = {
-  ink: '#1B2031',
+  ink: '#1B1B22',
   white: '#FFFFFF',
-  woolShadow: '#CDBFA8',
-  ear: '#F0B49C',
-  earIn: '#F39C93',
-  cheek: '#FF9C8F',
-  tongue: '#F27C8C',
+  sclera: '#F7F4EF',
+  faceInk: '#F1ECE6', // lines drawn on the dark face
+  woolShadow: '#C9BCA7',
+  ear: '#4A4550',
+  earIn: '#C99A9A',
+  cheek: '#E58C8C',
+  tongue: '#E8778A',
   amberDeep: '#D98A00',
   error: '#F2735F',
   mark: '#8E96B0',
@@ -52,12 +55,12 @@ export const GRADIENTS = {
     ],
   },
   face: {
-    cx: 0.4,
-    cy: 0.32,
-    r: 0.8,
+    cx: 0.42,
+    cy: 0.3,
+    r: 0.85,
     stops: [
-      [0, '#FFF1E6'],
-      [1, '#F2C4AC'],
+      [0, '#6E6774'],
+      [1, '#3C3742'],
     ],
   },
   leg: {
@@ -65,8 +68,8 @@ export const GRADIENTS = {
     cy: 0.25,
     r: 0.9,
     stops: [
-      [0, '#535A75'],
-      [1, '#2A2F44'],
+      [0, '#5A5460'],
+      [1, '#2E2A33'],
     ],
   },
   bell: {
@@ -133,10 +136,10 @@ export function cloud(
   return `${d}Z`;
 }
 
-export const BELL = { cx: 50, cy: 78, r: 4.8 } as const;
+export const BELL = { cx: 50, cy: 76.5, r: 4.4 } as const;
 
 /** The bell's needle tip: θ from |0⟩ (up), in the bell's plane. */
-export function needle(theta: number, length = 3.9): { x: number; y: number } {
+export function needle(theta: number, length = 3.6): { x: number; y: number } {
   return { x: BELL.cx + length * Math.sin(theta), y: BELL.cy - length * Math.cos(theta) };
 }
 
@@ -150,109 +153,134 @@ export function measure(theta: number, random: () => number = Math.random): 0 | 
   return random() < probabilityOfZero(theta) ? 0 : 1;
 }
 
-const EYE_L = { x: 44.5, y: 61 };
-const EYE_R = { x: 55.5, y: 61 };
-const MOUTH_Y = 67.5;
+// The face: small and dark, low in an enormous fleece, eyes set close like a sheep's.
+const FACE = { cx: 50, cy: 61, rx: 12, ry: 12.2 } as const;
+const EYE_L = { x: 45.3, y: 59.8 };
+const EYE_R = { x: 54.7, y: 59.8 };
+const MOUTH_Y = 67.2;
 
-function openEye(p: { x: number; y: number }, dx: number, dy: number, r = 2.8): Shape[] {
-  return [
-    { part: 'face', d: circle(p.x + dx, p.y + dy, r), fill: COLORS.ink },
+/**
+ * An eye: white, a dark pupil looking `dx` sideways, a glint, and an upper lid that covers
+ * `lid` of it (0 open, 0.5 the placid half-closed look).
+ */
+function eye(p: { x: number; y: number }, dx: number, dy: number, lid: number, r = 3.2): Shape[] {
+  const shapes: Shape[] = [
+    { part: 'face', d: circle(p.x, p.y, r), fill: COLORS.sclera },
+    { part: 'face', d: circle(p.x + dx * 0.9, p.y + 0.3 + dy, r * 0.56), fill: COLORS.ink },
     {
       part: 'face',
-      d: circle(p.x + dx - r * 0.33, p.y + dy - r * 0.36, r * 0.36),
+      d: circle(p.x + dx * 0.9 - 0.55, p.y - 0.35 + dy, r * 0.2),
       fill: COLORS.white,
     },
   ];
+  if (lid > 0) {
+    // The lid: the top of the eye in face colour, with a soft line along its edge.
+    const y = p.y - r + 2 * r * lid;
+    shapes.push(
+      {
+        part: 'face',
+        d: `M${n(p.x - r - 0.3)} ${n(y)}A${n(r + 0.3)} ${n(r + 0.3)} 0 0 1 ${n(p.x + r + 0.3)} ${n(y)}Z`,
+        fill: '#57515D',
+      },
+      {
+        part: 'face',
+        d: `M${n(p.x - r)} ${n(y)}Q${n(p.x)} ${n(y + 0.7)} ${n(p.x + r)} ${n(y)}`,
+        stroke: COLORS.ink,
+        width: 0.7,
+        opacity: 0.6,
+      },
+    );
+  }
+  return shapes;
 }
 
 function arcEye(p: { x: number; y: number }, up: boolean): Shape {
-  const y = p.y + (up ? 1 : -0.6);
+  const y = p.y + (up ? 0.8 : -0.4);
   return {
     part: 'face',
-    d: `M${n(p.x - 3.2)} ${n(y)}Q${n(p.x)} ${n(y + (up ? -3.6 : 3))} ${n(p.x + 3.2)} ${n(y)}`,
-    stroke: COLORS.ink,
-    width: 1.9,
+    d: `M${n(p.x - 2.6)} ${n(y)}Q${n(p.x)} ${n(y + (up ? -3 : 2.6))} ${n(p.x + 2.6)} ${n(y)}`,
+    stroke: COLORS.faceInk,
+    width: 1.5,
   };
 }
 
 function face(kind: Face, look: number): Shape[] {
-  const dx = Math.max(-1, Math.min(1, look)) * 1.4;
-  const ink = { part: 'face' as const, stroke: COLORS.ink, width: 1.7 };
+  const dx = Math.max(-1, Math.min(1, look));
+  const line = { part: 'face' as const, stroke: COLORS.faceInk, width: 1.3 };
+  const nose: Shape[] = [
+    { part: 'face', d: ellipse(48.4, 64.8, 0.8, 0.5), fill: COLORS.ink, opacity: 0.7 },
+    { part: 'face', d: ellipse(51.6, 64.8, 0.8, 0.5), fill: COLORS.ink, opacity: 0.7 },
+  ];
   const cheeks: Shape[] = [
-    { part: 'face', d: ellipse(40.5 + dx * 0.5, 65.5, 2.6, 1.9), fill: COLORS.cheek, opacity: 0.5 },
-    { part: 'face', d: ellipse(59.5 + dx * 0.5, 65.5, 2.6, 1.9), fill: COLORS.cheek, opacity: 0.5 },
+    { part: 'face', d: ellipse(41.6, 64.6, 2.1, 1.4), fill: COLORS.cheek, opacity: 0.45 },
+    { part: 'face', d: ellipse(58.4, 64.6, 2.1, 1.4), fill: COLORS.cheek, opacity: 0.45 },
   ];
   const m = MOUTH_Y;
-  const L = { x: EYE_L.x + dx, y: EYE_L.y };
-  const R = { x: EYE_R.x + dx, y: EYE_R.y };
+  const smile = { ...line, d: `M48 ${n(m)}Q50 ${n(m + 1.8)} 52 ${n(m)}` };
   switch (kind) {
+    case 'awake':
+      return [...eye(EYE_L, dx, 0, 0.42), ...eye(EYE_R, dx, 0, 0.42), ...nose, ...cheeks, smile];
     case 'blink':
       return [
+        { ...line, d: `M${n(EYE_L.x - 2.6)} ${n(EYE_L.y + 0.6)}h5.2` },
+        { ...line, d: `M${n(EYE_R.x - 2.6)} ${n(EYE_R.y + 0.6)}h5.2` },
+        ...nose,
         ...cheeks,
-        { ...ink, d: `M${n(L.x - 2.8)} ${n(L.y)}h5.6` },
-        { ...ink, d: `M${n(R.x - 2.8)} ${n(R.y)}h5.6` },
-        { ...ink, d: `M47.5 ${n(m)}Q50 ${n(m + 2.2)} 52.5 ${n(m)}` },
+        smile,
       ];
     case 'happy':
       return [
+        arcEye(EYE_L, true),
+        arcEye(EYE_R, true),
+        ...nose,
         ...cheeks,
-        arcEye(L, true),
-        arcEye(R, true),
         {
           part: 'face',
-          d: `M46.6 ${n(m - 0.6)}Q50 ${n(m + 5)} 53.4 ${n(m - 0.6)}Z`,
+          d: `M47.4 ${n(m - 0.4)}Q50 ${n(m + 4)} 52.6 ${n(m - 0.4)}Z`,
           fill: COLORS.ink,
         },
         {
           part: 'face',
-          d: `M48.2 ${n(m + 1.6)}Q50 ${n(m + 0.7)} 51.8 ${n(m + 1.6)}Q50 ${n(m + 3)} 48.2 ${n(m + 1.6)}Z`,
+          d: `M48.6 ${n(m + 1.3)}Q50 ${n(m + 0.6)} 51.4 ${n(m + 1.3)}Q50 ${n(m + 2.5)} 48.6 ${n(m + 1.3)}Z`,
           fill: COLORS.tongue,
         },
       ];
     case 'thinking':
       return [
+        ...eye(EYE_L, 0.4, -1.1, 0.2),
+        ...eye(EYE_R, 0.4, -1.1, 0.2),
+        ...nose,
         ...cheeks,
-        ...openEye(EYE_L, dx + 0.8, -1.6),
-        ...openEye(EYE_R, dx + 0.8, -1.6),
-        { ...ink, d: `M48 ${n(m + 0.6)}Q50.5 ${n(m - 0.4)} 52.6 ${n(m + 0.2)}` },
+        { ...line, d: `M48.4 ${n(m + 0.5)}Q50.4 ${n(m - 0.3)} 52 ${n(m + 0.2)}` },
       ];
     case 'worried':
       return [
-        ...cheeks,
-        ...openEye(EYE_L, dx, 0.6, 2.5),
-        ...openEye(EYE_R, dx, 0.6, 2.5),
+        ...eye(EYE_L, dx, 0.3, 0, 2.5),
+        ...eye(EYE_R, dx, 0.3, 0, 2.5),
         {
-          ...ink,
-          width: 1.5,
-          d: `M${n(L.x - 3.4)} ${n(L.y - 4.4)}L${n(L.x + 2.2)} ${n(L.y - 5.8)}`,
+          ...line,
+          width: 1.1,
+          d: `M${n(EYE_L.x - 3)} ${n(EYE_L.y - 3.6)}L${n(EYE_L.x + 1.6)} ${n(EYE_L.y - 4.9)}`,
         },
         {
-          ...ink,
-          width: 1.5,
-          d: `M${n(R.x - 2.2)} ${n(R.y - 5.8)}L${n(R.x + 3.4)} ${n(R.y - 4.4)}`,
+          ...line,
+          width: 1.1,
+          d: `M${n(EYE_R.x - 1.6)} ${n(EYE_R.y - 4.9)}L${n(EYE_R.x + 3)} ${n(EYE_R.y - 3.6)}`,
         },
-        { ...ink, d: `M46.8 ${n(m + 1)}Q48.4 ${n(m - 0.6)} 50 ${n(m + 1)}T53.2 ${n(m + 1)}` },
+        ...nose,
+        {
+          ...line,
+          d: `M47.6 ${n(m + 0.9)}Q48.8 ${n(m - 0.4)} 50 ${n(m + 0.9)}T52.4 ${n(m + 0.9)}`,
+        },
       ];
     case 'asleep':
-      return [
-        ...cheeks,
-        arcEye(EYE_L, false),
-        arcEye(EYE_R, false),
-        { part: 'face', d: circle(50, m + 0.6, 1.3), fill: COLORS.ink },
-      ];
+      return [arcEye(EYE_L, false), arcEye(EYE_R, false), ...nose, ...cheeks];
     case 'surprised':
       return [
-        ...cheeks,
-        ...openEye(EYE_L, dx, -0.4, 3.3),
-        ...openEye(EYE_R, dx, -0.4, 3.3),
-        { part: 'face', d: ellipse(50, m + 0.8, 1.7, 2.2), fill: COLORS.ink },
-      ];
-    case 'awake':
-      return [
-        ...cheeks,
-        ...openEye(EYE_L, dx, 0),
-        ...openEye(EYE_R, dx, 0),
-        { ...ink, d: `M47.2 ${n(m)}Q50 ${n(m + 2.8)} 52.8 ${n(m)}` },
+        ...eye(EYE_L, 0, 0, 0, 3.1),
+        ...eye(EYE_R, 0, 0, 0, 3.1),
+        ...nose,
+        { part: 'face', d: ellipse(50, m + 0.6, 1.3, 1.7), fill: COLORS.ink },
       ];
   }
 }
@@ -261,31 +289,36 @@ function marks(kind: Face): Shape[] {
   switch (kind) {
     case 'asleep':
       return [
-        { part: 'marks', d: 'M76 14h6l-6 7h6', stroke: COLORS.mark, width: 2 },
-        { part: 'marks', d: 'M85 5h4.5l-4.5 5h4.5', stroke: COLORS.mark, width: 1.6 },
+        { part: 'marks', d: 'M78 12h6l-6 7h6', stroke: COLORS.mark, width: 2 },
+        { part: 'marks', d: 'M87 3h4.5l-4.5 5h4.5', stroke: COLORS.mark, width: 1.6 },
       ];
     case 'thinking':
       return [0, 1, 2].map((i) => ({
         part: 'marks' as const,
-        d: circle(79 + i * 6, 16 - i * 3, 2.1),
+        d: circle(80 + i * 6, 14 - i * 3, 2.1),
         fill: COLORS.mark,
       }));
     case 'worried':
-      return [{ part: 'marks', d: 'M73 32q3.2 5.2 0 7.4q-3.2 -2.2 0 -7.4Z', fill: COLORS.sweat }];
+      return [{ part: 'marks', d: 'M72 30q3.2 5.2 0 7.4q-3.2 -2.2 0 -7.4Z', fill: COLORS.sweat }];
     default:
       return [];
   }
 }
 
-// Lumps of wool across the fleece, where the clay was pressed on. Fixed, so Ket always looks the same.
+// Lumps across the fleece, where the clay was pressed on. Fixed, so Ket always looks the same.
 const PUFFS: readonly (readonly [number, number, number])[] = [
-  [36, 30, 9],
-  [52, 23, 10],
-  [67, 31, 8.5],
-  [27, 46, 8],
-  [74, 47, 8],
-  [33, 66, 7.5],
-  [68, 67, 7.5],
+  [34, 24, 8.5],
+  [50, 17, 9.5],
+  [66, 24, 8.5],
+  [24, 39, 8],
+  [76, 39, 8],
+  [21, 56, 7.5],
+  [79, 56, 7.5],
+  [30, 70, 7],
+  [70, 70, 7],
+  [42, 33, 7],
+  [58, 33, 7],
+  [50, 43, 6.5],
 ];
 
 export interface KetPose {
@@ -305,68 +338,69 @@ export function ket(pose: KetPose): Shape[] {
   const detail = pose.detail !== false;
   const tip = needle(pose.theta ?? 0);
   const legs: Shape[] = detail
-    ? [36.5, 44.5, 55.5, 63.5].map((x, i) => ({
+    ? [39, 45.5, 54.5, 61].map((x, i) => ({
         part: 'legs' as const,
-        d: `M${n(x - 3.4)} 80h6.8v${n(i === 0 || i === 3 ? 8 : 9.5)}a3.4 3.4 0 0 1 -6.8 0Z`,
+        d: `M${n(x - 2.6)} 81h5.2v${n(i === 0 || i === 3 ? 6.5 : 7.5)}a2.6 2.6 0 0 1 -5.2 0Z`,
         fill: { gradient: 'leg' as const },
       }))
     : [];
   const shadow: Shape[] = detail
-    ? [{ part: 'shadow', d: ellipse(50, 92.5, 25, 3.6), fill: COLORS.ink, opacity: 0.14 }]
+    ? [{ part: 'shadow', d: ellipse(50, 92, 27, 3.6), fill: COLORS.ink, opacity: 0.16 }]
     : [];
   const puffs: Shape[] = detail
     ? PUFFS.map(([x, y, r], i) => ({
         part: 'wool' as const,
-        d: cloud(x, y, r, 6, i * 0.7, 0.05),
+        d: cloud(x, y, r, 7, i * 0.7, 0.05),
         fill: { gradient: 'puff' as const },
-        opacity: 0.95,
+        opacity: 0.92,
       }))
     : [];
   return [
     ...shadow,
     ...legs,
+    // An enormous round fleece: nearly the whole canvas, curls all the way round.
     {
       part: 'wool',
-      d: cloud(51.2, 50.8, 36, 15, 0.15, 0.03),
+      d: cloud(51.4, 49.2, 40, 20, 0.12, 0.025),
       fill: COLORS.woolShadow,
-      opacity: 0.85,
+      opacity: 0.9,
     },
-    { part: 'wool', d: cloud(50, 49, 36, 15, 0.3, 0.035), fill: { gradient: 'wool' } },
+    { part: 'wool', d: cloud(50, 47.6, 40, 20, 0.28, 0.03), fill: { gradient: 'wool' } },
     ...puffs,
-    // Ears, out to the sides and drooping, half under the fleece.
-    { part: 'ears', d: 'M40 58Q30 55.5 27.5 61Q32 65 41 61.5Z', fill: COLORS.ear },
-    { part: 'ears', d: 'M38.5 59.4Q32.5 58.6 30.6 61.3Q34 63 39 61.2Z', fill: COLORS.earIn },
-    { part: 'ears', d: 'M60 58Q70 55.5 72.5 61Q68 65 59 61.5Z', fill: COLORS.ear },
-    { part: 'ears', d: 'M61.5 59.4Q67.5 58.6 69.4 61.3Q66 63 61 61.2Z', fill: COLORS.earIn },
-    // The face peeks out of the fleece, under a fringe.
-    { part: 'face', d: ellipse(50, 63, 12.6, 11.4), fill: { gradient: 'face' } },
-    { part: 'face', d: cloud(50, 52.4, 9.2, 7, -0.25, 0.04), fill: { gradient: 'puff' } },
+    // Small dark ears, out to the sides, just under the fleece.
+    { part: 'ears', d: 'M41 57.4Q34.5 55.2 32.4 58.6Q35.6 61.6 41.4 60.2Z', fill: COLORS.ear },
+    { part: 'ears', d: 'M39.6 58.2Q35.6 57.2 34.4 58.9Q36.6 60.3 39.8 59.6Z', fill: COLORS.earIn },
+    { part: 'ears', d: 'M59 57.4Q65.5 55.2 67.6 58.6Q64.4 61.6 58.6 60.2Z', fill: COLORS.ear },
+    { part: 'ears', d: 'M60.4 58.2Q64.4 57.2 65.6 58.9Q63.4 60.3 60.2 59.6Z', fill: COLORS.earIn },
+    // The face peeks out of the fleece, under a thick fringe.
+    { part: 'face', d: ellipse(FACE.cx, FACE.cy, FACE.rx, FACE.ry), fill: { gradient: 'face' } },
+    { part: 'face', d: cloud(50, 50.4, 12, 8, -0.2, 0.05), fill: { gradient: 'puff' } },
     ...face(pose.face, pose.look ?? 0),
     // Collar and bell.
-    { part: 'bell', d: 'M41.5 73.4Q50 77.6 58.5 73.4', stroke: COLORS.amberDeep, width: 2.2 },
+    { part: 'bell', d: 'M43 71.8Q50 75.6 57 71.8', stroke: COLORS.amberDeep, width: 1.9 },
     {
       part: 'bell',
       d: circle(BELL.cx, BELL.cy, BELL.r),
       fill: { gradient: 'bell' },
       stroke: COLORS.amberDeep,
-      width: 0.9,
+      width: 0.8,
     },
     {
       part: 'bell',
-      d: ellipse(BELL.cx, BELL.cy, BELL.r, 1.6),
+      d: ellipse(BELL.cx, BELL.cy, BELL.r, 1.45),
       stroke: COLORS.amberDeep,
-      width: 0.7,
+      width: 0.6,
       opacity: 0.8,
     },
     {
       part: 'needle',
       d: `M${n(BELL.cx)} ${n(BELL.cy)}L${n(tip.x)} ${n(tip.y)}`,
       stroke: COLORS.ink,
-      width: 1.1,
+      width: 1,
     },
     {
       part: 'needle',
-      d: circle(tip.x, tip.y, 1.35),
+      d: circle(tip.x, tip.y, 1.2),
       fill: pose.alarm === true ? COLORS.error : COLORS.ink,
     },
     ...(detail ? marks(pose.face) : []),
