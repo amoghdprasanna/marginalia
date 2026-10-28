@@ -30,9 +30,8 @@ export interface Proposal {
   expected: string;
 }
 
-/** Errors are keyed by cell id (stable while you edit), else position. */
-export const fixKey = (e: Pick<CellError, 'cellId' | 'index'>): string =>
-  e.cellId ?? `#${String(e.index)}`;
+/** A fix belongs to one error, not to its cell: a rerun or a new error starts afresh. */
+export const fixKey = (e: Pick<CellError, 'key'>): string => e.key;
 
 export function proposalFor(error: CellError, reply: FixReply): Proposal {
   return {

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { browser } from 'wxt/browser';
 import { CHECK_COMMAND, EXPECTED_ID, INSTALL_COMMAND } from '@/src/adapters/helper';
 import { SERVER_CONFIG_LINES } from '@/src/core/access';
@@ -389,12 +389,15 @@ function FixArea({
   claude,
   fkey,
   cells,
+  current,
   onAsk,
 }: {
   state: FixState;
   claude: Claude;
   fkey: string;
   cells: number;
+  /** The cell's source now, to tell when Claude's suggestion is out of date. */
+  current: string;
   onAsk: () => void;
 }) {
   const seconds = useSeconds(state.kind === 'asking' ? state.since : null);
@@ -422,6 +425,7 @@ function FixArea({
     case 'applying': {
       const { reply } = state.proposal;
       const busy = state.kind === 'applying';
+      const stale = !busy && state.proposal.expected !== current;
       return (
         <div className="suggestion">
           <p className="suggestion-by">
@@ -430,9 +434,15 @@ function FixArea({
           </p>
           <p className="suggestion-summary">{reply.summary}</p>
           <Reasoning text={reply.explanation} />
-          {reply.fix.kind !== 'none' && <Diff proposal={state.proposal} />}
+          {reply.fix.kind !== 'none' && !stale && <Diff proposal={state.proposal} />}
+          {stale && (
+            <p className="stale" role="status">
+              The cell changed since Claude looked. Ask again so the suggestion fits the code as it
+              is now.
+            </p>
+          )}
           <div className="actions">
-            {reply.fix.kind === 'none' ? (
+            {reply.fix.kind === 'none' || stale ? (
               <button type="button" className="btn" onClick={onAsk}>
                 Ask again
               </button>
@@ -605,10 +615,56 @@ function ErrorNote({
           claude={claude}
           fkey={fkey}
           cells={context.summary.cellCount}
+          current={error.source}
           onAsk={ask}
         />
       </div>
     </li>
+  );
+}
+
+/**
+ * Keeps the Claude session live: an error that appears while the panel is open (a cell you
+ * just ran, or the next error after a fix) is sent to Claude without a click. Errors already
+ * there when the panel opens wait for you, so opening it never sets off a burst of requests.
+ */
+function useAutoAsk(view: View, claude: Claude): void {
+  const seen = useRef<{ path: string; keys: Set<string> } | null>(null);
+  useEffect(() => {
+    if (view.kind !== 'ready') return;
+    const keys = view.summary.errors.map((e) => e.key);
+    if (seen.current?.path !== view.path) {
+      seen.current = { path: view.path, keys: new Set(keys) };
+      return;
+    }
+    const known = seen.current.keys;
+    const fresh = view.summary.errors.filter((e) => !known.has(e.key));
+    for (const k of keys) known.add(k);
+    const ready = claude.status.kind === 'ready' && claude.status.hasKey;
+    if (!claude.auto || !ready) return;
+    const context: NotebookContext = {
+      path: view.path,
+      kernel: view.kernel.name,
+      summary: view.summary,
+    };
+    for (const e of fresh) if (claude.fixes[fixKey(e)] === undefined) claude.ask(e, context);
+  }, [view, claude]);
+}
+
+function AutoSwitch({ claude }: { claude: Claude }) {
+  return (
+    <label className="switch">
+      <input
+        type="checkbox"
+        role="switch"
+        checked={claude.auto}
+        onChange={(e) => {
+          claude.setAuto(e.target.checked);
+        }}
+      />
+      <span className="switch-track" aria-hidden="true" />
+      Suggest fixes for new errors
+    </label>
   );
 }
 
@@ -725,6 +781,7 @@ function Body({ nb, claude }: { nb: Notebook; claude: Claude }) {
               {errors.length} {errors.length === 1 ? 'error' : 'errors'}
             </h2>
             <p className="fine">Nothing changes in the notebook until you press Apply.</p>
+            <AutoSwitch claude={claude} />
           </div>
           {nb.revealProblem !== null && (
             <p className="reveal-problem" role="status">
@@ -745,6 +802,7 @@ function Body({ nb, claude }: { nb: Notebook; claude: Claude }) {
 export function App() {
   const nb = useNotebook();
   const claude = useClaude(nb);
+  useAutoAsk(nb.view, claude);
   return (
     <div className="app">
       <Header view={nb.view} claude={claude} />

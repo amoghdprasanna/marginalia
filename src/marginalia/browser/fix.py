@@ -56,6 +56,10 @@ missing module, `%pip install <package>` (the pip name, e.g. `%pip install qutip
   - none, with an empty source: when the fix is outside the notebook (a file that only exists on \
 another computer, a cluster module to load) or you can't tell. Say what to do in the explanation.
 
+The session may list what was already tried in this notebook. Build on it: if a fix was \
+applied and the cell now raises something new, say whether the new error follows from it, and \
+don't suggest what was already tried and undone or dismissed.
+
 Never invent data, results or files. A path from someone else's computer (C:\\Users\\..., \
 /Users/...) won't exist here: point to a path relative to the notebook only if the notebook \
 itself shows where the file lives; otherwise choose none and say which file is needed."""
@@ -74,6 +78,23 @@ class Cell:
 
 
 @dataclass(frozen=True)
+class Attempt:
+    """One earlier suggestion in this notebook's session, and what you did with it."""
+
+    cell: int  # the cell's number, from 1
+    ename: str
+    evalue: str
+    summary: str
+    kind: str
+    source: str
+    outcome: str  # proposed, applied, undone or dismissed
+
+
+OUTCOMES = ("proposed", "applied", "undone", "dismissed")
+HISTORY_LIMIT = 10
+
+
+@dataclass(frozen=True)
 class FixRequest:
     path: str
     kernel: str | None
@@ -83,6 +104,7 @@ class FixRequest:
     evalue: str
     traceback: str
     model: str | None = None  # the panel's choice; None keeps Marginalia's setting
+    history: tuple[Attempt, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -126,7 +148,26 @@ def parse_request(obj: Any) -> FixRequest:
         raise ValueError("failing must be the index of one of the cells")
     kernel = obj.get("kernel")
     model = obj.get("model")
+    history = []
+    for h in obj.get("history") or []:
+        if not isinstance(h, dict):
+            continue
+        try:
+            attempt = Attempt(
+                cell=int(h["cell"]),
+                ename=str(h["ename"])[:200],
+                evalue=str(h.get("evalue", ""))[:500],
+                summary=str(h.get("summary", ""))[:500],
+                kind=str(h.get("kind", "none")),
+                source=str(h.get("source", ""))[:2000],
+                outcome=str(h.get("outcome", "proposed")),
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+        if attempt.kind in FIX_KINDS and attempt.outcome in OUTCOMES:
+            history.append(attempt)
     return FixRequest(
+        history=tuple(history[-HISTORY_LIMIT:]),
         model=model if isinstance(model, str) and model else None,
         path=_str(obj, "path", "notebook.ipynb"),
         kernel=kernel if isinstance(kernel, str) else None,
@@ -141,6 +182,29 @@ def parse_request(obj: Any) -> FixRequest:
 def _cell_text(cell: Cell, failing: bool) -> str:
     mark = ' failing="true"' if failing else ""
     return f'<cell number="{cell.index + 1}" type="{cell.kind}"{mark}>\n{cell.source}\n</cell>'
+
+
+_DID = {
+    "proposed": "Not acted on yet.",
+    "applied": "The user applied it.",
+    "undone": "The user applied it, then undid it.",
+    "dismissed": "The user dismissed it.",
+}
+
+
+def session_text(history: tuple[Attempt, ...]) -> str:
+    """Earlier suggestions in this notebook, oldest first, as Claude reads them."""
+    lines = []
+    for a in history:
+        change = {
+            "replace": f"replace the cell with:\n{a.source}",
+            "insert_before": f"insert a cell before it:\n{a.source}",
+            "none": "no change in the notebook",
+        }[a.kind]
+        lines.append(f"- Cell {a.cell} raised {a.ename}: {a.evalue}")
+        lines.append(f"  Suggested: {a.summary} Change: {change}")
+        lines.append(f"  {_DID[a.outcome]}")
+    return "<session>\nEarlier in this session, oldest first:\n" + "\n".join(lines) + "\n</session>"
 
 
 def build_user_text(req: FixRequest, budget: int = CONTEXT_BUDGET) -> str:
@@ -170,6 +234,8 @@ def build_user_text(req: FixRequest, budget: int = CONTEXT_BUDGET) -> str:
     ]
     if left_out:
         parts.append(f"({left_out} cells left out for length.)")
+    if req.history:
+        parts.append(session_text(req.history))
     parts.append(f"<traceback>\n{traceback}\n</traceback>")
     return "\n\n".join(parts)
 

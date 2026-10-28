@@ -11,8 +11,12 @@ import {
 import type { CellError, NotebookSummary } from '@/src/core/notebook';
 import type { Notebook } from './connection';
 import { editFor, fixKey, proposalFor, undoFor, type FixState } from './fixes';
+import { proposed, settle, type Attempt, type Outcome } from './session';
 
 const MODEL_KEY = 'fixModel';
+const AUTO_KEY = 'autoAsk';
+/** Sessions live as long as the browser does (storage.session), one per notebook path. */
+const SESSIONS_KEY = 'sessions';
 
 /** Whether Claude can be asked, as the status bar says it. */
 export type ClaudeStatus =
@@ -32,6 +36,9 @@ export interface Claude {
   model: string | null;
   setModel: (id: string) => void;
   fixes: Readonly<Record<string, FixState>>;
+  /** Ask Claude about new errors without a click (on unless you turn it off). */
+  auto: boolean;
+  setAuto: (on: boolean) => void;
   /** Goes up by one each time a fix is applied: Ket hops. */
   landed: number;
   /** Checks the helper again (after you install it). */
@@ -53,9 +60,11 @@ export function fixRequest(
   error: CellError,
   nb: NotebookContext,
   model: string | null,
+  history: readonly Attempt[] = [],
 ): FixRequest {
   return {
     ...(model !== null ? { model } : {}),
+    ...(history.length > 0 ? { history: history.map(({ key: _key, ...attempt }) => attempt) } : {}),
     path: nb.path,
     kernel: nb.kernel,
     cells: nb.summary.cells,
@@ -122,6 +131,40 @@ export function useClaude(nb: Notebook): Claude {
     setFixes((all) => ({ ...all, [key]: state }));
   }, []);
 
+  // Asking about new errors by itself: on unless you turn it off, remembered in this browser.
+  const [auto, setAutoState] = useState(true);
+  useEffect(() => {
+    void browser.storage.local.get(AUTO_KEY).then((stored) => {
+      if (typeof stored[AUTO_KEY] === 'boolean') setAutoState(stored[AUTO_KEY]);
+    });
+  }, []);
+  const setAuto = useCallback((on: boolean) => {
+    setAutoState(on);
+    void browser.storage.local.set({ [AUTO_KEY]: on });
+  }, []);
+
+  // Each notebook's session: what was suggested and what you did, sent with every fix.
+  const sessions = useRef<Record<string, Attempt[]>>({});
+  const pathOf = useRef(new Map<string, string>());
+  useEffect(() => {
+    void browser.storage.session.get(SESSIONS_KEY).then((stored) => {
+      const value: unknown = stored[SESSIONS_KEY];
+      if (typeof value === 'object' && value !== null)
+        sessions.current = { ...(value as Record<string, Attempt[]>), ...sessions.current };
+    });
+  }, []);
+  const remember = useCallback((path: string, next: Attempt[]) => {
+    sessions.current = { ...sessions.current, [path]: next };
+    void browser.storage.session.set({ [SESSIONS_KEY]: sessions.current });
+  }, []);
+  const record = useCallback(
+    (key: string, outcome: Outcome) => {
+      const path = pathOf.current.get(key);
+      if (path !== undefined) remember(path, settle(sessions.current[path] ?? [], key, outcome));
+    },
+    [remember],
+  );
+
   const probe = useCallback(() => {
     helper.hello().then(
       (h) => {
@@ -155,10 +198,13 @@ export function useClaude(nb: Notebook): Claude {
   const ask = useCallback(
     (error: CellError, context: NotebookContext) => {
       const key = fixKey(error);
+      pathOf.current.set(key, context.path);
       set(key, { kind: 'asking', since: Date.now() });
-      helper.fix(fixRequest(error, context, modelRef.current)).then(
+      const history = sessions.current[context.path] ?? [];
+      helper.fix(fixRequest(error, context, modelRef.current, history)).then(
         (reply) => {
           set(key, { kind: 'proposed', proposal: proposalFor(error, reply) });
+          remember(context.path, proposed(sessions.current[context.path] ?? [], error, reply));
         },
         (e: unknown) => {
           if (stopping.current.delete(key)) {
@@ -176,7 +222,7 @@ export function useClaude(nb: Notebook): Claude {
         },
       );
     },
-    [helper, set],
+    [helper, set, remember],
   );
 
   const stop = useCallback(
@@ -198,6 +244,7 @@ export function useClaude(nb: Notebook): Claude {
         const undo = applied.ok ? undoFor(state.proposal, applied.cellId ?? null) : null;
         if (applied.ok && undo !== null) {
           set(key, { kind: 'applied', proposal: state.proposal, undo });
+          record(key, 'applied');
           setLanded((n) => n + 1);
         } else
           set(key, {
@@ -208,7 +255,7 @@ export function useClaude(nb: Notebook): Claude {
           });
       });
     },
-    [nb, set],
+    [nb, set, record],
   );
 
   const undo = useCallback(
@@ -217,8 +264,10 @@ export function useClaude(nb: Notebook): Claude {
       if (state?.kind !== 'applied') return;
       set(key, { kind: 'undoing', proposal: state.proposal, undo: state.undo });
       void nb.apply(state.undo).then((applied) => {
-        if (applied.ok) set(key, { kind: 'proposed', proposal: state.proposal });
-        else
+        if (applied.ok) {
+          set(key, { kind: 'proposed', proposal: state.proposal });
+          record(key, 'undone');
+        } else
           set(key, {
             kind: 'failed',
             message: applied.detail ?? 'The notebook didn’t take the undo.',
@@ -227,15 +276,30 @@ export function useClaude(nb: Notebook): Claude {
           });
       });
     },
-    [nb, set],
+    [nb, set, record],
   );
 
   const dismiss = useCallback(
     (key: string) => {
+      if (fixesRef.current[key]?.kind === 'proposed') record(key, 'dismissed');
       set(key, { kind: 'idle' });
     },
-    [set],
+    [set, record],
   );
 
-  return { status, model, setModel, fixes, landed, recheck, ask, stop, apply, undo, dismiss };
+  return {
+    status,
+    model,
+    setModel,
+    fixes,
+    auto,
+    setAuto,
+    landed,
+    recheck,
+    ask,
+    stop,
+    apply,
+    undo,
+    dismiss,
+  };
 }

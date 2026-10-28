@@ -27,6 +27,11 @@ const CodeCell = z.object({
 
 /** One cell whose last run raised an exception. */
 export interface CellError {
+  /**
+   * This error, as opposed to the cell: the cell, the run that raised it and what it raised.
+   * Rerunning the cell, or a different error from it, is a new key and so a new note.
+   */
+  key: string;
   /** Position in the notebook, from 0. */
   index: number;
   /** nbformat 4.5+ cell id; null on older notebooks. */
@@ -58,6 +63,16 @@ export interface NotebookSummary {
   codeCellCount: number;
   errors: CellError[];
   cells: CellText[];
+}
+
+/** A short, stable fingerprint of a string (FNV-1a), for keys. */
+export function fingerprint(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
 }
 
 const sourceText = (s: string | string[] | undefined) =>
@@ -159,7 +174,10 @@ export function summarize(cells: readonly unknown[]): NotebookSummary {
     const err = errorOf(code.data.outputs);
     if (err === null) return;
     const traceback = tidy(stripAnsi(err.traceback.join('\n')));
+    const cell = code.data.id ?? `#${String(index)}`;
+    const run = code.data.execution_count ?? '-';
     errors.push({
+      key: `${cell}.${String(run)}.${fingerprint(`${err.ename}: ${err.evalue}`)}`,
       index,
       cellId: code.data.id ?? null,
       executionCount: code.data.execution_count ?? null,

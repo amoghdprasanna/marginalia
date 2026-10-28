@@ -80,6 +80,16 @@ export interface FixRequest {
   traceback: string;
   /** A model from the helper's list; left out, the helper uses Marginalia's setting. */
   model?: string;
+  /** What was already tried in this notebook, oldest first. */
+  history?: {
+    cell: number;
+    ename: string;
+    evalue: string;
+    summary: string;
+    kind: 'replace' | 'insert_before' | 'none';
+    source: string;
+    outcome: 'proposed' | 'applied' | 'undone' | 'dismissed';
+  }[];
 }
 
 /** The part of a runtime.Port the client uses (real ports and test fakes). */

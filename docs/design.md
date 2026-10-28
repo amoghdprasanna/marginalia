@@ -98,6 +98,11 @@ the one bold idea; everything else stays quiet (`extension/src/ui/theme.css`).
   reasoning (three lines, then *More*), the change as a red/green diff, **Apply** and *Dismiss*.
   No boxes inside boxes. Applying shows a spinner on a solid button; applied shows "Changed cell 4.
   Run it to check." with **Undo**.
+- A note belongs to one error, not to its cell: rerun a cell, or get a new error from it, and it
+  gets a fresh note. New errors that appear while the panel is open get a suggestion without a
+  click (*Suggest fixes for new errors*, under the count, turns this off). Claude is told what was
+  already tried in this notebook. A suggestion whose cell has changed since says so and offers
+  *Ask again* instead of Apply (ADR 0032).
 - The status bar: the kernel on the left, the model menu on the right (a real `<select>`, styled
   with `appearance: base-select`).
 - **Colour, in oklch, in light/dark pairs (`light-dark()`):** a cool paper or night-ink base,

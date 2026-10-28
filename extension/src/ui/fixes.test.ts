@@ -4,6 +4,7 @@ import type { CellError } from '@/src/core/notebook';
 import { appliedText, editFor, fixKey, proposalFor, undoFor } from './fixes';
 
 const error: CellError = {
+  key: 'c4.5.abc',
   index: 3,
   cellId: 'c4',
   executionCount: 5,
@@ -65,8 +66,7 @@ describe('fix edits', () => {
     expect(editFor(proposalFor(error, reply('none', '')))).toBeNull();
   });
 
-  it('keys errors by cell id, else position', () => {
-    expect(fixKey(error)).toBe('c4');
-    expect(fixKey({ cellId: null, index: 2 })).toBe('#2');
+  it('keys a fix by its error', () => {
+    expect(fixKey(error)).toBe('c4.5.abc');
   });
 });

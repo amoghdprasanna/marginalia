@@ -46,7 +46,7 @@ export default defineConfig(
       '@typescript-eslint/no-confusing-void-expression': ['error', { ignoreArrowShorthand: true }],
       '@typescript-eslint/no-unused-vars': [
         'error',
-        { varsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' },
+        { varsIgnorePattern: '^_', argsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' },
       ],
       'no-restricted-globals': ['error', ...NETWORK_GLOBALS],
       'no-restricted-properties': [

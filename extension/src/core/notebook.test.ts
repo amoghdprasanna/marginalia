@@ -49,6 +49,16 @@ describe('locate', () => {
   });
 });
 
+describe('error keys', () => {
+  it('change when the cell runs again or raises something else, not otherwise', () => {
+    const key = (count: number, evalue: string) =>
+      summarize([codeCell('c', count, [errorOutput('ValueError', evalue)])]).errors[0]?.key;
+    expect(key(3, 'a')).toBe(key(3, 'a'));
+    expect(key(3, 'a')).not.toBe(key(4, 'a'));
+    expect(key(3, 'a')).not.toBe(key(3, 'b'));
+  });
+});
+
 describe('summarize', () => {
   it('lists code cells whose outputs hold an error, with their position and count', () => {
     const cells = [

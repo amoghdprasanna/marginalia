@@ -83,7 +83,7 @@ test('a missing module gets a %pip cell before it, which Undo removes', async ({
   expect(await sources(page)).toHaveLength(2);
 });
 
-test('an edit to the cell after Claude looked makes Apply refuse', async ({
+test('a suggestion whose cell changed asks to be asked again, not applied', async ({
   context,
   openPanel,
 }) => {
@@ -98,9 +98,45 @@ test('an edit to the cell after Claude looked makes Apply refuse', async ({
       .model.cells;
     cells.get(3).sharedModel.setSource('# I rewrote this myself');
   });
-  await panel.getByRole('button', { name: 'Apply' }).click();
-  await expect(panel.getByText('The cell changed since Claude looked at it.')).toBeVisible();
+  await expect(panel.getByText('The cell changed since Claude looked.')).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Apply' })).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Ask again' })).toBeVisible();
   expect((await sources(page))[3]).toBe('# I rewrote this myself');
+});
+
+test('after a fix, the next error from that cell gets its own note and Claude is asked by itself', async ({
+  context,
+  openPanel,
+}) => {
+  const page = await context.newPage();
+  await openNotebook(page, 'missing.ipynb');
+  const panel = await openPanel(page);
+  await panel.getByRole('button', { name: 'Fix with Claude' }).click();
+  await panel.getByRole('button', { name: 'Apply' }).click();
+  await expect(panel.getByText('Added a cell before cell 2.')).toBeVisible();
+
+  // Run the imports again (now cell 3): qutip is still missing here, so it raises again.
+  await page.evaluate(async () => {
+    type Run = {
+      shell: {
+        currentWidget: {
+          content: { activeCellIndex: number };
+          sessionContext: { ready: Promise<void> };
+        };
+      };
+      commands: { execute(id: string): Promise<unknown> };
+    };
+    const app = (window as unknown as { jupyterapp: Run }).jupyterapp;
+    await app.shell.currentWidget.sessionContext.ready;
+    app.shell.currentWidget.content.activeCellIndex = 2;
+    await app.commands.execute('notebook:run-cell');
+  });
+
+  // A fresh note for the new run: no stale "fixed" mark, and a suggestion without a click,
+  // made knowing what was tried before.
+  await expect(panel.getByText('Added a cell before cell 2.')).toHaveCount(0, { timeout: 30_000 });
+  await expect(panel.getByRole('button', { name: 'Go to cell 3' })).toHaveText('3');
+  await expect(panel.getByText('Seen 1 earlier in this session.')).toBeVisible({ timeout: 15_000 });
 });
 
 test('the model menu picks who answers, and the proposal says who did', async ({

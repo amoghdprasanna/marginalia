@@ -133,3 +133,24 @@ def test_the_panel_may_pick_a_listed_model_only(cfg):
     fixer.fix(parse_request(request(model="gpt-9")))
     fixer.fix(parse_request(request()))
     assert [r["model"] for r in messages.requests] == ["claude-haiku-5-5", "claude-opus-5-5", "claude-opus-5-5"]
+
+
+def test_the_session_history_reaches_claude_and_bad_entries_are_dropped():
+    history = [
+        {"cell": 2, "ename": "ModuleNotFoundError", "evalue": "No module named 'qutip'",
+         "summary": "qutip isn't installed.", "kind": "insert_before", "source": "%pip install qutip",
+         "outcome": "applied"},
+        {"cell": "x"},
+        {"cell": 3, "ename": "E", "kind": "rewrite", "outcome": "applied"},
+        "nonsense",
+    ]
+    req = parse_request(request(history=history))
+    assert len(req.history) == 1
+    text = build_user_text(req)
+    assert "<session>" in text and "insert a cell before it:\n%pip install qutip" in text
+    assert "The user applied it." in text
+    assert text.index("<session>") < text.index("<traceback>")
+
+
+def test_no_history_no_session_block():
+    assert "<session>" not in build_user_text(parse_request(request()))

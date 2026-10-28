@@ -12,6 +12,14 @@ function send(message) {
 }
 
 function fixFor(request) {
+  const fix = baseFix(request);
+  // Says how much of the session it was sent, so tests can see the history arrive.
+  const earlier = (request.history ?? []).length;
+  if (earlier > 0) fix.explanation += ` Seen ${String(earlier)} earlier in this session.`;
+  return fix;
+}
+
+function baseFix(request) {
   const cell = request.cells[request.failing]?.source ?? '';
   if (request.ename === 'ModuleNotFoundError')
     return {
