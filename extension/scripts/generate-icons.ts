@@ -8,14 +8,14 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { chromium } from '@playwright/test';
-import { ICON_SIZES, iconArt, toSvg } from '../src/mascot/ket.ts';
+import { ICON_SIZES, iconArt, iconBox, toSvg } from '../src/mascot/ket.ts';
 
 const outDir = path.resolve(import.meta.dirname, '../public/icon');
 mkdirSync(outDir, { recursive: true });
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
-const svgs = ICON_SIZES.map((size) => toSvg(iconArt(size), size));
+const svgs = ICON_SIZES.map((size) => toSvg(iconArt(size), size, iconBox(size)));
 for (const [i, size] of ICON_SIZES.entries()) {
   const svg = svgs[i] ?? '';
   await page.setContent(`<body style="margin:0;background:transparent">${svg}</body>`);

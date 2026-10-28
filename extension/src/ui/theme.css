@@ -979,39 +979,35 @@
   }
 
   .ket-body {
-    transform-origin: 50px 92px;
+    transform-origin: 56px 88px;
   }
 
   .ket-wool {
-    transform-origin: 50px 72px;
-    animation: ket-breathe 4s ease-in-out infinite;
+    transform-origin: 56px 78px;
+    animation: ket-breathe 4.2s ease-in-out infinite;
   }
 
-  .ket-ears {
-    transform-origin: 50px 59px;
-    transition: transform 200ms var(--ease);
+  /* The head turns a little toward the pointer, and lifts when you hover. */
+  .ket-head {
+    transform-origin: 30px 56px;
+    transform: rotate(calc(var(--look, 0) * 5deg));
+    transition: transform 260ms var(--ease);
   }
 
-  .ket[data-hover] .ket-ears {
-    transform: translateY(-1.2px) scaleX(1.06);
+  .ket[data-hover] .ket-head {
+    transform: rotate(calc(var(--look, 0) * 5deg - 4deg)) translateY(-0.8px);
   }
 
-  .ket-needle {
-    transform-origin: 50px 76.5px;
-    transform: rotate(var(--theta));
-    transition: transform 450ms cubic-bezier(0.3, 1.5, 0.5, 1);
+  .ket[data-mood='thinking'] .ket-head {
+    animation: ket-ponder 2.6s ease-in-out infinite;
   }
 
-  .ket[data-mood='thinking'] .ket-needle {
-    animation: ket-precess 1.6s linear infinite;
-  }
-
-  .ket[data-mood='asleep'] .ket-body {
-    transform: translateY(2px);
+  .ket[data-mood='asleep'] .ket-head {
+    transform: rotate(6deg) translateY(1.5px);
   }
 
   .ket[data-mood='asleep'] .ket-wool {
-    animation-duration: 6s;
+    animation-duration: 6.5s;
   }
 
   .ket[data-mood='asleep'] .ket-marks,
@@ -1024,24 +1020,24 @@
   }
 
   .ket[data-anim='hop'] .ket-shadow {
-    transform-origin: 50px 92px;
+    transform-origin: 56px 89px;
     animation: ket-shadow 650ms ease;
   }
 
   .ket[data-anim='spin'] .ket-body {
-    transform-origin: 50px 50px;
-    animation: ket-spin 800ms cubic-bezier(0.5, 0, 0.3, 1);
+    transform-origin: 56px 60px;
+    animation: ket-turn 800ms cubic-bezier(0.5, 0, 0.3, 1);
   }
 
-  .ket[data-anim='ring'] .ket-bell {
-    transform-origin: 50px 72px;
-    animation: ket-ring 500ms ease-out;
+  /* Measured: a little startled hop of the head. */
+  .ket[data-anim='ring'] .ket-head {
+    animation: ket-startle 420ms ease-out;
   }
 
   .ket-said {
     position: absolute;
-    left: 76%;
-    top: 66%;
+    left: 6%;
+    top: 4%;
     color: var(--accent-ink);
     font-family: var(--mono);
     font-size: 0.72rem;
@@ -1055,12 +1051,15 @@
     }
   }
 
-  @keyframes ket-precess {
-    from {
-      transform: rotate(0turn);
+  @keyframes ket-ponder {
+    50% {
+      transform: rotate(-6deg);
     }
-    to {
-      transform: rotate(1turn);
+  }
+
+  @keyframes ket-startle {
+    35% {
+      transform: translateY(-2.5px) rotate(-5deg);
     }
   }
 
@@ -1087,21 +1086,10 @@
     }
   }
 
-  @keyframes ket-spin {
-    to {
-      transform: rotate(1turn);
-    }
-  }
-
-  @keyframes ket-ring {
-    20% {
-      transform: rotate(16deg);
-    }
-    45% {
-      transform: rotate(-12deg);
-    }
-    70% {
-      transform: rotate(6deg);
+  /* Turning round on the spot: a flip across, and back. */
+  @keyframes ket-turn {
+    50% {
+      transform: scaleX(-1);
     }
   }
 

@@ -109,13 +109,17 @@ the one bold idea; everything else stays quiet (`extension/src/ui/theme.css`).
   lagoon blue for actions and Claude, coral only for errors, mint for fixed. Ket's amber bell is
   the one warm accent. No tinted browns.
 - Lexend for text, as in Lemma; Atkinson Hyperlegible Mono for code (`l`/`1`/`I`, `0`/`O`).
-- **Ket**: an enormous round fleece with a small dark face peeking out, placid half-lidded eyes,
-  tiny ears, stubby legs, in a soft clay look; an original character. Its collar bell is a Bloch
-  sphere: |0⟩ when the notebook is clean, precessing while Claude works, knocked over and red when
-  a cell raised. It breathes, blinks, follows the pointer, perks its ears on hover, hops when a
-  fix lands and sleeps when there's nothing to read. A click rings the bell and measures it
-  (Born-rule odds); three quick clicks roll it. All CSS; reduced motion stops it, except the
-  Apply spinner, which slows instead so "busy" still reads.
+- **Ket** follows the user's own character brief: one enormous, slightly flattened mass of ivory
+  fleece (height about 0.8 of its width) with fine matted curls; a small charcoal head at its
+  upper front edge with a domed forehead and heavy muzzle; close-set protruding eyes with a thin
+  dusty-mauve upper rim; small recessed nostrils; sideways leaf-shaped ears; short legs with
+  flared hooves; a soft clay finish lit from the upper left. 96 px in the header. Icons at 16
+  and 32 px close in on the face so the eyes and nostrils stay readable. The brief is modelled
+  on Aardman's Shirley and is for personal use: **change the look before publishing the
+  extension anywhere.** Moods change the face and pose (content, looking up while Claude works,
+  fretting at an error, asleep); a click measures Ket with Born-rule odds for its mood and
+  shows `|0⟩`/`|1⟩`; three quick clicks turn it round. All CSS; reduced motion stops it,
+  except the Apply spinner, which slows instead so "busy" still reads.
 - Chrome 135 is the floor (manifest), so `light-dark()`, `interpolate-size` and `base-select`
   need no fallbacks. Checked at 390 px in both schemes.
 

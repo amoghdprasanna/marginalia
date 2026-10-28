@@ -120,7 +120,7 @@ test('Ket answers a click with a measurement', async ({ context, openPanel }) =>
   const panel = await openPanel(page);
   await expect(panel.getByRole('heading', { name: 'No cell has an error' })).toBeVisible();
 
-  await panel.getByRole('button', { name: /Ket, Marginalia's lamb/ }).click();
-  // The bell sits at |0⟩ when the notebook is clean, so the Born rule says |0⟩.
+  await panel.getByRole('button', { name: /Ket, Marginalia's sheep/ }).click();
+  // Content when the notebook is clean, which is |0⟩, so the Born rule says |0⟩.
   await expect(panel.locator('.ket-said')).toHaveText('|0⟩');
 });

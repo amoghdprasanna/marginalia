@@ -21,7 +21,10 @@ const MOOD_FACE: Record<Mood, Face> = {
   worried: 'worried',
 };
 
-/** The bell needle's angle from |0⟩ for each mood (thinking precesses instead, in CSS). */
+/**
+ * Ket's mood as a qubit state, θ from |0⟩: what a click "measures". Content is |0⟩, an error
+ * knocks it most of the way to |1⟩, and the rest sit in between.
+ */
 const MOOD_THETA: Record<Mood, number> = {
   asleep: Math.PI / 2,
   awake: 0.45,
@@ -66,9 +69,9 @@ function Defs({ prefix }: { prefix: string }) {
 
 /**
  * Ket, the lamb. It breathes, blinks, looks toward the pointer and perks its ears when you
- * hover. While Marginalia reads or Claude works, its bell needle precesses; a clean notebook
- * sets it to |0⟩ and an error knocks it over, red. It hops when a fix lands. A click rings
- * the bell and measures it, with the Born rule's odds; three quick clicks roll it over.
+ * hover. It looks up while Marginalia reads or Claude works, is content when the notebook is
+ * clean and frets when a cell raised. It hops when a fix lands. A click measures it, with the
+ * Born rule's odds for its mood, and shows |0⟩ or |1⟩; three quick clicks make it turn round.
  * All motion is CSS, and none of it runs with reduced motion.
  */
 export function Ket({
@@ -184,7 +187,7 @@ export function Ket({
   else if (blinking) face = 'blink';
   else if (hover && mood === 'awake') face = 'happy';
 
-  const shapes = ket({ face, look, theta: 0, alarm: mood === 'worried' && measured === null });
+  const shapes = ket({ face, look });
   const parts = groups(shapes);
 
   const paths = (list: Shape[]) =>
@@ -225,7 +228,7 @@ export function Ket({
         onPointerLeave={() => {
           setHover(false);
         }}
-        aria-label="Ket, Marginalia's lamb. Click to ring its bell."
+        aria-label="Ket, Marginalia's sheep. Click to measure it."
         style={{ width: size, height: size }}
       >
         <svg
@@ -233,7 +236,7 @@ export function Ket({
           width={size}
           height={size}
           aria-hidden="true"
-          style={{ '--theta': `${String(theta)}rad` } as CSSProperties}
+          style={{ '--look': String(look) } as CSSProperties}
         >
           <Defs prefix={prefix} />
           {parts

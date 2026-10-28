@@ -91,7 +91,7 @@ function Header({ view, claude }: { view: View; claude: Claude }) {
   const file = view.kind === 'ready' ? splitPath(view.path) : null;
   return (
     <header className="header">
-      <Ket mood={moodOf(view, claude)} size={72} celebrate={claude.landed} />
+      <Ket mood={moodOf(view, claude)} size={96} celebrate={claude.landed} />
       <div className="header-text">
         {file !== null ? (
           <>

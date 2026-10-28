@@ -3,25 +3,16 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  BELL,
-  COLORS,
+  FLEECE,
   ICON_SIZES,
   iconArt,
+  iconBox,
   ket,
   measure,
-  needle,
   probabilityOfZero,
   toSvg,
   type Face,
 } from './ket';
-
-describe('the bell needle', () => {
-  it('points up for |0⟩ and down for |1⟩', () => {
-    expect(needle(0).x).toBeCloseTo(BELL.cx);
-    expect(needle(0).y).toBeLessThan(BELL.cy);
-    expect(needle(Math.PI).y).toBeGreaterThan(BELL.cy);
-  });
-});
 
 describe('measurement', () => {
   it('follows the Born rule', () => {
@@ -35,19 +26,17 @@ describe('measurement', () => {
 });
 
 describe('ket', () => {
-  it('has a face for every mood, and marks only where they mean something', () => {
-    const faces: Face[] = ['awake', 'blink', 'happy', 'worried', 'thinking', 'asleep', 'surprised'];
-    for (const face of faces) expect(ket({ face }).some((s) => s.part === 'face')).toBe(true);
-    expect(ket({ face: 'asleep' }).some((s) => s.part === 'marks')).toBe(true);
-    expect(ket({ face: 'awake' }).some((s) => s.part === 'marks')).toBe(false);
+  it('keeps the brief: fleece height about 0.8 of its width, inside the padding', () => {
+    expect(FLEECE.ry / FLEECE.rx).toBeGreaterThanOrEqual(0.75);
+    expect(FLEECE.ry / FLEECE.rx).toBeLessThanOrEqual(0.85);
+    expect(FLEECE.cx + FLEECE.rx).toBeLessThanOrEqual(92);
   });
 
-  it('turns the needle red only on alarm', () => {
-    const dot = (alarm: boolean) =>
-      ket({ face: 'worried', alarm }).find((s) => s.part === 'needle' && s.fill !== undefined)
-        ?.fill;
-    expect(dot(true)).toBe('#F2735F');
-    expect(dot(false)).toBe(COLORS.ink);
+  it('has a face for every mood, and marks only where they mean something', () => {
+    const faces: Face[] = ['awake', 'blink', 'happy', 'worried', 'thinking', 'asleep', 'surprised'];
+    for (const face of faces) expect(ket({ face }).some((s) => s.part === 'head')).toBe(true);
+    expect(ket({ face: 'asleep' }).some((s) => s.part === 'marks')).toBe(true);
+    expect(ket({ face: 'awake' }).some((s) => s.part === 'marks')).toBe(false);
   });
 
   it('keeps each part together, so the panel can animate it as one group', () => {
@@ -55,12 +44,16 @@ describe('ket', () => {
     const runs = parts.filter((p, i) => p !== parts[i - 1]);
     expect(new Set(runs).size).toBe(runs.length);
   });
+
+  it('looks the same every time', () => {
+    expect(ket({ face: 'awake' })).toEqual(ket({ face: 'awake' }));
+  });
 });
 
 describe('packaged icons', () => {
   it('are up to date with the art (run `npm run icons`)', () => {
     const hash = createHash('sha256')
-      .update(ICON_SIZES.map((size) => toSvg(iconArt(size), size)).join('\n'))
+      .update(ICON_SIZES.map((size) => toSvg(iconArt(size), size, iconBox(size))).join('\n'))
       .digest('hex');
     const saved = readFileSync(
       path.resolve(import.meta.dirname, '../../scripts/icons.hash'),
@@ -69,8 +62,9 @@ describe('packaged icons', () => {
     expect(saved.trim()).toBe(hash);
   });
 
-  it('drop the small details where there is no room', () => {
-    expect(iconArt(16).some((s) => s.part === 'legs')).toBe(false);
-    expect(iconArt(128).some((s) => s.part === 'legs')).toBe(true);
+  it('close in on the face and drop the curls where there is no room', () => {
+    expect(iconBox(16).size).toBeLessThan(100);
+    expect(iconBox(128).size).toBe(100);
+    expect(iconArt(16).length).toBeLessThan(iconArt(128).length);
   });
 });
