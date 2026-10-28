@@ -14,14 +14,17 @@ test('lists the cell that raised, with where and why', async ({ context, openPan
   const panel = await openPanel(page);
 
   await expect(panel.getByRole('heading', { name: '1 cell raised an error' })).toBeVisible();
-  await expect(panel.getByRole('heading', { name: 'control.ipynb' })).toBeVisible();
-  const card = panel.locator('.error-card');
-  await expect(card).toContainText('ValueError');
+  await expect(panel.locator('.file')).toHaveText('control.ipynb');
+  const card = panel.locator('.item');
+  await expect(card.getByRole('heading', { name: 'ValueError' })).toBeVisible();
   await expect(card).toContainText('size 3 is different from 4');
   await expect(card).toContainText('Cell In[3], line 3');
-  await expect(card.locator('.line')).toHaveText('h @ psi');
-  await expect(card).toContainText('Cell 4 of 4');
-  await expect(card.locator('.prompt')).toHaveText('[3]');
+  await expect(card.locator('.item-line')).toHaveText('h @ psi');
+  await expect(card.locator('.chip')).toHaveText('Cell 4');
+  // The traceback stays folded until you ask for it.
+  await expect(card.locator('.details')).toHaveCount(0);
+  await card.getByRole('button', { name: 'Details' }).click();
+  await expect(card.locator('.details pre')).toContainText('Traceback (most recent call last)');
 });
 
 test('Go to cell selects that cell in the notebook', async ({ context, openPanel }) => {
@@ -75,7 +78,7 @@ test('a new error shows up as soon as the cell runs', async ({ context, openPane
   await expect(panel.getByRole('heading', { name: '1 cell raised an error' })).toBeVisible({
     timeout: 30_000,
   });
-  await expect(panel.locator('.error-card')).toContainText('ZeroDivisionError');
+  await expect(panel.locator('.item')).toContainText('ZeroDivisionError');
 });
 
 test('reconnects after the notebook tab reloads', async ({ context, openPanel }) => {
@@ -99,7 +102,7 @@ test('asks for the server setting when Jupyter keeps the app to itself', async (
   const panel = await openPanel(page);
 
   await expect(panel.getByRole('heading', { name: 'One setting on the server' })).toBeVisible();
-  await expect(panel.locator('.config')).toContainText(
+  await expect(panel.locator('.codeblock pre')).toContainText(
     'c.JupyterNotebookApp.expose_app_in_browser = True',
   );
 });
@@ -117,7 +120,7 @@ test('Ket answers a click with a measurement', async ({ context, openPanel }) =>
   const panel = await openPanel(page);
   await expect(panel.getByRole('heading', { name: 'No cell has an error' })).toBeVisible();
 
-  await panel.getByRole('button', { name: /Ket, Marginalia's qubit/ }).click();
-  // Upright in |0⟩ when the notebook is clean, so the Born rule says |0⟩.
+  await panel.getByRole('button', { name: /Ket, Marginalia's lamb/ }).click();
+  // The bell sits at |0⟩ when the notebook is clean, so the Born rule says |0⟩.
   await expect(panel.locator('.ket-said')).toHaveText('|0⟩');
 });

@@ -1,4 +1,4 @@
-import '@fontsource-variable/atkinson-hyperlegible-next';
+import '@fontsource-variable/lexend';
 import '@fontsource-variable/atkinson-hyperlegible-mono';
 import '@/src/ui/theme.css';
 import { StrictMode } from 'react';

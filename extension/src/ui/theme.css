@@ -1,41 +1,61 @@
 /*
- * Marginalia's side panel. The desktop app's palette (src/marginalia/ui/theme.py,
- * docs/design.md "Tokens"): slate, one amber accent, red only for errors.
- * Atkinson Hyperlegible keeps l/1/I and 0/O apart, which tracebacks need.
- * Text meets WCAG AA (4.5:1) on --bg and on --card.
+ * Marginalia's notebook panel. Follows the system's light or dark scheme, like Lemma:
+ * quiet surfaces, compact cards, one amber action per card, red only for errors, and a
+ * status bar. Text meets WCAG AA (4.5:1) on --bg and --surface in both schemes.
  */
 @layer base, components;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;
 
-  --font: 'Atkinson Hyperlegible Next Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font: 'Lexend Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'Atkinson Hyperlegible Mono Variable', ui-monospace, Menlo, Consolas, monospace;
+  --radius: 8px;
+  --radius-lg: 12px;
 
-  --bg: #1b2031; /* slate */
-  --sunk: #161a28; /* code, a shade under */
-  --card: #20263a; /* white 6/255 over slate */
-  --raised: #262c42;
-  --line: rgb(255 255 255 / 0.094);
-  --field-edge: #6b7391;
-  --fg: #eceff7; /* 14:1 */
-  --fg-soft: #c4cadb;
-  --muted: #9ba3bc; /* 6.4:1 */
+  /* Light: a cool paper white, Marginalia's slate ink, its amber for the action. */
+  --bg: #f3f5f9;
+  --surface: #ffffff;
+  --sunk: #eef1f6;
+  --hover: #e8ecf3;
+  --border: #dce2eb;
+  --fg: #1b2031;
+  --muted: #566079;
   --amber: #ffb224;
   --amber-hover: #ffc452;
   --amber-down: #e99a0b;
   --on-amber: #1b2031;
-  --error: #f2735f; /* only for "this went wrong" */
-  --ok: #6ee7b7;
+  --amber-ink: #8a5300;
+  --amber-soft: #fff3db;
+  --error: #b83a26;
+  --ok: #23804a;
+  --add-bg: #e2f4e7;
+  --add-fg: #185f33;
+  --remove-bg: #fbe5e1;
+  --remove-fg: #962c1c;
+  --focus: #1b2031;
+  --shadow: 0 1px 2px rgb(27 32 49 / 0.05), 0 4px 14px rgb(27 32 49 / 0.06);
 
-  --step--1: 0.8125rem; /* 13px */
-  --step-0: 0.875rem; /* 14px body */
-  --step-1: 1rem;
-  --step-2: 1.1875rem;
-
-  --radius-card: 10px;
-  --radius-control: 7px;
-  --radius-code: 6px;
+  @media (prefers-color-scheme: dark) {
+    /* Dark: the desktop app's slate. */
+    --bg: #161a28;
+    --surface: #1f2436;
+    --sunk: #191d2c;
+    --hover: #272d42;
+    --border: #2e3550;
+    --fg: #eceff7;
+    --muted: #a3abc2;
+    --amber-ink: #ffc452;
+    --amber-soft: rgb(255 178 36 / 0.13);
+    --error: #f2735f;
+    --ok: #6ee7b7;
+    --add-bg: rgb(110 231 183 / 0.12);
+    --add-fg: #93f0c9;
+    --remove-bg: rgb(242 115 95 / 0.14);
+    --remove-fg: #ffa395;
+    --focus: #ffb224;
+    --shadow: none;
+  }
 }
 
 @layer base {
@@ -48,26 +68,25 @@
   html,
   body {
     margin: 0;
+    height: 100%;
     background: var(--bg);
     color: var(--fg);
-    font: 400 var(--step-0) / 1.5 var(--font);
+    font: 400 0.875rem / 1.5 var(--font);
     -webkit-font-smoothing: antialiased;
-  }
-
-  body {
-    min-width: 280px;
   }
 
   h1,
   h2,
-  p {
+  h3,
+  p,
+  figure {
     margin: 0;
   }
 
   code,
   pre {
     font-family: var(--mono);
-    font-size: var(--step--1);
+    font-size: 0.78rem;
   }
 
   button {
@@ -76,77 +95,486 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--amber);
+    outline: 2px solid var(--focus);
     outline-offset: 2px;
-  }
-
-  ::selection {
-    background: var(--amber);
-    color: var(--on-amber);
   }
 }
 
 @layer components {
-  .panel {
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-    padding: 1rem 1rem 1.5rem;
-    max-width: 40rem;
+  .app {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100vh;
   }
 
-  /* Ket and what it's looking at. */
-  .head {
+  .muted {
+    color: var(--muted);
+  }
+
+  .small {
+    font-size: 0.8125rem;
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .icon {
+    flex: none;
+  }
+
+  /* Header: Ket and what it's reading. */
+  .header {
     display: flex;
     align-items: center;
-    gap: 0.875rem;
-    min-height: 4.5rem;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem 0.5rem;
   }
 
-  .head-text {
+  .header-text {
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.125rem;
   }
 
-  .title {
-    font-size: var(--step-1);
+  .brand {
+    font-size: 1.125rem;
     font-weight: 650;
-    line-height: 1.3;
-    overflow-wrap: anywhere;
+    letter-spacing: -0.01em;
   }
 
-  .subtitle {
-    color: var(--muted);
-    font-size: var(--step--1);
+  .file {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 0;
+    color: var(--fg);
+    font-size: 0.8125rem;
+  }
+
+  .file span {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .kernel {
+  .file .icon {
+    color: var(--muted);
+  }
+
+  .main {
+    padding: 0.5rem 1rem 1.25rem;
+    min-width: 0;
+  }
+
+  .title {
+    font-size: 1rem;
+    font-weight: 650;
+    line-height: 1.35;
+  }
+
+  .lede {
+    margin-top: 0.125rem;
+  }
+
+  .note {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    max-width: 34rem;
+  }
+
+  /* Error cards */
+  .items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    margin: 0.75rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.75rem 0.875rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    min-width: 0;
+  }
+
+  .item-head {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
-    color: var(--fg-soft);
-    font-size: var(--step--1);
+    gap: 0.4rem;
+    min-width: 0;
   }
 
-  .kernel-dot {
-    width: 0.5rem;
-    height: 0.5rem;
+  .item-icon {
+    color: var(--error);
+  }
+
+  .item-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  .chip {
+    flex: none;
+    padding: 0.05rem 0.5rem;
+    border-radius: 999px;
+    background: var(--sunk);
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+
+  .item-msg {
+    color: var(--fg);
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .item-where {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    min-width: 0;
+  }
+
+  .item-line {
+    align-self: flex-start;
+    max-width: 100%;
+    padding: 0.15rem 0.45rem;
+    border-radius: 6px;
+    background: var(--sunk);
+    color: var(--fg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .details {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+  }
+
+  .details pre {
+    align-self: stretch;
+    margin: 0;
+    padding: 0.6rem 0.7rem;
+    max-height: 16rem;
+    overflow: auto;
+    background: var(--sunk);
+    border-radius: var(--radius);
+    color: var(--fg);
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* Buttons */
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-top: 0.125rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 1.875rem;
+    padding: 0.25rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--fg);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .btn:hover {
+    background: var(--hover);
+  }
+
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .btn.ghost {
+    border-color: transparent;
+    background: transparent;
+    color: var(--muted);
+  }
+
+  .btn.ghost:hover {
+    background: var(--hover);
+    color: var(--fg);
+  }
+
+  .btn.primary {
+    border-color: var(--amber);
+    background: var(--amber);
+    color: var(--on-amber);
+    font-weight: 600;
+  }
+
+  .btn.primary:hover {
+    background: var(--amber-hover);
+  }
+
+  .btn.primary:active {
+    background: var(--amber-down);
+  }
+
+  .btn.primary:focus-visible {
+    outline-color: var(--fg);
+  }
+
+  .disclose .icon {
+    transition: transform 150ms ease;
+  }
+
+  .disclose[aria-expanded='true'] .icon {
+    transform: rotate(90deg);
+  }
+
+  /* A fix, under its error */
+  .fix,
+  .setup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    margin-top: 0.25rem;
+    padding: 0.7rem 0.75rem;
+    border-radius: var(--radius);
+    background: var(--amber-soft);
+  }
+
+  .fix.done {
+    background: var(--add-bg);
+  }
+
+  .fix.failed {
+    background: var(--remove-bg);
+  }
+
+  .fix-summary {
+    font-weight: 600;
+  }
+
+  .fix-why {
+    color: var(--fg);
+    font-size: 0.8125rem;
+  }
+
+  .fix-error {
+    color: var(--remove-fg);
+    font-weight: 500;
+  }
+
+  .applied {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.35rem;
+    color: var(--add-fg);
+    font-weight: 500;
+  }
+
+  .applied .icon {
+    margin-top: 0.15rem;
+  }
+
+  .working {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--fg);
+  }
+
+  .pulse {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: var(--amber);
+    animation: pulse 1.1s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    50% {
+      opacity: 0.3;
+      transform: scale(0.75);
+    }
+  }
+
+  .diff {
+    border-radius: var(--radius);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .diff figcaption {
+    padding: 0.3rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+
+  .diff pre {
+    margin: 0;
+    padding: 0.35rem 0;
+    overflow-x: auto;
+    line-height: 1.5;
+  }
+
+  .diff pre > span {
+    display: block;
+    padding: 0 0.6rem;
+    white-space: pre;
+  }
+
+  .diff-mark {
+    display: inline-block;
+    width: 1.1em;
+    color: var(--muted);
+    user-select: none;
+  }
+
+  .diff-add {
+    background: var(--add-bg);
+    color: var(--add-fg);
+  }
+
+  .diff-remove {
+    background: var(--remove-bg);
+    color: var(--remove-fg);
+  }
+
+  .diff-skip {
+    color: var(--muted);
+    font-family: var(--font);
+    font-size: 0.75rem;
+    font-style: italic;
+  }
+
+  /* A file's lines, with Copy */
+  .codeblock {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    overflow: hidden;
+  }
+
+  .codeblock figcaption {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.2rem 0.25rem 0.2rem 0.65rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .codeblock figcaption code {
+    min-width: 0;
+    font-size: 0.72rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .codeblock pre {
+    margin: 0;
+    padding: 0.55rem 0.65rem;
+    overflow-x: auto;
+    font-size: 0.74rem;
+    line-height: 1.6;
+  }
+
+  .reveal-problem {
+    margin-top: 0.4rem;
+    color: var(--error);
+    font-size: 0.8125rem;
+  }
+
+  /* Status bar */
+  .statusbar {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.35rem 0.875rem;
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+
+  .status-left {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dot {
+    flex: none;
+    width: 0.45rem;
+    height: 0.45rem;
     border-radius: 50%;
     background: var(--muted);
-    flex: none;
   }
 
-  .kernel-dot[data-status='idle'] {
+  .dot[data-status='idle'] {
     background: var(--ok);
   }
 
-  .kernel-dot[data-status='busy'] {
+  .dot[data-status='busy'] {
     background: var(--amber);
+  }
+
+  .badge {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--fg);
+  }
+
+  .badge .icon {
+    width: 13px;
+    height: 13px;
+    color: var(--amber-ink);
+  }
+
+  .badge.warn {
+    color: var(--amber-ink);
   }
 
   /* Ket */
@@ -156,7 +584,6 @@
   }
 
   .ket-button {
-    position: relative;
     display: block;
     padding: 0;
     border: none;
@@ -170,268 +597,142 @@
     overflow: visible;
   }
 
-  .ket-flash {
-    position: absolute;
-    inset: 12%;
-    border-radius: 50%;
-    border: 2px solid var(--amber);
-    pointer-events: none;
-    animation: ket-flash 600ms ease-out forwards;
+  .ket g {
+    transform-box: view-box;
   }
 
-  @keyframes ket-flash {
-    from {
-      opacity: 0.9;
-      transform: scale(0.8);
-    }
-    to {
-      opacity: 0;
-      transform: scale(1.5);
-    }
+  .ket-body {
+    transform-origin: 50px 92px;
+  }
+
+  .ket-wool {
+    transform-origin: 50px 70px;
+    animation: ket-breathe 3.8s ease-in-out infinite;
+  }
+
+  .ket-ears {
+    transform-origin: 50px 60px;
+    transition: transform 200ms ease;
+  }
+
+  .ket[data-hover] .ket-ears {
+    transform: translateY(-1.4px) scaleX(1.04);
+  }
+
+  .ket-needle {
+    transform-origin: 50px 78px;
+    transform: rotate(var(--theta));
+    transition: transform 450ms cubic-bezier(0.3, 1.5, 0.5, 1);
+  }
+
+  .ket[data-mood='thinking'] .ket-needle {
+    animation: ket-precess 1.6s linear infinite;
+  }
+
+  .ket[data-mood='asleep'] .ket-body {
+    transform: translateY(2.5px);
+  }
+
+  .ket[data-mood='asleep'] .ket-wool {
+    animation-duration: 5.5s;
+  }
+
+  .ket[data-mood='asleep'] .ket-marks,
+  .ket[data-mood='thinking'] .ket-marks {
+    animation: ket-float 2.4s ease-in-out infinite;
+  }
+
+  .ket[data-anim='hop'] .ket-body {
+    animation: ket-hop 650ms cubic-bezier(0.3, 0.9, 0.4, 1);
+  }
+
+  .ket[data-anim='hop'] .ket-shadow {
+    transform-origin: 50px 92px;
+    animation: ket-shadow 650ms ease;
+  }
+
+  .ket[data-anim='spin'] .ket-body {
+    transform-origin: 50px 52px;
+    animation: ket-spin 800ms cubic-bezier(0.5, 0, 0.3, 1);
+  }
+
+  .ket[data-anim='ring'] .ket-bell {
+    transform-origin: 50px 73px;
+    animation: ket-ring 500ms ease-out;
   }
 
   .ket-said {
     position: absolute;
-    left: 100%;
-    top: 0;
-    margin-left: -0.25rem;
-    color: var(--amber);
+    left: 74%;
+    top: 64%;
+    color: var(--amber-ink);
     font-family: var(--mono);
-    font-size: var(--step--1);
+    font-size: 0.75rem;
+    font-weight: 600;
     pointer-events: none;
   }
 
-  /* A message for a state without a notebook: what's wrong and the one thing to do. */
-  .note {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    max-width: 34rem;
+  @keyframes ket-breathe {
+    50% {
+      transform: scale(1.025, 0.985);
+    }
   }
 
-  .note p {
-    color: var(--fg-soft);
+  @keyframes ket-precess {
+    from {
+      transform: rotate(0turn);
+    }
+    to {
+      transform: rotate(1turn);
+    }
   }
 
-  .note .fine {
-    color: var(--muted);
-    font-size: var(--step--1);
+  @keyframes ket-float {
+    50% {
+      transform: translateY(-2px);
+      opacity: 0.6;
+    }
   }
 
-  /* A file's lines: its name above, Copy beside it, lines that never wrap mid-identifier. */
-  .config {
-    margin: 0;
-    background: var(--sunk);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-code);
-    overflow: hidden;
+  @keyframes ket-hop {
+    30% {
+      transform: translateY(-9px) scale(0.97, 1.04);
+    }
+    60% {
+      transform: translateY(0) scale(1.05, 0.95);
+    }
   }
 
-  .config-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding: 0.375rem 0.375rem 0.375rem 0.75rem;
-    border-bottom: 1px solid var(--line);
-    color: var(--muted);
+  @keyframes ket-shadow {
+    30% {
+      transform: scale(0.75);
+      opacity: 0.6;
+    }
   }
 
-  .config-head code {
-    min-width: 0;
-    font-size: 0.75rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  @keyframes ket-spin {
+    to {
+      transform: rotate(1turn);
+    }
   }
 
-  .config pre {
-    margin: 0;
-    padding: 0.625rem 0.75rem;
-    overflow-x: auto;
-    color: var(--fg);
-    font-size: 0.75rem;
-    line-height: 1.6;
-  }
-
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .button {
-    min-height: 2rem;
-    padding: 0.3rem 0.85rem;
-    border-radius: var(--radius-control);
-    border: 1px solid var(--line);
-    background: rgb(255 255 255 / 0.063);
-    color: var(--fg);
-    font-weight: 600;
-    font-size: var(--step--1);
-    white-space: nowrap;
-    cursor: pointer;
-  }
-
-  .button:hover {
-    background: rgb(255 255 255 / 0.11);
-  }
-
-  .button:active {
-    background: rgb(255 255 255 / 0.04);
-  }
-
-  .button.primary {
-    background: var(--amber);
-    border-color: var(--amber);
-    color: var(--on-amber);
-  }
-
-  .button.primary:hover {
-    background: var(--amber-hover);
-  }
-
-  .button.primary:active {
-    background: var(--amber-down);
-  }
-
-  .button.primary:focus-visible {
-    outline-color: var(--fg);
-  }
-
-  .button.small {
-    min-height: 1.75rem;
-    padding: 0.15rem 0.6rem;
-    font-weight: 500;
-  }
-
-  /* Errors */
-  .summary {
-    font-size: var(--step-1);
-    font-weight: 650;
-  }
-
-  .summary-sub {
-    margin-top: 0.125rem;
-    color: var(--muted);
-    font-size: var(--step--1);
-  }
-
-  .errors {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  /* The red bar is Jupyter's own active-cell bar, in the error colour. */
-  .error-card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.75rem 0.875rem 0.75rem 1.125rem;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-card);
-    overflow: hidden;
-  }
-
-  .error-card::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 4px;
-    background: var(--error);
-  }
-
-  .cell-label {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.5rem;
-    color: var(--muted);
-    font-size: var(--step--1);
-  }
-
-  .prompt {
-    font-family: var(--mono);
-    color: var(--fg-soft);
-  }
-
-  .exception {
-    font-family: var(--mono);
-    font-size: var(--step--1);
-    line-height: 1.45;
-    overflow-wrap: anywhere;
-  }
-
-  .ename {
-    color: var(--error);
-    font-weight: 700;
-  }
-
-  .where {
-    color: var(--muted);
-    font-size: var(--step--1);
-  }
-
-  .line {
-    display: block;
-    margin-top: 0.25rem;
-    padding: 0.35rem 0.6rem;
-    background: var(--sunk);
-    border-radius: var(--radius-code);
-    color: var(--fg);
-    overflow-x: auto;
-    white-space: pre;
-  }
-
-  .traceback summary {
-    width: fit-content;
-    color: var(--fg-soft);
-    font-size: var(--step--1);
-    cursor: pointer;
-  }
-
-  .traceback summary:hover {
-    color: var(--fg);
-  }
-
-  .traceback pre {
-    margin: 0.5rem 0 0;
-    padding: 0.6rem;
-    max-height: 18rem;
-    overflow: auto;
-    background: var(--sunk);
-    border-radius: var(--radius-code);
-    color: var(--fg-soft);
-    line-height: 1.4;
-    /* A narrow panel: wrap rather than hide the end of the message. */
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-
-  .reveal-problem {
-    color: var(--error);
-    font-size: var(--step--1);
-  }
-
-  .visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+  @keyframes ket-ring {
+    20% {
+      transform: rotate(16deg);
+    }
+    45% {
+      transform: rotate(-12deg);
+    }
+    70% {
+      transform: rotate(6deg);
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .ket-flash {
-      animation: none;
-      opacity: 0;
+    .ket *,
+    .pulse {
+      animation: none !important;
+      transition: none !important;
     }
   }
 }

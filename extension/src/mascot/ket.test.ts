@@ -3,34 +3,22 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  ARM,
+  BELL,
   ICON_SIZES,
   iconArt,
   ket,
   measure,
+  needle,
   probabilityOfZero,
-  project,
-  SPHERE,
-  TILT,
+  toSvg,
+  type Face,
 } from './ket';
 
-const L = ARM * SPHERE.r;
-
-describe('project', () => {
-  it('puts |0⟩ straight up and |1⟩ straight down', () => {
-    const up = project({ theta: 0, phi: 0 });
-    expect(up.x).toBeCloseTo(SPHERE.cx);
-    expect(up.y).toBeCloseTo(SPHERE.cy - L * Math.sqrt(1 - TILT ** 2));
-    const down = project({ theta: Math.PI, phi: 0 });
-    expect(down.y).toBeGreaterThan(SPHERE.cy);
-  });
-
-  it('draws the front half of the equator lower, like the desktop orb', () => {
-    const front = project({ theta: Math.PI / 2, phi: Math.PI / 2 });
-    const back = project({ theta: Math.PI / 2, phi: -Math.PI / 2 });
-    expect(front.y).toBeCloseTo(SPHERE.cy + L * TILT);
-    expect(front.behind).toBe(false);
-    expect(back.behind).toBe(true);
+describe('the bell needle', () => {
+  it('points up for |0⟩ and down for |1⟩', () => {
+    expect(needle(0).x).toBeCloseTo(BELL.cx);
+    expect(needle(0).y).toBeLessThan(BELL.cy);
+    expect(needle(Math.PI).y).toBeGreaterThan(BELL.cy);
   });
 });
 
@@ -46,40 +34,32 @@ describe('measurement', () => {
 });
 
 describe('ket', () => {
-  it('hides a vector pointing away behind the sphere', () => {
-    const away = ket({ state: { theta: 1, phi: -Math.PI / 2 }, face: 'awake' });
-    const toward = ket({ state: { theta: 1, phi: Math.PI / 2 }, face: 'awake' });
-    expect(away[0]?.part).toBe('vector');
-    expect(toward[0]?.part).toBe('body');
+  it('has a face for every mood, and marks only where they mean something', () => {
+    const faces: Face[] = ['awake', 'blink', 'happy', 'worried', 'thinking', 'asleep', 'surprised'];
+    for (const face of faces) expect(ket({ face }).some((s) => s.part === 'face')).toBe(true);
+    expect(ket({ face: 'asleep' }).some((s) => s.part === 'marks')).toBe(true);
+    expect(ket({ face: 'awake' }).some((s) => s.part === 'marks')).toBe(false);
   });
 
-  it('turns the dot red only on alarm', () => {
+  it('turns the needle red only on alarm', () => {
     const dot = (alarm: boolean) =>
-      ket({ state: { theta: 0, phi: 0 }, face: 'worried', alarm }).find(
-        (s) => s.part === 'vector' && s.fill !== undefined,
-      )?.fill;
+      ket({ face: 'worried', alarm }).find((s) => s.part === 'needle' && s.fill !== undefined)
+        ?.fill;
     expect(dot(true)).toBe('#F2735F');
-    expect(dot(false)).toBe('#FFB224');
+    expect(dot(false)).toBe('#1B2031');
   });
 
-  it('has a face for every mood', () => {
-    for (const face of [
-      'awake',
-      'blink',
-      'happy',
-      'worried',
-      'thinking',
-      'asleep',
-      'surprised',
-    ] as const)
-      expect(ket({ state: { theta: 0, phi: 0 }, face }).some((s) => s.part === 'face')).toBe(true);
+  it('keeps each part together, so the panel can animate it as one group', () => {
+    const parts = ket({ face: 'awake' }).map((s) => s.part);
+    const runs = parts.filter((p, i) => p !== parts[i - 1]);
+    expect(new Set(runs).size).toBe(runs.length);
   });
 });
 
 describe('packaged icons', () => {
   it('are up to date with the art (run `npm run icons`)', () => {
     const hash = createHash('sha256')
-      .update(JSON.stringify(ICON_SIZES.map((size) => iconArt(size))))
+      .update(ICON_SIZES.map((size) => toSvg(iconArt(size), size)).join('\n'))
       .digest('hex');
     const saved = readFileSync(
       path.resolve(import.meta.dirname, '../../scripts/icons.hash'),
@@ -88,8 +68,8 @@ describe('packaged icons', () => {
     expect(saved.trim()).toBe(hash);
   });
 
-  it('leave the face off where there is no room for it', () => {
-    expect(iconArt(16).some((s) => s.part === 'face')).toBe(false);
-    expect(iconArt(128).some((s) => s.part === 'face')).toBe(true);
+  it('drop the small details where there is no room', () => {
+    expect(iconArt(16).some((s) => s.part === 'legs')).toBe(false);
+    expect(iconArt(128).some((s) => s.part === 'legs')).toBe(true);
   });
 });

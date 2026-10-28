@@ -5,26 +5,57 @@ import {
   type Page,
   type Worker,
 } from '@playwright/test';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const EXTENSION_PATH = path.resolve(import.meta.dirname, '../../.output/e2e/chrome-mv3');
+/** Fixed by the manifest key (wxt.config.ts), so the helper manifest can name it. */
+export const EXTENSION_ID = 'behgmlfpdfdjcbiogfngmghpbfgaagpa';
+
+/**
+ * Chromium reads helper manifests from <user data dir>/NativeMessagingHosts. With `helper`
+ * on, the fake helper is registered there, as `marginalia-browser-host install` would.
+ */
+function registerFakeHelper(userDataDir: string): void {
+  const dir = path.join(userDataDir, 'NativeMessagingHosts');
+  mkdirSync(dir, { recursive: true });
+  const launcher = path.join(userDataDir, 'fake-helper.sh');
+  const script = path.join(import.meta.dirname, 'fake-helper.js');
+  writeFileSync(launcher, `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`);
+  chmodSync(launcher, 0o755);
+  writeFileSync(
+    path.join(dir, 'marginalia.browser.json'),
+    JSON.stringify({
+      name: 'marginalia.browser',
+      description: 'fake helper for tests',
+      path: launcher,
+      type: 'stdio',
+      allowed_origins: [`chrome-extension://${EXTENSION_ID}/`],
+    }),
+  );
+}
 
 /** A Chromium context with the e2e build loaded (`npm run build:e2e` first). */
 export const test = base.extend<{
+  helper: boolean;
   context: BrowserContext;
   serviceWorker: Worker;
   extensionId: string;
   /** Opens the side panel as a page, pinned to the tab showing `page`. */
   openPanel: (page: Page) => Promise<Page>;
 }>({
-  // eslint-disable-next-line no-empty-pattern -- Playwright fixture signature
-  context: async ({}, use) => {
-    const context = await chromium.launchPersistentContext('', {
+  helper: [true, { option: true }],
+  context: async ({ helper }, use) => {
+    const userDataDir = mkdtempSync(path.join(tmpdir(), 'marginalia-chrome-'));
+    if (helper) registerFakeHelper(userDataDir);
+    const context = await chromium.launchPersistentContext(userDataDir, {
       channel: 'chromium',
       args: [`--disable-extensions-except=${EXTENSION_PATH}`, `--load-extension=${EXTENSION_PATH}`],
     });
     await use(context);
     await context.close();
+    rmSync(userDataDir, { recursive: true, force: true });
   },
   serviceWorker: async ({ context }, use) => {
     const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));

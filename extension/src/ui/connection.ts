@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { browser, type Browser } from 'wxt/browser';
 import { allowedSites, requestSites } from '@/src/adapters/permissions';
-import { makeMessage, NOTEBOOK_PORT, parseMessage } from '@/src/messaging/protocol';
+import {
+  makeMessage,
+  NOTEBOOK_PORT,
+  parseMessage,
+  type EditOp,
+  type MessageOf,
+} from '@/src/messaging/protocol';
 import { initialView, reduce, type View } from './view';
 
 /**
@@ -24,7 +30,18 @@ export interface Notebook {
   allow: () => void;
   reload: () => void;
   reveal: (index: number, cellId: string | null) => void;
+  /** Makes an edit in the notebook; resolves with the page's answer. */
+  apply: (op: EditOp) => Promise<Applied>;
 }
+
+export type Applied = MessageOf<'notebook/applied'>['payload'];
+
+const NOT_CONNECTED: Applied = {
+  requestId: '-',
+  ok: false,
+  error: 'unavailable',
+  detail: 'Marginalia lost the tab. Wait a moment and try again.',
+};
 
 /**
  * Follows the active tab of the panel's window and talks to its content
@@ -36,6 +53,7 @@ export function useNotebook(): Notebook {
   const [revealProblem, setRevealProblem] = useState<string | null>(null);
   const port = useRef<Browser.runtime.Port | null>(null);
   const tabId = useRef<number | null>(null);
+  const applies = useRef(new Map<string, (a: Applied) => void>());
 
   useEffect(() => {
     let generation = 0;
@@ -59,13 +77,19 @@ export function useNotebook(): Notebook {
         heard = true;
         if (message.type === 'notebook/revealed')
           setRevealProblem(message.payload.ok ? null : (message.payload.detail ?? 'Not found.'));
-        else dispatch({ type: 'message', message });
+        else if (message.type === 'notebook/applied') {
+          applies.current.get(message.payload.requestId)?.(message.payload);
+          applies.current.delete(message.payload.requestId);
+        } else dispatch({ type: 'message', message });
       });
       p.onDisconnect.addListener(() => {
         // Reading lastError tells Chrome we handled "Receiving end does not exist".
         const why = browser.runtime.lastError?.message;
         if (mine !== generation || port.current !== p) return;
         port.current = null;
+        // An edit in flight when the tab went away: say so rather than wait forever.
+        for (const resolve of applies.current.values()) resolve(NOT_CONNECTED);
+        applies.current.clear();
         if (!heard && tries <= 1) {
           console.debug('Marginalia: the tab did not answer:', why ?? 'disconnected');
           dispatch({ type: 'connect-failed' });
@@ -127,5 +151,20 @@ export function useNotebook(): Notebook {
     port.current?.postMessage(makeMessage('notebook/reveal', { index, cellId }));
   }, []);
 
-  return { view, revealProblem, allow, reload, reveal };
+  const apply = useCallback(
+    (op: EditOp) =>
+      new Promise<Applied>((resolve) => {
+        const p = port.current;
+        if (p === null) {
+          resolve(NOT_CONNECTED);
+          return;
+        }
+        const requestId = crypto.randomUUID();
+        applies.current.set(requestId, resolve);
+        p.postMessage(makeMessage('notebook/apply', { requestId, op }));
+      }),
+    [],
+  );
+
+  return { view, revealProblem, allow, reload, reveal, apply };
 }
