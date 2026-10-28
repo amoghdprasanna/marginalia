@@ -30,7 +30,7 @@ jobs:
           python - <<'PY'
           import glob, zipfile
           names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
-          for pkg in ("marginalia/brain/", "marginalia/ui/", "marginalia/ui/assets/check.svg"):
+          for pkg in ("marginalia/brain/", "marginalia/ui/", "marginalia/browser/", "marginalia/ui/assets/check.svg"):
               assert any(n.startswith(pkg) for n in names), f"{pkg} missing from wheel: {names}"
           print("ok:", len(names), "files")
           PY
@@ -61,3 +61,52 @@ jobs:
       # Only the dev extra: the suite must pass without OCR or voice installed, like a fresh user's machine.
       - run: pip install -e ".[dev]"
       - run: pytest -rs --cov=marginalia --cov-report=term-missing  # -rs: name every skipped test and why
+
+  extension:
+    # The Chrome extension for notebooks (ADR 0029): types, lint, formatting, unit tests, build.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: extension/.nvmrc
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run test:coverage
+      - run: npm run build
+
+  extension-e2e:
+    # Loads the built extension into Chromium against real Jupyter Notebook servers:
+    # the pinned version and the one on UMD's hepcms cluster.
+    strategy:
+      fail-fast: false
+      matrix:
+        notebook: ["7.5.6", "7.6.3"]
+    runs-on: ubuntu-latest
+    env:
+      MARGINALIA_NOTEBOOK_VERSION: ${{ matrix.notebook }}
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: extension/.nvmrc
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-notebook-${{ matrix.notebook }}
+          path: extension/playwright-report/
+

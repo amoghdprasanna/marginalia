@@ -47,6 +47,7 @@ src/marginalia/      the app (installed with pip install -e .; see ADR 0010)
                      secrets, hotkeys, permissions, logs, app (wiring)
 tests/               unit and pytest-qt tests; fakes in helpers.py
 eval/                answer-quality harness and labelled cases (costs real API calls)
+extension/           the Chrome extension for Jupyter notebooks (TypeScript; ADR 0029)
 docs/                this file, ADRs, README images
 ```
 

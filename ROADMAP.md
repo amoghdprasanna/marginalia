@@ -55,3 +55,20 @@ Goal: someone else can install it.
 - [x] Windows: CI, microphone consent check, taskbar icon, UTF-8 file handling, `.zip` build
 - [x] Wayland: Screenshot and GlobalShortcuts portals, windows through XWayland (ADR 0024)
 - [ ] **You (or a tester):** first real run on Windows, GNOME and KDE Wayland; tests use fakes there
+
+## Stage 6: Notebooks in the browser (in progress)
+Goal: help with a Jupyter notebook open in Chrome (UMD's cluster through Open OnDemand), from its
+real cells, not a screenshot. See ADR 0029.
+- [x] Chrome extension in `extension/` (WXT, React, strict TypeScript), asks only for UMD and
+      local Jupyter, once
+- [x] Reads the open notebook through Jupyter's own app object; lists cells that raised, with
+      where and why; *Go to cell*; updates as cells run; survives reloads
+- [x] Ket in the panel and the toolbar icon (now an original lamb with a Bloch-sphere bell)
+- [x] Unit tests and an e2e suite against real Notebook 7.6.3 servers; CI runs both
+- [x] Turned on `expose_app_in_browser` on hepcms; the panel read a real notebook there
+- [x] Fix with Claude through a desktop helper over native messaging (ADR 0030): a proposed change
+      as a diff, applied only when you press Apply, with Undo; stale edits refused
+- [x] Panel rebuilt to Lemma's standard: light and dark, compact cards, status bar
+- [ ] **You:** reload the extension and try Fix with Claude on the hepcms notebook
+- [ ] Tests: pytest + testbook for the notebook's functions, and a Playwright "runs clean" check
+      in its own browser profile

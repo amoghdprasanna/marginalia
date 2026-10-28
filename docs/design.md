@@ -84,6 +84,45 @@ These are the rules the UI follows, with where each shows up. Check a UI change 
 - An empty journal is one centred message under the qubit mark: what will appear here and how to
   make it appear. A search with no results says so, and what to try.
 
+## The notebook panel (`extension/`, ADRs 0029 to 0031)
+
+**Notes in the margin of your notebook**, which is what Marginalia means. Each error hangs on a
+thread down the panel's left edge from a numbered marker: the cell's number, coral while it has an
+error, a mint check once its fix is applied. Clicking a marker goes to that cell. The thread is
+the one bold idea; everything else stays quiet (`extension/src/ui/theme.css`).
+- Chrome's panel title already says Marginalia, so the header leads with the notebook's name.
+- Each note: the exception class as a small coral label, the *message* as the headline (two
+  lines, the rest in Details), the line that raised, then actions. **Fix with Claude** is the one
+  filled button; *Go to cell* and *Details* are quiet. Details expands smoothly.
+- Claude's suggestion is one lagoon-tinted block: who suggests it, a one-line summary, the
+  reasoning (three lines, then *More*), the change as a red/green diff, **Apply** and *Dismiss*.
+  No boxes inside boxes. Applying shows a spinner on a solid button; applied shows "Changed cell 4.
+  Run it to check." with **Undo**.
+- A note belongs to one error, not to its cell: rerun a cell, or get a new error from it, and it
+  gets a fresh note. New errors that appear while the panel is open get a suggestion without a
+  click (*Suggest fixes for new errors*, under the count, turns this off). Claude is told what was
+  already tried in this notebook. A suggestion whose cell has changed since says so and offers
+  *Ask again* instead of Apply (ADR 0032).
+- The status bar: the kernel on the left, the model menu on the right (a real `<select>`, styled
+  with `appearance: base-select`).
+- **Colour, in oklch, in light/dark pairs (`light-dark()`):** a cool paper or night-ink base,
+  lagoon blue for actions and Claude, coral only for errors, mint for fixed. Ket's amber bell is
+  the one warm accent. No tinted browns.
+- Lexend for text, as in Lemma; Atkinson Hyperlegible Mono for code (`l`/`1`/`I`, `0`/`O`).
+- **Ket** follows the user's own character brief: one enormous, slightly flattened mass of ivory
+  fleece (height about 0.8 of its width) with fine matted curls; a small charcoal head at its
+  upper front edge with a domed forehead and heavy muzzle; close-set protruding eyes with a thin
+  dusty-mauve upper rim; small recessed nostrils; sideways leaf-shaped ears; short legs with
+  flared hooves; a soft clay finish lit from the upper left. 96 px in the header. Icons at 16
+  and 32 px close in on the face so the eyes and nostrils stay readable. The brief is modelled
+  on Aardman's Shirley and is for personal use: **change the look before publishing the
+  extension anywhere.** Moods change the face and pose (content, looking up while Claude works,
+  fretting at an error, asleep); a click measures Ket with Born-rule odds for its mood and
+  shows `|0⟩`/`|1⟩`; three quick clicks turn it round. All CSS; reduced motion stops it,
+  except the Apply spinner, which slows instead so "busy" still reads.
+- Chrome 135 is the floor (manifest), so `light-dark()`, `interpolate-size` and `base-select`
+  need no fallbacks. Checked at 390 px in both schemes.
+
 ## Tokens (`ui/theme.py`)
 
 Every colour is a token in `theme.py`; no other UI module writes a colour literal (a test checks).

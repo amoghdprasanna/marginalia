@@ -1,0 +1,11 @@
+node_modules/
+.output/
+.wxt/
+coverage/
+playwright-report/
+test-results/
+web-ext.config.ts
+.DS_Store
+# Jupyter's working files from the e2e server
+tests/e2e/fixtures/.ipynb_checkpoints/
+tests/e2e/.jupyter-runtime/

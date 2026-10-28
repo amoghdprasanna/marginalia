@@ -38,6 +38,8 @@ package = ["pyinstaller>=6.10"]
 
 [project.scripts]
 marginalia = "marginalia.app:main"
+# Chrome runs this for the notebook extension; `marginalia-browser-host install` sets it up (ADR 0030).
+marginalia-browser-host = "marginalia.browser.host:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -63,6 +65,8 @@ addopts = "--strict-markers"
 [tool.ruff]
 line-length = 120
 target-version = "py310"
+# The Chrome extension is TypeScript with its own linters; its test notebooks are fixtures.
+extend-exclude = ["extension"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "N"]

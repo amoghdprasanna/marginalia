@@ -1107,6 +1107,13 @@ def hard_exit(code: int) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    args_in = sys.argv[1:] if argv is None else argv
+    # Chrome starts the installed app as the notebook extension's helper (ADR 0030); it passes
+    # the extension's origin as the first argument. No window, no Qt: just the helper.
+    if args_in[:1] and args_in[0].startswith("chrome-extension://"):
+        from .browser.host import main as helper_main
+
+        raise SystemExit(helper_main())
     ap = argparse.ArgumentParser(prog="marginalia", description="Screen-aware study companion.")
     ap.add_argument("--demo", action="store_true", help="canned answers, no API key needed")
     ap.add_argument("--no-hotkey", action="store_true", help="disable the global shortcut (use the orb)")

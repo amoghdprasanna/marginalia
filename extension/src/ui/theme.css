@@ -1,0 +1,1112 @@
+/*
+ * Marginalia's notebook panel: notes in the margin of your notebook. Each error hangs on a
+ * thread down the left edge from its cell's number; that thread is the one bold idea, and
+ * everything else stays quiet (docs/design.md).
+ *
+ * Colours are oklch, picked in pairs with light-dark(), so the panel follows the system's
+ * scheme. Lagoon blue is for actions and Claude's suggestions, coral only for errors, mint for
+ * fixed; Ket's amber bell is the one warm note. Text meets WCAG AA (4.5:1) on bg and surface.
+ * Chrome 135+ (manifest minimum), so light-dark(), interpolate-size and base-select need no
+ * fallbacks.
+ */
+@layer base, components;
+
+:root {
+  color-scheme: light dark;
+  interpolate-size: allow-keywords;
+
+  --font: 'Lexend Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'Atkinson Hyperlegible Mono Variable', ui-monospace, Menlo, Consolas, monospace;
+
+  --bg: light-dark(oklch(98.4% 0.005 250), oklch(17.5% 0.022 262));
+  --surface: light-dark(oklch(100% 0 0), oklch(21.5% 0.026 262));
+  --sunken: light-dark(oklch(96.2% 0.007 250), oklch(15.5% 0.02 262));
+  --hover: light-dark(oklch(94.8% 0.01 250), oklch(26% 0.03 262));
+  --line: light-dark(oklch(91.5% 0.01 255), oklch(29% 0.03 262));
+  --line-strong: light-dark(oklch(84% 0.015 255), oklch(36% 0.035 262));
+  --ink: light-dark(oklch(23% 0.03 265), oklch(95% 0.008 260));
+  --ink-soft: light-dark(oklch(38% 0.03 265), oklch(84% 0.015 260));
+  --muted: light-dark(oklch(50% 0.025 265), oklch(72% 0.02 262));
+
+  --accent: light-dark(oklch(52% 0.13 232), oklch(78% 0.115 222));
+  --accent-hover: light-dark(oklch(47% 0.13 232), oklch(83% 0.1 222));
+  --on-accent: light-dark(oklch(99% 0 0), oklch(18% 0.04 240));
+  --accent-ink: light-dark(oklch(46% 0.12 232), oklch(82% 0.1 222));
+  --accent-wash: light-dark(oklch(96.5% 0.022 232), oklch(25% 0.045 238));
+  --accent-line: light-dark(oklch(88% 0.05 232), oklch(38% 0.07 232));
+
+  --error: light-dark(oklch(54% 0.19 28), oklch(73% 0.15 28));
+  --error-wash: light-dark(oklch(96.5% 0.02 28), oklch(25% 0.04 28));
+  --ok: light-dark(oklch(52% 0.12 158), oklch(80% 0.13 160));
+  --ok-wash: light-dark(oklch(96.5% 0.03 158), oklch(24% 0.04 160));
+  --add-bg: light-dark(oklch(95% 0.045 158), oklch(28% 0.055 160));
+  --add-ink: light-dark(oklch(38% 0.1 158), oklch(86% 0.1 160));
+  --remove-bg: light-dark(oklch(95.5% 0.03 28), oklch(28% 0.05 28));
+  --remove-ink: light-dark(oklch(44% 0.15 28), oklch(84% 0.09 28));
+  --focus: var(--accent);
+
+  --radius: 10px;
+  --radius-sm: 7px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  accent-color: var(--accent);
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font: 400 0.875rem / 1.5 var(--font);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  p,
+  figure,
+  ol {
+    margin: 0;
+  }
+
+  code,
+  pre {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+  }
+
+  button,
+  input,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--accent-line);
+  }
+}
+
+@layer components {
+  .app {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100vh;
+  }
+
+  .fine {
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  .muted {
+    color: var(--muted);
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .icon {
+    flex: none;
+  }
+
+  .clamp-2,
+  .clamp-3 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .clamp-2 {
+    -webkit-line-clamp: 2;
+  }
+
+  .clamp-3 {
+    -webkit-line-clamp: 3;
+  }
+
+  /* Header: Ket and the notebook it's reading. Chrome's panel title already says "Marginalia". */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem 0.75rem;
+  }
+
+  .header-text {
+    min-width: 0;
+  }
+
+  .notebook {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .folder {
+    color: var(--muted);
+    font-size: 0.8125rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .main {
+    padding: 0.25rem 1rem 1.5rem;
+    min-width: 0;
+  }
+
+  /* A state without errors to list: what it is and the one thing to do. */
+  .message {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    max-width: 34rem;
+    padding-top: 0.25rem;
+  }
+
+  .message-title,
+  .list-title {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .message > p {
+    color: var(--ink-soft);
+  }
+
+  .list-head {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    margin-bottom: 0.875rem;
+  }
+
+  /* The thread: a line down the margin, a numbered marker per failing cell. */
+  .thread {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    padding: 0;
+    list-style: none;
+  }
+
+  .thread::before {
+    content: '';
+    position: absolute;
+    inset: 0.75rem auto 0.75rem calc(0.875rem - 0.5px);
+    width: 1px;
+    background: var(--line-strong);
+  }
+
+  .note {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1.75rem minmax(0, 1fr);
+    column-gap: 0.75rem;
+  }
+
+  .marker {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 1.5px solid var(--error);
+    border-radius: 50%;
+    background: var(--bg);
+    color: var(--error);
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+      background 150ms var(--ease),
+      color 150ms var(--ease),
+      border-color 150ms var(--ease);
+  }
+
+  .marker:hover {
+    background: var(--error);
+    color: var(--bg);
+  }
+
+  .note[data-fixed] .marker {
+    border-color: var(--ok);
+    background: var(--ok);
+    color: var(--bg);
+  }
+
+  .note-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    min-width: 0;
+    padding-top: 0.125rem;
+  }
+
+  .ename {
+    color: var(--error);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    overflow-wrap: anywhere;
+  }
+
+  .note[data-fixed] .ename {
+    color: var(--muted);
+  }
+
+  .evalue {
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .source-line {
+    align-self: flex-start;
+    max-width: 100%;
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-sm);
+    background: var(--sunken);
+    box-shadow: inset 0 0 0 1px var(--line);
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Details: where it was raised and the whole traceback, folded until asked for. */
+  .details {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+    overflow: hidden;
+    transition:
+      block-size 220ms var(--ease),
+      opacity 220ms var(--ease),
+      display 220ms allow-discrete;
+  }
+
+  .details[hidden] {
+    display: none;
+    block-size: 0;
+    opacity: 0;
+  }
+
+  @starting-style {
+    .details:not([hidden]) {
+      block-size: 0;
+      opacity: 0;
+    }
+  }
+
+  .details pre {
+    align-self: stretch;
+    margin: 0;
+    padding: 0.625rem 0.75rem;
+    max-height: 16rem;
+    overflow: auto;
+    border-radius: var(--radius-sm);
+    background: var(--sunken);
+    box-shadow: inset 0 0 0 1px var(--line);
+    color: var(--ink-soft);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* Buttons: primary (one per note), plain, and quiet. */
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.125rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 2rem;
+    padding: 0.3rem 0.75rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background 120ms var(--ease),
+      border-color 120ms var(--ease),
+      color 120ms var(--ease);
+  }
+
+  .btn:hover:not(:disabled) {
+    background: var(--hover);
+  }
+
+  .btn:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  .btn.quiet {
+    border-color: transparent;
+    background: transparent;
+    color: var(--ink-soft);
+  }
+
+  .btn.quiet:hover:not(:disabled) {
+    background: var(--hover);
+    color: var(--ink);
+  }
+
+  .btn.primary {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+  }
+
+  .btn.primary:hover:not(:disabled) {
+    border-color: var(--accent-hover);
+    background: var(--accent-hover);
+  }
+
+  /* Applying: the button stays solid and says so, with a small spinner. */
+  .btn.primary[aria-busy='true'] {
+    opacity: 1;
+  }
+
+  .btn .icon {
+    width: 15px;
+    height: 15px;
+  }
+
+  .disclose .icon {
+    transition: rotate 180ms var(--ease);
+  }
+
+  .disclose[aria-expanded='true'] .icon {
+    rotate: 90deg;
+  }
+
+  .link {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--accent-ink);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .link:hover {
+    text-decoration: underline;
+  }
+
+  .spinner {
+    width: 0.8rem;
+    height: 0.8rem;
+    border: 2px solid color-mix(in oklch, var(--on-accent) 35%, transparent);
+    border-top-color: var(--on-accent);
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      rotate: 1turn;
+    }
+  }
+
+  /* Claude's suggestion: one tinted block, no boxes inside boxes. */
+  .suggestion {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.375rem;
+    padding: 0.75rem 0.875rem 0.625rem;
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius);
+    background: var(--accent-wash);
+    animation: rise 220ms var(--ease);
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      translate: 0 4px;
+    }
+  }
+
+  .suggestion-by {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--accent-ink);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .suggestion-by .icon {
+    width: 13px;
+    height: 13px;
+  }
+
+  .suggestion-summary {
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  .reasoning {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.125rem;
+  }
+
+  .reasoning p {
+    color: var(--ink-soft);
+    font-size: 0.8125rem;
+    line-height: 1.55;
+  }
+
+  .skeleton {
+    display: block;
+    height: 0.625rem;
+    border-radius: 999px;
+    background:
+      linear-gradient(
+          90deg,
+          transparent,
+          color-mix(in oklch, var(--surface) 70%, transparent),
+          transparent
+        )
+        0 0 / 40% 100% no-repeat,
+      var(--accent-line);
+    animation: shimmer 1.3s linear infinite;
+  }
+
+  .skeleton.short {
+    width: 62%;
+  }
+
+  @keyframes shimmer {
+    from {
+      background-position:
+        -40% 0,
+        0 0;
+    }
+    to {
+      background-position:
+        140% 0,
+        0 0;
+    }
+  }
+
+  .stale {
+    color: var(--ink-soft);
+    font-size: 0.8125rem;
+  }
+
+  /* A switch: a real checkbox, drawn as a track and thumb. */
+  .switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    align-self: flex-start;
+    margin-top: 0.375rem;
+    color: var(--ink-soft);
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+
+  .switch input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+  }
+
+  .switch-track {
+    position: relative;
+    flex: none;
+    width: 1.875rem;
+    height: 1.125rem;
+    border-radius: 999px;
+    background: var(--line-strong);
+    transition: background 150ms var(--ease);
+  }
+
+  .switch-track::after {
+    content: '';
+    position: absolute;
+    inset: 0.1875rem auto auto 0.1875rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 50%;
+    background: var(--surface);
+    box-shadow: 0 1px 2px oklch(0% 0 0 / 0.25);
+    transition: translate 150ms var(--ease);
+  }
+
+  .switch input:checked + .switch-track {
+    background: var(--accent);
+  }
+
+  .switch input:checked + .switch-track::after {
+    translate: 0.75rem 0;
+  }
+
+  .switch input:focus-visible + .switch-track {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  /* The diff: tinted lines on the code surface, captioned with what it changes. */
+  .diff {
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--accent-line);
+    overflow: hidden;
+  }
+
+  .diff figcaption {
+    padding: 0.3rem 0.625rem;
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 500;
+  }
+
+  .diff pre {
+    margin: 0;
+    padding: 0 0 0.375rem;
+    overflow-x: auto;
+    line-height: 1.6;
+  }
+
+  .diff pre > span {
+    display: block;
+    padding: 0 0.625rem;
+    white-space: pre;
+  }
+
+  .diff-mark {
+    display: inline-block;
+    width: 1.1em;
+    color: var(--muted);
+    user-select: none;
+  }
+
+  .diff-add {
+    background: var(--add-bg);
+    color: var(--add-ink);
+  }
+
+  .diff-add .diff-mark {
+    color: var(--add-ink);
+  }
+
+  .diff-remove {
+    background: var(--remove-bg);
+    color: var(--remove-ink);
+  }
+
+  .diff-remove .diff-mark {
+    color: var(--remove-ink);
+  }
+
+  .diff-skip {
+    color: var(--muted);
+    font-family: var(--font);
+    font-size: 0.72rem;
+  }
+
+  /* What happened after Apply, or why it couldn't. */
+  .outcome {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem 0.5rem;
+    margin-top: 0.375rem;
+    padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+    border-radius: var(--radius);
+    font-size: 0.8125rem;
+    animation: rise 220ms var(--ease);
+  }
+
+  .outcome p {
+    flex: 1 1 12rem;
+  }
+
+  .outcome.ok {
+    background: var(--ok-wash);
+    color: var(--ink);
+  }
+
+  .outcome.ok > .icon {
+    color: var(--ok);
+  }
+
+  .outcome.bad {
+    background: var(--error-wash);
+  }
+
+  .outcome-actions {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  /* Connect Claude: above the list while fixes can't be asked for. */
+  .connect {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+    padding: 0.875rem;
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius);
+    background: var(--accent-wash);
+  }
+
+  .connect > p {
+    color: var(--ink-soft);
+    font-size: 0.8125rem;
+  }
+
+  .connect-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+
+  .connect-title .icon {
+    color: var(--accent-ink);
+  }
+
+  .connect code {
+    overflow-wrap: anywhere;
+  }
+
+  /* A file's lines, with Copy. */
+  .codeblock {
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--line-strong);
+    overflow: hidden;
+  }
+
+  .codeblock figcaption {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.15rem 0.15rem 0.15rem 0.625rem;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+  }
+
+  .codeblock figcaption code {
+    min-width: 0;
+    font-size: 0.72rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .codeblock pre {
+    margin: 0;
+    padding: 0.55rem 0.625rem;
+    overflow-x: auto;
+    font-size: 0.74rem;
+    line-height: 1.6;
+  }
+
+  /* Add a site */
+  .site-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 0.375rem;
+  }
+
+  .site-label {
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  .site-row {
+    display: flex;
+    gap: 0.375rem;
+  }
+
+  .input {
+    flex: 1;
+    min-width: 0;
+    min-height: 2rem;
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 0.8125rem;
+  }
+
+  .input::placeholder {
+    color: var(--muted);
+  }
+
+  .input:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 0;
+    border-color: transparent;
+  }
+
+  .input[aria-invalid='true'] {
+    border-color: var(--error);
+  }
+
+  .site-problem,
+  .reveal-problem {
+    color: var(--error);
+    font-size: 0.8125rem;
+  }
+
+  .reveal-problem {
+    margin-bottom: 0.75rem;
+  }
+
+  /* Status bar: the kernel on the left, who answers fixes on the right. */
+  .statusbar {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.375rem 0.5rem 0.375rem 1rem;
+    border-top: 1px solid var(--line);
+    background: color-mix(in oklch, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px);
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+
+  .status-left {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dot {
+    flex: none;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+
+  .dot[data-status='idle'] {
+    background: var(--ok);
+  }
+
+  .dot[data-status='busy'] {
+    background: var(--accent);
+    animation: breathe 1.2s ease-in-out infinite;
+  }
+
+  @keyframes breathe {
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  .status-claude {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--ink-soft);
+  }
+
+  .status-claude > .icon {
+    width: 13px;
+    height: 13px;
+    color: var(--accent-ink);
+  }
+
+  .status-claude.warn {
+    color: var(--error);
+  }
+
+  .status-claude.warn > .icon {
+    color: var(--error);
+  }
+
+  /* The model menu: a real <select>, styled with base-select so its picker matches. */
+  .model-select,
+  .model-select::picker(select) {
+    appearance: base-select;
+  }
+
+  .model-select {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.2rem 0.4rem;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .model-select:hover {
+    background: var(--hover);
+  }
+
+  .model-select::picker-icon {
+    color: var(--muted);
+    transition: rotate 150ms var(--ease);
+  }
+
+  .model-select:open::picker-icon {
+    rotate: 180deg;
+  }
+
+  .model-select::picker(select) {
+    margin-block: 0.25rem;
+    padding: 0.25rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: 0 10px 30px oklch(0% 0 0 / 0.18);
+    color: var(--ink);
+  }
+
+  .model-select option {
+    padding: 0.375rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+
+  .model-select option:hover,
+  .model-select option:focus-visible {
+    background: var(--hover);
+  }
+
+  .model-select option::checkmark {
+    color: var(--accent-ink);
+  }
+
+  /* Ket */
+  .ket {
+    position: relative;
+    flex: none;
+  }
+
+  .ket-button {
+    display: block;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .ket-button svg {
+    display: block;
+    overflow: visible;
+    /* White fleece on a near-white page needs an edge; on dark it already has one. */
+    filter: drop-shadow(0 1px 1.5px oklch(30% 0.03 260 / 0.22));
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .ket-button svg {
+      filter: none;
+    }
+  }
+
+  .ket g {
+    transform-box: view-box;
+  }
+
+  .ket-body {
+    transform-origin: 56px 88px;
+  }
+
+  .ket-wool {
+    transform-origin: 56px 78px;
+    animation: ket-breathe 4.2s ease-in-out infinite;
+  }
+
+  /* The head turns a little toward the pointer, and lifts when you hover. */
+  .ket-head {
+    transform-origin: 30px 56px;
+    transform: rotate(calc(var(--look, 0) * 5deg));
+    transition: transform 260ms var(--ease);
+  }
+
+  .ket[data-hover] .ket-head {
+    transform: rotate(calc(var(--look, 0) * 5deg - 4deg)) translateY(-0.8px);
+  }
+
+  .ket[data-mood='thinking'] .ket-head {
+    animation: ket-ponder 2.6s ease-in-out infinite;
+  }
+
+  .ket[data-mood='asleep'] .ket-head {
+    transform: rotate(6deg) translateY(1.5px);
+  }
+
+  .ket[data-mood='asleep'] .ket-wool {
+    animation-duration: 6.5s;
+  }
+
+  .ket[data-mood='asleep'] .ket-marks,
+  .ket[data-mood='thinking'] .ket-marks {
+    animation: ket-float 2.4s ease-in-out infinite;
+  }
+
+  .ket[data-anim='hop'] .ket-body {
+    animation: ket-hop 650ms cubic-bezier(0.3, 0.9, 0.4, 1);
+  }
+
+  .ket[data-anim='hop'] .ket-shadow {
+    transform-origin: 56px 89px;
+    animation: ket-shadow 650ms ease;
+  }
+
+  .ket[data-anim='spin'] .ket-body {
+    transform-origin: 56px 60px;
+    animation: ket-turn 800ms cubic-bezier(0.5, 0, 0.3, 1);
+  }
+
+  /* Measured: a little startled hop of the head. */
+  .ket[data-anim='ring'] .ket-head {
+    animation: ket-startle 420ms ease-out;
+  }
+
+  .ket-said {
+    position: absolute;
+    left: 6%;
+    top: 4%;
+    color: var(--accent-ink);
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    pointer-events: none;
+  }
+
+  @keyframes ket-breathe {
+    50% {
+      transform: scale(1.022, 0.988);
+    }
+  }
+
+  @keyframes ket-ponder {
+    50% {
+      transform: rotate(-6deg);
+    }
+  }
+
+  @keyframes ket-startle {
+    35% {
+      transform: translateY(-2.5px) rotate(-5deg);
+    }
+  }
+
+  @keyframes ket-float {
+    50% {
+      transform: translateY(-2px);
+      opacity: 0.6;
+    }
+  }
+
+  @keyframes ket-hop {
+    30% {
+      transform: translateY(-8px) scale(0.97, 1.04);
+    }
+    60% {
+      transform: translateY(0) scale(1.05, 0.95);
+    }
+  }
+
+  @keyframes ket-shadow {
+    30% {
+      transform: scale(0.75);
+      opacity: 0.6;
+    }
+  }
+
+  /* Turning round on the spot: a flip across, and back. */
+  @keyframes ket-turn {
+    50% {
+      transform: scaleX(-1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ket *,
+    .suggestion,
+    .outcome,
+    .details,
+    .dot,
+    .skeleton {
+      animation: none !important;
+      transition: none !important;
+    }
+
+    /* A busy indicator still says "busy", just slowly (modern-web-guidance: spinner). */
+    .spinner {
+      animation-duration: 3s;
+    }
+  }
+}
