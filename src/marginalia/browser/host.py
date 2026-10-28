@@ -35,8 +35,16 @@ def claude_fixer() -> tuple[NotebookFixer, dict[str, Any]]:
     if provider_of_model(cfg.model) != "anthropic":
         cfg.model = PROVIDERS["anthropic"].default_model
     key, source = find_key("anthropic", Keychain())
-    about = {"model": cfg.model, "modelName": model_name(cfg.model), "hasKey": key is not None, "keySource": source}
-    return NotebookFixer(cfg, key), about
+    claude = PROVIDERS["anthropic"]
+    models = [{"id": mid, "name": name, "note": note} for mid, name, note in claude.models]
+    about = {
+        "model": cfg.model,
+        "modelName": model_name(cfg.model),
+        "models": models,
+        "hasKey": key is not None,
+        "keySource": source,
+    }
+    return NotebookFixer(cfg, key, models=claude.model_ids), about
 
 
 def handle(message: Any, fixer: Callable[[], tuple[NotebookFixer, dict[str, Any]]]) -> dict[str, Any]:

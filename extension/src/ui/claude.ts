@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import {
+  type ModelChoice,
   createHelper,
   HELPER_NAME,
   HelperError,
@@ -11,14 +12,25 @@ import type { CellError, NotebookSummary } from '@/src/core/notebook';
 import type { Notebook } from './connection';
 import { editFor, fixKey, proposalFor, undoFor, type FixState } from './fixes';
 
+const MODEL_KEY = 'fixModel';
+
 /** Whether Claude can be asked, as the status bar says it. */
 export type ClaudeStatus =
   | { kind: 'checking' }
-  | { kind: 'ready'; modelName: string; hasKey: boolean }
+  | {
+      kind: 'ready';
+      modelName: string;
+      defaultModel: string;
+      models: ModelChoice[];
+      hasKey: boolean;
+    }
   | { kind: 'unavailable'; problem: HelperProblem; message: string };
 
 export interface Claude {
   status: ClaudeStatus;
+  /** The model fixes use: your pick in the panel, else Marginalia's setting. */
+  model: string | null;
+  setModel: (id: string) => void;
   fixes: Readonly<Record<string, FixState>>;
   /** Goes up by one each time a fix is applied: Ket hops. */
   landed: number;
@@ -37,8 +49,13 @@ export interface NotebookContext {
   summary: NotebookSummary;
 }
 
-export function fixRequest(error: CellError, nb: NotebookContext): FixRequest {
+export function fixRequest(
+  error: CellError,
+  nb: NotebookContext,
+  model: string | null,
+): FixRequest {
   return {
+    ...(model !== null ? { model } : {}),
     path: nb.path,
     kernel: nb.kernel,
     cells: nb.summary.cells,
@@ -77,6 +94,29 @@ export function useClaude(nb: Notebook): Claude {
     fixesRef.current = fixes;
   }, [fixes]);
   const stopping = useRef(new Set<string>());
+  const [picked, setPicked] = useState<string | null>(null);
+
+  // Your pick is remembered in this browser; Marginalia's own setting stays as it is.
+  useEffect(() => {
+    void browser.storage.local.get(MODEL_KEY).then((stored) => {
+      const value: unknown = stored[MODEL_KEY];
+      if (typeof value === 'string') setPicked(value);
+    });
+  }, []);
+  const setModel = useCallback((id: string) => {
+    setPicked(id);
+    void browser.storage.local.set({ [MODEL_KEY]: id });
+  }, []);
+  const model =
+    status.kind !== 'ready'
+      ? null
+      : picked !== null && status.models.some((m) => m.id === picked)
+        ? picked
+        : status.defaultModel;
+  const modelRef = useRef(model);
+  useEffect(() => {
+    modelRef.current = model;
+  }, [model]);
 
   const set = useCallback((key: string, state: FixState) => {
     setFixes((all) => ({ ...all, [key]: state }));
@@ -85,7 +125,13 @@ export function useClaude(nb: Notebook): Claude {
   const probe = useCallback(() => {
     helper.hello().then(
       (h) => {
-        setStatus({ kind: 'ready', modelName: h.modelName, hasKey: h.hasKey });
+        setStatus({
+          kind: 'ready',
+          modelName: h.modelName,
+          defaultModel: h.model,
+          models: h.models,
+          hasKey: h.hasKey,
+        });
       },
       (e: unknown) => {
         const err = e instanceof HelperError ? e : new HelperError(String(e), 'exited');
@@ -110,7 +156,7 @@ export function useClaude(nb: Notebook): Claude {
     (error: CellError, context: NotebookContext) => {
       const key = fixKey(error);
       set(key, { kind: 'asking', since: Date.now() });
-      helper.fix(fixRequest(error, context)).then(
+      helper.fix(fixRequest(error, context, modelRef.current)).then(
         (reply) => {
           set(key, { kind: 'proposed', proposal: proposalFor(error, reply) });
         },
@@ -191,5 +237,5 @@ export function useClaude(nb: Notebook): Claude {
     [set],
   );
 
-  return { status, fixes, landed, recheck, ask, stop, apply, undo, dismiss };
+  return { status, model, setModel, fixes, landed, recheck, ask, stop, apply, undo, dismiss };
 }

@@ -1,5 +1,6 @@
 import {
   makeMessage,
+  PAGE_SCRIPT,
   parseMessage,
   TO_PAGE,
   type Message,
@@ -106,6 +107,23 @@ export function readCells(cells: CellList): unknown[] {
   return out;
 }
 
+const CLAIM = Symbol.for('marginalia.page');
+
+/**
+ * Starts the page script in `win`, after stopping one an earlier install or version left
+ * running: Chrome doesn't stop MAIN-world scripts when an extension goes. Each script leaves
+ * `{ version, stop }` behind for the next. (The very first version left `true`, which can't be
+ * stopped; its replies fail validation instead.)
+ */
+export function claimPage(win: Window, start: () => () => void): () => void {
+  const slot = win as unknown as Record<symbol, unknown>;
+  const previous = slot[CLAIM];
+  if (isObject(previous) && typeof previous.stop === 'function') (previous.stop as () => void)();
+  const stop = start();
+  slot[CLAIM] = { version: PAGE_SCRIPT, stop };
+  return stop;
+}
+
 export interface PageOptions {
   win: Window;
   transport: Transport;
@@ -136,6 +154,7 @@ export function startPage(opts: PageOptions): () => void {
   const status = (state: 'waiting' | 'unavailable', problem?: PageProblem, detail?: string) => {
     send(
       makeMessage('page/status', {
+        script: PAGE_SCRIPT,
         state,
         ...(problem !== undefined ? { problem } : {}),
         ...(detail !== undefined ? { detail: detail.slice(0, 500) } : {}),
@@ -177,6 +196,7 @@ export function startPage(opts: PageOptions): () => void {
       const session = panel.sessionContext;
       send(
         makeMessage('notebook/snapshot', {
+          script: PAGE_SCRIPT,
           path: panel.context.path.slice(0, 1000),
           kernel: {
             name: str(session?.kernelDisplayName)?.slice(0, 1000) ?? null,
@@ -201,7 +221,13 @@ export function startPage(opts: PageOptions): () => void {
 
   const reveal = (payload: MessageOf<'notebook/reveal'>['payload']) => {
     const done = (ok: boolean, detail?: string) => {
-      transport.post(makeMessage('notebook/revealed', { ok, ...(detail ? { detail } : {}) }));
+      transport.post(
+        makeMessage('notebook/revealed', {
+          script: PAGE_SCRIPT,
+          ok,
+          ...(detail ? { detail } : {}),
+        }),
+      );
     };
     try {
       const panel = currentPanel();
@@ -249,7 +275,9 @@ export function startPage(opts: PageOptions): () => void {
         detail?: string;
       } = {},
     ) => {
-      transport.post(makeMessage('notebook/applied', { requestId, ok, ...extra }));
+      transport.post(
+        makeMessage('notebook/applied', { script: PAGE_SCRIPT, requestId, ok, ...extra }),
+      );
     };
     try {
       const panel = currentPanel();

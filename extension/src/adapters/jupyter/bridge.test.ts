@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeMessage, type Message } from '@/src/messaging/protocol';
+import { PAGE_SCRIPT, makeMessage, type Message } from '@/src/messaging/protocol';
 import { fakeTransport } from '@/src/testing/fakes';
 import { startBridge, type PortLike } from './bridge';
 
@@ -39,6 +39,7 @@ describe('startBridge', () => {
     const a = fakePort();
     bridge.connect(a.port);
     const snap = makeMessage('notebook/snapshot', {
+      script: PAGE_SCRIPT,
       path: 'x.ipynb',
       kernel: { name: null, status: null },
       cells: [],

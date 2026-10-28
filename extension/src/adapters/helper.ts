@@ -40,10 +40,15 @@ export function classify(chromeMessage: string): HelperProblem {
   return 'exited';
 }
 
+const ModelChoice = z.object({ id: z.string(), name: z.string(), note: z.string() });
+export type ModelChoice = z.infer<typeof ModelChoice>;
+
 const Hello = z.object({
   type: z.literal('hello'),
+  /** Marginalia's own setting: what fixes use until you pick another in the panel. */
   model: z.string(),
   modelName: z.string(),
+  models: z.array(ModelChoice).default([]),
   hasKey: z.boolean(),
 });
 export type Hello = z.infer<typeof Hello>;
@@ -73,6 +78,8 @@ export interface FixRequest {
   ename: string;
   evalue: string;
   traceback: string;
+  /** A model from the helper's list; left out, the helper uses Marginalia's setting. */
+  model?: string;
 }
 
 /** The part of a runtime.Port the client uses (real ports and test fakes). */

@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeMessage, type MessageOf } from '@/src/messaging/protocol';
+import { makeMessage, PAGE_SCRIPT, type MessageOf } from '@/src/messaging/protocol';
 import { codeCell, errorOutput } from '@/src/testing/fixtures';
 import { fakeApp, fakeTransport } from '@/src/testing/fakes';
 import { summarize } from '@/src/core/notebook';
-import { readCells, startPage } from './page';
+import { claimPage, readCells, startPage } from './page';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -175,7 +175,12 @@ describe('apply', () => {
       }),
     );
     expect(sources()).toEqual(['x = 1', 'x = 2']);
-    expect(applied(posted)).toEqual({ requestId: 'r1', ok: true, cellId: 'b' });
+    expect(applied(posted)).toEqual({
+      script: PAGE_SCRIPT,
+      requestId: 'r1',
+      ok: true,
+      cellId: 'b',
+    });
   });
 
   it('refuses a stale edit and leaves the cell alone', () => {
@@ -230,5 +235,31 @@ describe('apply', () => {
       }),
     );
     expect(applied(posted)).toMatchObject({ ok: false, error: 'gone' });
+  });
+});
+
+describe('claimPage', () => {
+  it('stops the script an earlier install left running, then starts', () => {
+    const win = {} as unknown as Window;
+    const log: string[] = [];
+    claimPage(win, () => {
+      log.push('start 1');
+      return () => log.push('stop 1');
+    });
+    claimPage(win, () => {
+      log.push('start 2');
+      return () => log.push('stop 2');
+    });
+    expect(log).toEqual(['start 1', 'stop 1', 'start 2']);
+  });
+
+  it("starts beside the first version, whose marker can't be stopped", () => {
+    const win = { [Symbol.for('marginalia.page')]: true } as unknown as Window;
+    let started = false;
+    claimPage(win, () => {
+      started = true;
+      return () => undefined;
+    });
+    expect(started).toBe(true);
   });
 });

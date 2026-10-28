@@ -15,5 +15,14 @@ describe('parseMessage', () => {
     expect(parseMessage({ ns: 'lemma', v: 1, type: 'tab/other', payload: {} })).toBeNull();
     expect(parseMessage(makeMessage('notebook/reveal', { index: -1, cellId: null }))).toBeNull();
     expect(parseMessage('hello')).toBeNull();
+    // An old page script's snapshot (no script version) is dropped, so it can't mix with ours.
+    expect(
+      parseMessage({
+        ns: 'marginalia',
+        v: 1,
+        type: 'notebook/snapshot',
+        payload: { path: 'x', kernel: { name: null, status: null }, cells: [] },
+      }),
+    ).toBeNull();
   });
 });

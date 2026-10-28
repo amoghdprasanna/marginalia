@@ -39,10 +39,19 @@ function handle(message) {
       type: 'hello',
       model: 'claude-test',
       modelName: 'Claude Test',
+      models: [
+        { id: 'claude-test', name: 'Claude Test', note: 'The default.' },
+        { id: 'claude-fast', name: 'Claude Fast', note: 'Quicker.' },
+      ],
       hasKey: true,
     };
   if (message.type === 'fix')
-    return { id: message.id, type: 'fix', model: 'claude-test', ...fixFor(message.request) };
+    return {
+      id: message.id,
+      type: 'fix',
+      model: message.request.model ?? 'claude-test',
+      ...fixFor(message.request),
+    };
   return { id: message.id, type: 'error', message: 'unknown request' };
 }
 

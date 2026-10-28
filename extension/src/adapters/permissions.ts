@@ -1,13 +1,19 @@
 import { browser } from 'wxt/browser';
-import { SITES } from '@/src/sites';
+import { LOCAL_SITES } from '@/src/sites';
 
-/** The sites from SITES you've allowed. */
+const SITE = /^https?:\/\/[^/]+\/\*$/;
+
+/** The sites you've allowed, as match patterns. */
 export async function allowedSites(): Promise<string[]> {
   const { origins = [] } = await browser.permissions.getAll();
-  return origins.filter((o) => (SITES as readonly string[]).includes(o));
+  return origins.filter((o) => SITE.test(o));
 }
 
-/** Asks Chrome for every site at once. Call it straight from a click: Chrome needs the gesture. */
-export function requestSites(): Promise<boolean> {
-  return browser.permissions.request({ origins: [...SITES] });
+/** Call these straight from a click or a form submit: Chrome needs the gesture. */
+export function requestLocal(): Promise<boolean> {
+  return browser.permissions.request({ origins: [...LOCAL_SITES] });
+}
+
+export function requestSite(pattern: string): Promise<boolean> {
+  return browser.permissions.request({ origins: [pattern] });
 }

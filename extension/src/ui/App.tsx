@@ -3,6 +3,7 @@ import { browser } from 'wxt/browser';
 import { CHECK_COMMAND, EXPECTED_ID, INSTALL_COMMAND } from '@/src/adapters/helper';
 import { SERVER_CONFIG_LINES } from '@/src/core/access';
 import { diffLines, hunks } from '@/src/core/diff';
+import { sitePattern } from '@/src/core/site';
 import type { CellError } from '@/src/core/notebook';
 import { useClaude, type Claude, type ClaudeStatus, type NotebookContext } from './claude';
 import { useNotebook, type Notebook } from './connection';
@@ -121,12 +122,13 @@ function StatusBar({ view, claude }: { view: View; claude: Claude }) {
   return (
     <footer className="statusbar">
       <span className="status-left">{left}</span>
-      <ClaudeBadge status={claude.status} />
+      <ClaudeBadge claude={claude} />
     </footer>
   );
 }
 
-function ClaudeBadge({ status }: { status: ClaudeStatus }) {
+function ClaudeBadge({ claude }: { claude: Claude }) {
+  const { status, model } = claude;
   if (status.kind === 'checking') return <span className="badge muted">Connecting to Claude</span>;
   if (status.kind === 'unavailable')
     return (
@@ -135,11 +137,102 @@ function ClaudeBadge({ status }: { status: ClaudeStatus }) {
         Claude not connected
       </span>
     );
+  if (!status.hasKey)
+    return (
+      <span className="badge warn">
+        <Icon name="sparkle" />
+        No Claude key
+      </span>
+    );
+  if (status.models.length === 0)
+    return (
+      <span className="badge">
+        <Icon name="sparkle" />
+        {status.modelName}
+      </span>
+    );
+  const note = status.models.find((m) => m.id === model)?.note;
   return (
-    <span className={status.hasKey ? 'badge' : 'badge warn'}>
+    <label className="badge model" title={note}>
       <Icon name="sparkle" />
-      {status.hasKey ? status.modelName : 'No Claude key'}
-    </span>
+      <span className="visually-hidden">Model for fixes</span>
+      <select
+        value={model ?? status.defaultModel}
+        onChange={(e) => {
+          claude.setModel(e.target.value);
+        }}
+      >
+        {status.models.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
+      </select>
+      <Icon name="chevron" className="select-chevron" />
+    </label>
+  );
+}
+
+/**
+ * Add a site by its address. Chrome then asks you about that one site; nothing else is
+ * granted.
+ */
+function SiteForm({
+  onAdd,
+  label,
+}: {
+  onAdd: (pattern: string) => Promise<boolean>;
+  label: string;
+}) {
+  const [value, setValue] = useState('');
+  const [problem, setProblem] = useState<string | null>(null);
+  return (
+    <form
+      className="site-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const site = sitePattern(value);
+        if (site === null) {
+          setProblem(
+            'Enter the address Jupyter shows in the address bar, like jupyter.example.edu.',
+          );
+          return;
+        }
+        setProblem(null);
+        void onAdd(site.pattern).then((granted) => {
+          if (!granted) setProblem(`Chrome didn’t allow ${site.host}.`);
+        });
+      }}
+    >
+      <label className="site-label" htmlFor="site-input">
+        {label}
+      </label>
+      <div className="site-row">
+        <input
+          id="site-input"
+          className="input"
+          type="text"
+          inputMode="url"
+          autoComplete="url"
+          spellCheck={false}
+          placeholder="jupyter.example.edu"
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value);
+          }}
+          aria-invalid={problem !== null}
+          aria-describedby={problem !== null ? 'site-problem' : undefined}
+        />
+        <button type="submit" className="btn" disabled={value.trim() === ''}>
+          Allow
+        </button>
+      </div>
+      {problem !== null && (
+        <p className="site-problem" id="site-problem" role="alert">
+          {problem}
+        </p>
+      )}
+    </form>
   );
 }
 
@@ -258,6 +351,12 @@ function ConnectClaude({ status, onCheck }: { status: ClaudeStatus; onCheck: () 
   );
 }
 
+/** "Claude Sonnet 5.5" for an id the helper listed; the id itself otherwise. */
+function modelName(claude: Claude, id: string): string {
+  if (claude.status.kind !== 'ready') return id;
+  return claude.status.models.find((m) => m.id === id)?.name ?? id;
+}
+
 function FixArea({
   state,
   claude,
@@ -296,6 +395,7 @@ function FixArea({
         <div className="fix">
           <p className="fix-summary">{reply.summary}</p>
           <p className="fix-why">{reply.explanation}</p>
+          <p className="muted small">Proposed by {modelName(claude, reply.model)}</p>
           {reply.fix.kind === 'none' ? (
             <div className="actions">
               <button type="button" className="btn" onClick={onAsk}>
@@ -478,23 +578,25 @@ function Body({ nb, claude }: { nb: Notebook; claude: Claude }) {
       return (
         <Note title="Read your notebooks">
           <p>
-            Marginalia reads Jupyter notebooks on UMD&rsquo;s servers and on your own computer, and
-            no other sites. Chrome asks once.
+            Marginalia reads Jupyter notebooks only on sites you allow, and Chrome asks you first.
+            Jupyter on this computer, or through an SSH tunnel, is on localhost.
           </p>
           <div className="actions">
             <button type="button" className="btn primary" onClick={nb.allow}>
-              Allow access
+              Allow localhost
             </button>
           </div>
+          <SiteForm onAdd={nb.addSite} label="Jupyter somewhere else? Add its address." />
         </Note>
       );
     case 'other-site':
       return (
-        <Note title="Nothing to read here">
+        <Note title="Marginalia can’t read this tab">
           <p>
-            Switch to a Jupyter notebook tab, on UMD&rsquo;s servers or on localhost, and Ket wakes
-            up.
+            It reads Jupyter notebooks only on sites you&rsquo;ve allowed. If this tab is a
+            notebook, add its address.
           </p>
+          <SiteForm onAdd={nb.addSite} label="Notebook address" />
         </Note>
       );
     case 'unreachable':

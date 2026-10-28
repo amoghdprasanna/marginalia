@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { browser, type Browser } from 'wxt/browser';
-import { allowedSites, requestSites } from '@/src/adapters/permissions';
+import { allowedSites, requestLocal, requestSite } from '@/src/adapters/permissions';
 import {
   makeMessage,
   NOTEBOOK_PORT,
+  PAGE_SCRIPT,
   parseMessage,
   type EditOp,
   type MessageOf,
@@ -27,7 +28,10 @@ export interface Notebook {
   view: View;
   /** Why the last "Go to cell" didn't work, until the next one. */
   revealProblem: string | null;
+  /** Allows Jupyter on this computer. */
   allow: () => void;
+  /** Allows one more site, by match pattern; resolves with whether you said yes. */
+  addSite: (pattern: string) => Promise<boolean>;
   reload: () => void;
   reveal: (index: number, cellId: string | null) => void;
   /** Makes an edit in the notebook; resolves with the page's answer. */
@@ -36,7 +40,19 @@ export interface Notebook {
 
 export type Applied = MessageOf<'notebook/applied'>['payload'];
 
+/** An edit takes milliseconds; a tab that hasn't answered by then won't. */
+const APPLY_TIMEOUT_MS = 6000;
+
+const NO_ANSWER: Applied = {
+  script: PAGE_SCRIPT,
+  requestId: '-',
+  ok: false,
+  error: 'unavailable',
+  detail: 'The notebook tab didn’t answer. Reload the tab, then try again.',
+};
+
 const NOT_CONNECTED: Applied = {
+  script: PAGE_SCRIPT,
   requestId: '-',
   ok: false,
   error: 'unavailable',
@@ -141,8 +157,9 @@ export function useNotebook(): Notebook {
   }, []);
 
   const allow = useCallback(() => {
-    void requestSites();
+    void requestLocal();
   }, []);
+  const addSite = useCallback((pattern: string) => requestSite(pattern), []);
   const reload = useCallback(() => {
     if (tabId.current !== null) void browser.tabs.reload(tabId.current);
   }, []);
@@ -160,11 +177,18 @@ export function useNotebook(): Notebook {
           return;
         }
         const requestId = crypto.randomUUID();
-        applies.current.set(requestId, resolve);
+        const timer = setTimeout(() => {
+          applies.current.delete(requestId);
+          resolve(NO_ANSWER);
+        }, APPLY_TIMEOUT_MS);
+        applies.current.set(requestId, (a) => {
+          clearTimeout(timer);
+          resolve(a);
+        });
         p.postMessage(makeMessage('notebook/apply', { requestId, op }));
       }),
     [],
   );
 
-  return { view, revealProblem, allow, reload, reveal, apply };
+  return { view, revealProblem, allow, addSite, reload, reveal, apply };
 }

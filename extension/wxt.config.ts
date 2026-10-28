@@ -1,5 +1,5 @@
 import { defineConfig } from 'wxt';
-import { SITES } from './src/sites';
+import { ANY_SITE, LOCAL_SITES } from './src/sites';
 
 // Extension-page CSP (side panel, background): no remote code, no outbound
 // connections. Applied to builds only, because `wxt dev` talks to its server.
@@ -41,7 +41,7 @@ export default defineConfig({
     // nativeMessaging: the desktop helper that asks Claude (docs/adr/0030).
     permissions: ['sidePanel', 'storage', 'scripting', 'nativeMessaging'],
     host_permissions: e2e ? ['http://127.0.0.1/*'] : [],
-    optional_host_permissions: [...SITES],
+    optional_host_permissions: [...LOCAL_SITES, ...ANY_SITE],
     action: {
       default_title: 'Open Marginalia',
       default_icon: { 16: 'icon/16.png', 32: 'icon/32.png' },

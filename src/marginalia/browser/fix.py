@@ -82,6 +82,7 @@ class FixRequest:
     ename: str
     evalue: str
     traceback: str
+    model: str | None = None  # the panel's choice; None keeps Marginalia's setting
 
 
 @dataclass(frozen=True)
@@ -124,7 +125,9 @@ def parse_request(obj: Any) -> FixRequest:
     if not isinstance(failing, int) or isinstance(failing, bool) or not 0 <= failing < len(cells):
         raise ValueError("failing must be the index of one of the cells")
     kernel = obj.get("kernel")
+    model = obj.get("model")
     return FixRequest(
+        model=model if isinstance(model, str) and model else None,
         path=_str(obj, "path", "notebook.ipynb"),
         kernel=kernel if isinstance(kernel, str) else None,
         cells=tuple(cells),
@@ -192,18 +195,23 @@ class NotebookFixer:
 
     FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
-    def __init__(self, cfg, api_key: str | None, client=None) -> None:
+    def __init__(self, cfg, api_key: str | None, client=None, models: tuple[str, ...] = ()) -> None:
         self.cfg = cfg
         self.model = cfg.model
+        # The models a request may pick (the panel's menu); anything else keeps cfg.model.
+        self.models = models
         self.client = client
         if self.client is None and api_key:
             import anthropic
 
             self.client = anthropic.Anthropic(api_key=api_key)
 
+    def model_for(self, req: FixRequest) -> str:
+        return req.model if req.model in self.models else self.model
+
     def build_request(self, req: FixRequest) -> dict:
         return {
-            "model": self.model,
+            "model": self.model_for(req),
             "max_tokens": self.cfg.max_tokens,
             "system": [{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
             "messages": [{"role": "user", "content": [{"type": "text", "text": build_user_text(req)}]}],
@@ -223,10 +231,10 @@ class NotebookFixer:
                     pass
                 resp = stream.get_final_message()
         except anthropic.APIError as exc:
-            raise friendly(anthropic, exc, "Claude", self.model) from exc
+            raise friendly(anthropic, exc, "Claude", self.model_for(req)) from exc
         if resp.stop_reason == "refusal":
             raise BrainError("Claude declined to fix this one.")
         if resp.stop_reason == "max_tokens":
             raise BrainError("Claude's answer was cut off. Raise Max tokens in Settings, then try again.", "settings")
         raw = "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text")
-        return parse_fix(raw, getattr(resp, "model", self.model))
+        return parse_fix(raw, getattr(resp, "model", self.model_for(req)))

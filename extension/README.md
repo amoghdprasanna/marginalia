@@ -6,8 +6,9 @@ error, and fixes them with Claude when you say so: a proposed change as a diff, 
 doing. Why it works this way: [ADR 0029](../docs/adr/0029-a-chrome-extension-for-notebooks.md)
 and [ADR 0030](../docs/adr/0030-fix-notebook-errors-through-a-desktop-helper.md).
 
-It reads notebooks on `*.umd.edu` and on your own computer (`localhost`, `127.0.0.1`), asks Chrome
-for that once, and makes no network requests itself: Claude is asked by Marginalia's helper on
+It reads notebooks only on sites you allow: `localhost` (Jupyter on this computer or through an SSH
+tunnel) with one click, or any address you add, with Chrome asking about that one site. It makes no
+network requests itself: Claude is asked by Marginalia's helper on
 your computer, with the key from your keychain.
 
 ## Install (from this repository)

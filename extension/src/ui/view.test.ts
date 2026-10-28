@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeMessage } from '@/src/messaging/protocol';
+import { PAGE_SCRIPT, makeMessage } from '@/src/messaging/protocol';
 import { codeCell, errorOutput } from '@/src/testing/fixtures';
 import { initialView, reduce, splitPath, type View } from './view';
 
@@ -38,7 +38,11 @@ describe('reduce', () => {
       v,
       msg({
         type: 'message',
-        message: makeMessage('page/status', { state: 'unavailable', problem: 'no-app' }),
+        message: makeMessage('page/status', {
+          script: PAGE_SCRIPT,
+          state: 'unavailable',
+          problem: 'no-app',
+        }),
       }),
     );
     expect(waited).toBe(v);
@@ -52,6 +56,7 @@ describe('reduce', () => {
       msg({
         type: 'message',
         message: makeMessage('notebook/snapshot', {
+          script: PAGE_SCRIPT,
           path: 'work/control.ipynb',
           kernel: { name: 'Python 3', status: 'idle' },
           cells: [codeCell('a', 1), codeCell('b', 2, [errorOutput()])],
@@ -67,6 +72,7 @@ describe('reduce', () => {
       msg({
         type: 'message',
         message: makeMessage('page/status', {
+          script: PAGE_SCRIPT,
           state: 'unavailable',
           problem: 'unexpected',
           detail: 'boom',

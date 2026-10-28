@@ -124,3 +124,12 @@ def test_a_reply_that_did_not_finish_says_why(cfg, stop, words):
     client, _ = fake_client(reply(), stop_reason=stop)
     with pytest.raises(BrainError, match=words):
         NotebookFixer(cfg, "key", client=client).fix(parse_request(request()))
+
+
+def test_the_panel_may_pick_a_listed_model_only(cfg):
+    client, messages = fake_client(reply())
+    fixer = NotebookFixer(cfg, "key", client=client, models=("claude-opus-5-5", "claude-haiku-5-5"))
+    fixer.fix(parse_request(request(model="claude-haiku-5-5")))
+    fixer.fix(parse_request(request(model="gpt-9")))
+    fixer.fix(parse_request(request()))
+    assert [r["model"] for r in messages.requests] == ["claude-haiku-5-5", "claude-opus-5-5", "claude-opus-5-5"]

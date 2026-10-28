@@ -38,7 +38,7 @@ test('Fix with Claude proposes a diff, Apply changes the cell, Undo puts it back
   const page = await context.newPage();
   await openNotebook(page, 'control.ipynb');
   const panel = await openPanel(page);
-  await expect(panel.getByText('Claude Test')).toBeVisible();
+  await expect(panel.getByRole('combobox', { name: 'Model for fixes' })).toHaveValue('claude-test');
   const before = await sources(page);
 
   await panel.getByRole('button', { name: 'Fix with Claude' }).click();
@@ -101,6 +101,25 @@ test('an edit to the cell after Claude looked makes Apply refuse', async ({
   await panel.getByRole('button', { name: 'Apply' }).click();
   await expect(panel.getByText('The cell changed since Claude looked at it.')).toBeVisible();
   expect((await sources(page))[3]).toBe('# I rewrote this myself');
+});
+
+test('the model menu picks who answers, and the proposal says who did', async ({
+  context,
+  openPanel,
+}) => {
+  const page = await context.newPage();
+  await openNotebook(page, 'control.ipynb');
+  const panel = await openPanel(page);
+  const menu = panel.getByRole('combobox', { name: 'Model for fixes' });
+  await expect(menu).toHaveValue('claude-test');
+  await menu.selectOption({ label: 'Claude Fast' });
+
+  await panel.getByRole('button', { name: 'Fix with Claude' }).click();
+  await expect(panel.getByText('Proposed by Claude Fast')).toBeVisible();
+
+  // Remembered: a new panel starts on the same model.
+  await panel.reload();
+  await expect(panel.getByRole('combobox', { name: 'Model for fixes' })).toHaveValue('claude-fast');
 });
 
 test.describe('without the helper installed', () => {

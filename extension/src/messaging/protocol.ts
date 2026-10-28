@@ -12,6 +12,14 @@ import { z } from 'zod';
 export const PROTOCOL_NAMESPACE = 'marginalia';
 export const PROTOCOL_VERSION = 1;
 
+/**
+ * The page script's own version. Chrome leaves a MAIN-world script running after the
+ * extension is removed or updated, so every page message says which script sent it, and
+ * replies from any other version are dropped.
+ */
+export const PAGE_SCRIPT = 2;
+const Script = z.literal(PAGE_SCRIPT);
+
 /** The side panel's port to a tab's content script. */
 export const NOTEBOOK_PORT = 'marginalia-notebook';
 
@@ -74,6 +82,7 @@ const Message = z.discriminatedUnion('type', [
   envelope(
     'page/status',
     z.object({
+      script: Script,
       state: z.enum(['waiting', 'unavailable']),
       problem: PageProblem.optional(),
       detail: z.string().max(500).optional(),
@@ -86,6 +95,7 @@ const Message = z.discriminatedUnion('type', [
   envelope(
     'notebook/snapshot',
     z.object({
+      script: Script,
       path: Name,
       kernel: z.object({ name: Name.nullable(), status: z.string().max(40).nullable() }),
       cells: z.array(z.unknown()).max(20_000),
@@ -104,6 +114,7 @@ const Message = z.discriminatedUnion('type', [
   envelope(
     'notebook/applied',
     z.object({
+      script: Script,
       requestId: RequestId,
       ok: z.boolean(),
       cellId: Name.nullable().optional(),
@@ -113,7 +124,7 @@ const Message = z.discriminatedUnion('type', [
   ),
   envelope(
     'notebook/revealed',
-    z.object({ ok: z.boolean(), detail: z.string().max(500).optional() }),
+    z.object({ script: Script, ok: z.boolean(), detail: z.string().max(500).optional() }),
   ),
 ]);
 
