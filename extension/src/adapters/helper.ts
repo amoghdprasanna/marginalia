@@ -7,6 +7,9 @@ import { z } from 'zod';
  */
 export const HELPER_NAME = 'marginalia.browser';
 export const INSTALL_COMMAND = 'marginalia-browser-host install';
+export const CHECK_COMMAND = 'marginalia-browser-host check';
+/** The id the helper's manifest allows: fixed by the public key in wxt.config.ts. */
+export const EXPECTED_ID = 'behgmlfpdfdjcbiogfngmghpbfgaagpa';
 
 /** Why the helper can't answer, in terms the panel can explain. */
 export type HelperProblem =

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { INSTALL_COMMAND } from '@/src/adapters/helper';
+import { browser } from 'wxt/browser';
+import { CHECK_COMMAND, EXPECTED_ID, INSTALL_COMMAND } from '@/src/adapters/helper';
 import { SERVER_CONFIG_LINES } from '@/src/core/access';
 import { diffLines, hunks } from '@/src/core/diff';
 import type { CellError } from '@/src/core/notebook';
@@ -185,22 +186,75 @@ function Diff({ proposal }: { proposal: Proposal }) {
   );
 }
 
-function SetupHelper({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div className="setup">
-      <p className="fix-summary">Connect Claude on this Mac</p>
-      <p className="fix-why">
-        Fixes come from Marginalia on your computer, with the Claude key in its keychain, so no key
-        lives in the browser. Run this once in Terminal, from the Python environment Marginalia is
-        installed in:
+/**
+ * Shown above everything while Claude can't be asked: what's wrong, in Chrome's terms turned
+ * into steps, and Check again. Each problem has its own fix.
+ */
+function ConnectClaude({ status, onCheck }: { status: ClaudeStatus; onCheck: () => void }) {
+  if (status.kind === 'checking') return null;
+  if (status.kind === 'ready' && status.hasKey) return null;
+  let title = 'Connect Claude';
+  let body: ReactNode;
+  if (status.kind === 'ready') {
+    title = 'Add your Claude key';
+    body = (
+      <p>
+        Marginalia&rsquo;s helper is connected, but it has no Claude API key. Add one in
+        Marginalia&rsquo;s Settings on this Mac, under AI model, then check again.
       </p>
-      <CodeBlock file="Terminal" text={INSTALL_COMMAND} />
+    );
+  } else if (status.problem === 'missing') {
+    body = (
+      <>
+        <p>
+          Fixes come from Marginalia on this Mac, with the Claude key from its keychain, so no key
+          lives in the browser. Chrome can&rsquo;t find Marginalia&rsquo;s helper yet. Run this once
+          in Terminal, in the Python environment Marginalia is installed in (in a source checkout,
+          prefix it with <code>.venv/bin/</code>):
+        </p>
+        <CodeBlock file="Terminal" text={INSTALL_COMMAND} />
+      </>
+    );
+  } else if (status.problem === 'forbidden') {
+    const id = browser.runtime.id;
+    body =
+      id === EXPECTED_ID ? (
+        <>
+          <p>The helper on this Mac was set up for another copy of Marginalia. Set it up again:</p>
+          <CodeBlock file="Terminal" text={INSTALL_COMMAND} />
+        </>
+      ) : (
+        <p>
+          The helper only answers Marginalia&rsquo;s own id, and this copy of the extension has a
+          different one (<code>{id}</code>), usually because it was reloaded from an older build. In{' '}
+          <code>chrome://extensions</code>, remove Marginalia, then choose Load unpacked and pick
+          the <code>extension/.output/chrome-mv3</code> folder again.
+        </p>
+      );
+  } else {
+    body = (
+      <>
+        <p>The helper started, then stopped. This shows what went wrong:</p>
+        <CodeBlock file="Terminal" text={CHECK_COMMAND} />
+      </>
+    );
+  }
+  return (
+    <section className="connect" aria-labelledby="connect-title">
+      <h2 className="connect-title" id="connect-title">
+        <Icon name="sparkle" />
+        {title}
+      </h2>
+      {body}
+      {status.kind === 'unavailable' && (
+        <p className="muted small">Chrome said: {status.message}</p>
+      )}
       <div className="actions">
-        <button type="button" className="btn" onClick={onRetry}>
-          Try again
+        <button type="button" className="btn primary" onClick={onCheck}>
+          Check again
         </button>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -299,8 +353,18 @@ function FixArea({
         </div>
       );
     case 'failed':
-      if (state.problem === 'missing' || state.problem === 'forbidden')
-        return <SetupHelper onRetry={onAsk} />;
+      if (
+        state.problem === 'missing' ||
+        state.problem === 'forbidden' ||
+        state.problem === 'exited'
+      )
+        return (
+          <div className="fix failed" role="alert">
+            <p className="fix-error">
+              Claude isn&rsquo;t connected. The steps are at the top of the panel.
+            </p>
+          </div>
+        );
       return (
         <div className="fix failed" role="alert">
           <p className="fix-error">{state.message}</p>
@@ -337,6 +401,7 @@ function ErrorItem({
   const fkey = fixKey(error);
   const state = claude.fixes[fkey] ?? { kind: 'idle' };
   const ask = () => claude.ask(error, context);
+  const ready = claude.status.kind === 'ready' && claude.status.hasKey;
   const canAsk = state.kind === 'idle';
   const detailsId = `details-${fkey}`;
   return (
@@ -356,7 +421,15 @@ function ErrorItem({
       )}
       <div className="actions">
         {canAsk && (
-          <button type="button" className="btn primary" onClick={ask}>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={ask}
+            disabled={!ready}
+            title={
+              ready ? undefined : 'Connect Claude first: the steps are at the top of the panel.'
+            }
+          >
             <Icon name="sparkle" />
             Fix with Claude
           </button>
@@ -531,6 +604,9 @@ export function App() {
     <div className="app">
       <Header view={nb.view} claude={claude} />
       <main className="main">
+        {nb.view.kind === 'ready' && (
+          <ConnectClaude status={claude.status} onCheck={claude.recheck} />
+        )}
         <Body nb={nb} claude={claude} />
       </main>
       <StatusBar view={nb.view} claude={claude} />

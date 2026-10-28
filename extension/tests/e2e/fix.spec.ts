@@ -106,19 +106,30 @@ test('an edit to the cell after Claude looked makes Apply refuse', async ({
 test.describe('without the helper installed', () => {
   test.use({ helper: false });
 
-  test('says how to connect Claude, in the card and the status bar', async ({
-    context,
-    openPanel,
-  }) => {
+  test('a Connect Claude card says how, and Fix waits for it', async ({ context, openPanel }) => {
     const page = await context.newPage();
     await openNotebook(page, 'control.ipynb');
     const panel = await openPanel(page);
     await expect(panel.getByText('Claude not connected')).toBeVisible();
 
-    await panel.getByRole('button', { name: 'Fix with Claude' }).click();
-    await expect(panel.getByText('Connect Claude on this Mac')).toBeVisible();
-    await expect(panel.locator('.setup .codeblock pre')).toHaveText(
-      'marginalia-browser-host install',
-    );
+    const card = panel.locator('.connect');
+    await expect(card.getByRole('heading', { name: 'Connect Claude' })).toBeVisible();
+    await expect(card.locator('.codeblock pre')).toHaveText('marginalia-browser-host install');
+    await expect(card).toContainText('Chrome said:');
+    await expect(card.getByRole('button', { name: 'Check again' })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Fix with Claude' })).toBeDisabled();
+  });
+});
+
+test.describe('with a helper set up for another extension', () => {
+  test.use({ helper: 'other-id' });
+
+  test('says to set the helper up again', async ({ context, openPanel }) => {
+    const page = await context.newPage();
+    await openNotebook(page, 'control.ipynb');
+    const panel = await openPanel(page);
+    const card = panel.locator('.connect');
+    await expect(card).toContainText('set up for another copy of Marginalia');
+    await expect(card.locator('.codeblock pre')).toHaveText('marginalia-browser-host install');
   });
 });

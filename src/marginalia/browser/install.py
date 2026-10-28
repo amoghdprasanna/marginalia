@@ -116,7 +116,54 @@ def _uninstall_windows() -> list[Path]:
     return []
 
 
+def check(dirs: list[Path] | None = None, hello=None) -> tuple[bool, list[str]]:
+    """What a person needs to see when the panel says Claude isn't connected: each manifest,
+    the program it names, the extension it allows, and whether the helper starts."""
+    lines: list[str] = []
+    ok = True
+    folders = dirs if dirs is not None else browser_dirs()
+    found = [f / f"{HOST_NAME}.json" for f in folders if (f / f"{HOST_NAME}.json").exists()]
+    if sys.platform == "win32" and dirs is None and _windows_manifest_path().exists():
+        found.append(_windows_manifest_path())
+    if not found:
+        return False, ["No browser knows the helper yet. Run: marginalia-browser-host install"]
+    for path in found:
+        try:
+            m = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            ok = False
+            lines.append(f"✗ {path}: can't be read ({exc}). Run install again.")
+            continue
+        program = Path(str(m.get("path", "")))
+        allowed = m.get("allowed_origins", [])
+        problems = []
+        if not program.is_file() or not os.access(program, os.X_OK):
+            problems.append(f"the program {program} is missing or not executable")
+        if f"chrome-extension://{EXTENSION_ID}/" not in allowed:
+            problems.append(f"it allows {allowed}, not chrome-extension://{EXTENSION_ID}/")
+        ok = ok and not problems
+        mark = "✓" if not problems else "✗"
+        lines.append(f"{mark} {path}\n    runs {program}" + "".join(f"\n    problem: {p}" for p in problems))
+    if hello is not None:
+        try:
+            about = hello()
+            key = "found" if about.get("hasKey") else "missing: add it in Marginalia's Settings, under AI model"
+            lines.append(f"✓ The helper starts. Model: {about.get('modelName')}. Claude key: {key}.")
+            ok = ok and bool(about.get("hasKey"))
+        except Exception as exc:  # what a person needs is the reason, whatever it is
+            ok = False
+            lines.append(f"✗ The helper didn't start: {exc}")
+    return ok, lines
+
+
 def cli(action: str) -> int:
+    if action == "check":
+        from .host import claude_fixer
+
+        ok, lines = check(hello=lambda: claude_fixer()[1])
+        print("\n".join(lines))
+        print("All good: open the panel and press Check again." if ok else "Fix the ✗ lines above, then check again.")
+        return 0 if ok else 1
     if action == "install":
         files = install()
         if not files:

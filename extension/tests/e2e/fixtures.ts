@@ -17,7 +17,7 @@ export const EXTENSION_ID = 'behgmlfpdfdjcbiogfngmghpbfgaagpa';
  * Chromium reads helper manifests from <user data dir>/NativeMessagingHosts. With `helper`
  * on, the fake helper is registered there, as `marginalia-browser-host install` would.
  */
-function registerFakeHelper(userDataDir: string): void {
+function registerFakeHelper(userDataDir: string, allowedId: string): void {
   const dir = path.join(userDataDir, 'NativeMessagingHosts');
   mkdirSync(dir, { recursive: true });
   const launcher = path.join(userDataDir, 'fake-helper.sh');
@@ -31,14 +31,15 @@ function registerFakeHelper(userDataDir: string): void {
       description: 'fake helper for tests',
       path: launcher,
       type: 'stdio',
-      allowed_origins: [`chrome-extension://${EXTENSION_ID}/`],
+      allowed_origins: [`chrome-extension://${allowedId}/`],
     }),
   );
 }
 
 /** A Chromium context with the e2e build loaded (`npm run build:e2e` first). */
 export const test = base.extend<{
-  helper: boolean;
+  /** true: the fake helper, for our id; 'other-id': installed for another extension; false: none. */
+  helper: boolean | 'other-id';
   context: BrowserContext;
   serviceWorker: Worker;
   extensionId: string;
@@ -48,7 +49,8 @@ export const test = base.extend<{
   helper: [true, { option: true }],
   context: async ({ helper }, use) => {
     const userDataDir = mkdtempSync(path.join(tmpdir(), 'marginalia-chrome-'));
-    if (helper) registerFakeHelper(userDataDir);
+    if (helper !== false)
+      registerFakeHelper(userDataDir, helper === 'other-id' ? 'a'.repeat(32) : EXTENSION_ID);
     const context = await chromium.launchPersistentContext(userDataDir, {
       channel: 'chromium',
       args: [`--disable-extensions-except=${EXTENSION_PATH}`, `--load-extension=${EXTENSION_PATH}`],

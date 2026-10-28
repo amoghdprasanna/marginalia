@@ -359,6 +359,34 @@
     transform: rotate(90deg);
   }
 
+  /* Connect Claude: above everything while fixes can't be asked for. */
+  .connect {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding: 0.8rem 0.875rem;
+    border: 1px solid var(--amber);
+    border-radius: var(--radius-lg);
+    background: var(--amber-soft);
+  }
+
+  .connect-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9375rem;
+    font-weight: 650;
+  }
+
+  .connect-title .icon {
+    color: var(--amber-ink);
+  }
+
+  .connect code {
+    overflow-wrap: anywhere;
+  }
+
   /* A fix, under its error */
   .fix,
   .setup {

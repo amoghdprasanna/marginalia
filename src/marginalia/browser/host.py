@@ -84,10 +84,10 @@ def serve(stdin: BinaryIO, stdout: BinaryIO, fixer=claude_fixer) -> int:
 
 
 def main() -> int:
-    """Chrome passes the caller's origin (`chrome-extension://<id>/`); `install` and `uninstall`
-    set the helper up for this browser instead."""
+    """Chrome passes the caller's origin (`chrome-extension://<id>/`). `install`, `uninstall`
+    and `check` set the helper up for this browser, or say what's wrong with it."""
     args = sys.argv[1:]
-    if args[:1] in (["install"], ["uninstall"]):
+    if args[:1] in (["install"], ["uninstall"], ["check"]):
         from .install import cli
 
         return cli(args[0])

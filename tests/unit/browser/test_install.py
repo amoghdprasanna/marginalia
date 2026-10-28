@@ -2,7 +2,15 @@
 import json
 from pathlib import Path
 
-from marginalia.browser.install import EXTENSION_ID, HOST_NAME, browser_dirs, install, manifest, uninstall
+from marginalia.browser.install import (
+    EXTENSION_ID,
+    HOST_NAME,
+    browser_dirs,
+    check,
+    install,
+    manifest,
+    uninstall,
+)
 
 
 def test_manifest_allows_only_our_extension():
@@ -31,3 +39,38 @@ def test_install_then_uninstall(tmp_path):
     assert json.loads(written[0].read_text())["path"] == str(Path("/opt/helper"))
     assert uninstall(dirs) == written
     assert not any(p.exists() for p in written)
+
+
+def test_check_says_what_is_wrong(tmp_path):
+    folder = tmp_path / "NativeMessagingHosts"
+    ok, lines = check([folder])
+    assert not ok and "install" in lines[0]
+
+    program = tmp_path / "helper"
+    program.write_text("#!/bin/sh\n")
+    program.chmod(0o755)
+    install([folder], program)
+    ok, lines = check([folder], hello=lambda: {"modelName": "Claude Haiku 5.5", "hasKey": True})
+    assert ok, lines
+    assert "Claude key: found" in lines[-1]
+
+    stale = manifest(program, extension_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    (folder / f"{HOST_NAME}.json").write_text(json.dumps(stale))
+    ok, lines = check([folder], hello=lambda: {"hasKey": False})
+    assert not ok
+    assert any("not chrome-extension://" in line for line in lines)
+    assert "missing: add it" in lines[-1]
+
+
+def test_check_reports_a_helper_that_cannot_start(tmp_path):
+    folder = tmp_path / "NativeMessagingHosts"
+    program = tmp_path / "helper"
+    program.write_text("")
+    program.chmod(0o755)
+    install([folder], program)
+
+    def broken():
+        raise RuntimeError("keyring locked")
+
+    ok, lines = check([folder], hello=broken)
+    assert not ok and "keyring locked" in lines[-1]
