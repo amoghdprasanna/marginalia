@@ -19,6 +19,7 @@ export const COLORS = {
   charcoal: '#343532',
   charcoalLight: '#50514B',
   charcoalDeep: '#262724',
+  rim: '#6E6F68', // a thin rim light, so charcoal edges read on a dark page
   black: '#111210',
   eyeWhite: '#F7F5ED',
   lid: '#94747E',
@@ -69,7 +70,7 @@ export const GRADIENTS = {
 export type GradientId = keyof typeof GRADIENTS;
 
 /** Groups the panel animates separately. */
-export type Part = 'shadow' | 'legs-back' | 'wool' | 'legs' | 'head' | 'marks';
+export type Part = 'shadow' | 'legs' | 'wool' | 'head' | 'marks';
 
 export interface Shape {
   part: Part;
@@ -337,14 +338,14 @@ function marks(kind: Face): Shape[] {
 function tufts(): Shape[] {
   const rand = seeded(7);
   const out: Shape[] = [];
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < 46; i++) {
     const a = rand() * 2 * Math.PI;
     const d = Math.sqrt(rand()) * 0.86;
     const x = FLEECE.cx + FLEECE.rx * d * Math.cos(a);
     const y = FLEECE.cy + FLEECE.ry * d * Math.sin(a);
     // Leave the head and its shadow clear.
     if (Math.hypot(x - HEAD.cx, y - 45) < 13) continue;
-    const r = 1.6 + rand() * 1.6;
+    const r = 1.2 + rand() * 1.2;
     const turn = rand() * Math.PI;
     const x1 = x + r * Math.cos(turn);
     const y1 = y + r * Math.sin(turn);
@@ -355,8 +356,8 @@ function tufts(): Shape[] {
       part: 'wool',
       d: `M${n(x1)} ${n(y1)}A${n(r)} ${n(r * 0.8)} 0 0 1 ${n(x2)} ${n(y2)}`,
       stroke: low ? COLORS.fleeceShadow : x < FLEECE.cx ? '#FFFFFF' : COLORS.fleeceShadow,
-      width: 0.75,
-      opacity: low ? 0.42 : 0.38,
+      width: 0.6,
+      opacity: low ? 0.32 : 0.28,
     });
   }
   return out;
@@ -370,8 +371,10 @@ export interface KetPose {
   detail?: boolean;
 }
 
-const LEG_TOP = 72;
-const LEG_BOTTOM = 87.5; // visible length ≈ 0.13B below the fleece
+const LEG_TOP = 70; // well inside the fleece, which hides the top
+const LEG_BOTTOM = 87; // the belly hangs to about 77 here: about 0.14B shows
+/** A front pair and a hind pair, each a near leg and a far one: four legs. */
+export const LEGS = { near: [39.5, 67.5], far: [45, 73] } as const;
 
 /** Ket in draw order, back to front. */
 export function ket(pose: KetPose): Shape[] {
@@ -382,16 +385,35 @@ export function ket(pose: KetPose): Shape[] {
       ? [
           {
             part: 'shadow' as const,
-            d: ellipse(56, 89, 31, 2.6),
+            d: ellipse(56.5, 88.3, 26, 2.4),
             fill: COLORS.black,
             opacity: 0.16,
           },
         ]
       : []),
-    // 1. The far legs, mostly hidden and a shade darker.
-    ...[62, 74].map((x): Shape => ({
-      part: 'legs-back',
-      d: leg(x, LEG_TOP, LEG_BOTTOM - 1.2),
+    // 1. Four legs, all drawn before the fleece so it hangs over their tops. The far leg of
+    // each pair sits a little to the right and higher, a shade darker: further away.
+    ...LEGS.far.map((x): Shape => ({
+      part: 'legs',
+      d: leg(x, LEG_TOP, LEG_BOTTOM - 1.4),
+      fill: COLORS.charcoalDeep,
+    })),
+    ...LEGS.far.map((x): Shape => ({
+      part: 'legs',
+      d: hoof(x, LEG_BOTTOM - 1.4),
+      fill: COLORS.black,
+      opacity: 0.6,
+    })),
+    ...LEGS.near.map((x): Shape => ({
+      part: 'legs',
+      d: leg(x, LEG_TOP, LEG_BOTTOM),
+      fill: { gradient: 'leg' },
+      stroke: COLORS.rim,
+      width: 0.45,
+    })),
+    ...LEGS.near.map((x): Shape => ({
+      part: 'legs',
+      d: hoof(x, LEG_BOTTOM),
       fill: COLORS.charcoalDeep,
     })),
     // 2. The fleece: a soft shadow, a fuzzy edge, the mass, then its curls.
@@ -415,22 +437,14 @@ export function ket(pose: KetPose): Shape[] {
     ...(detail ? tufts() : []),
     // The head's shadow on the wool.
     { part: 'wool', d: ellipse(32, 51, 9, 9.5), fill: COLORS.fleeceShadow, opacity: 0.45 },
-    // 3. The near legs, holding her up: two forelegs and a hind leg.
-    ...[33.5, 42, 79].map((x): Shape => ({
-      part: 'legs',
-      d: leg(x, LEG_TOP, LEG_BOTTOM),
-      fill: { gradient: 'leg' },
-    })),
-    ...[33.5, 42, 79].map((x): Shape => ({
-      part: 'legs',
-      d: hoof(x, LEG_BOTTOM),
-      fill: COLORS.charcoalDeep,
-    })),
+    // 3. (The legs are under the fleece, above.)
     // 4. Ears: short, flat, leaf-shaped, out to the sides with a slight droop, a groove for the fold.
     {
       part: 'head',
       d: 'M19.8 39.4C16 37.9 11.6 39.6 10.2 43.5C11.9 46 16.6 45.6 20 42.7Z',
       fill: { gradient: 'leg' },
+      stroke: COLORS.rim,
+      width: 0.45,
     },
     {
       part: 'head',
@@ -442,6 +456,8 @@ export function ket(pose: KetPose): Shape[] {
       part: 'head',
       d: 'M36.2 39.4C40 37.9 44.4 39.6 45.8 43.5C44.1 46 39.4 45.6 36 42.7Z',
       fill: { gradient: 'leg' },
+      stroke: COLORS.rim,
+      width: 0.45,
     },
     {
       part: 'head',
@@ -450,7 +466,7 @@ export function ket(pose: KetPose): Shape[] {
       width: 0.8,
     },
     // 5. The head, with the muzzle's volume in soft light.
-    { part: 'head', d: HEAD_PATH, fill: { gradient: 'head' } },
+    { part: 'head', d: HEAD_PATH, fill: { gradient: 'head' }, stroke: COLORS.rim, width: 0.45 },
     { part: 'head', d: ellipse(28, 51.8, 7.2, 4.2), fill: COLORS.charcoalLight, opacity: 0.3 },
     {
       part: 'head',

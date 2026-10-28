@@ -45,6 +45,11 @@ describe('ket', () => {
     expect(new Set(runs).size).toBe(runs.length);
   });
 
+  it('has four legs: a front and a hind pair', () => {
+    const legs = ket({ face: 'awake' }).filter((s) => s.part === 'legs' && s.d.includes('C'));
+    expect(legs).toHaveLength(4);
+  });
+
   it('looks the same every time', () => {
     expect(ket({ face: 'awake' })).toEqual(ket({ face: 'awake' }));
   });
