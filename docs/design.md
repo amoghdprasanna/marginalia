@@ -84,25 +84,29 @@ These are the rules the UI follows, with where each shows up. Check a UI change 
 - An empty journal is one centred message under the qubit mark: what will appear here and how to
   make it appear. A search with no results says so, and what to try.
 
-## The notebook panel (`extension/`, ADR 0029)
+## The notebook panel (`extension/`, ADRs 0029 and 0030)
 
-The Chrome side panel follows the same rules, with the same tokens (`extension/src/ui/theme.css`).
+The Chrome side panel is built to Lemma's standard and follows the system's light or dark scheme
+(`extension/src/ui/theme.css`), with Marginalia's slate and amber.
 - One state at a time, each a sentence and at most one thing to press: *Allow access*, *Reload
-  tab*, the server setting with *Copy*, or the list of errors. Nothing is offered that does nothing
-  yet: there is no *Explain* until the desktop bridge answers.
-- Errors look like Jupyter's: the cell's `[14]` count, a red bar where Jupyter draws its blue
-  one, the exception in red and the rest in body text. Red stays only for errors.
-- Atkinson Hyperlegible Next and Mono, bundled with the extension: they keep `l`/`1`/`I` and
-  `0`/`O` apart, which tracebacks need.
-- **Ket**, the qubit, is the one playful thing. It shows what the panel is doing as a state on the
-  Bloch sphere: precessing while it reads or the kernel is busy, upright in |0⟩ when the notebook
-  is clean, knocked off with a red dot when a cell raised, lying on the equator asleep when there
-  is nothing to read. It leans toward the pointer; a click measures it (Born-rule odds, the
-  outcome shown as `|0⟩`/`|1⟩`); three quick clicks drive a Rabi flop. Inside the sphere the
-  vector is faint and under the face, so it never crosses Ket's eyes. Reduced motion keeps the
-  states and drops the movement. Its animation loop stops when Ket is still.
-- Checked at 360 px, Chrome's default side-panel width: nothing wraps mid-identifier (the config
-  lines scroll instead), tracebacks wrap rather than hide their end.
+  tab*, the server setting with *Copy*, or the list of errors.
+- Each error is a compact card: the exception, its message, the notebook line that led to it (a
+  library frame shows as "Raised in …"), and its actions. **Fix with Claude** is the one amber
+  button; the traceback stays folded under *Details*.
+- A fix shows Claude's one-line summary, its reasoning, and the change as a red/green diff.
+  Nothing changes until **Apply**; **Undo** takes it back. A refused edit says why ("The cell
+  changed since Claude looked at it"). The status bar names the kernel and the Claude model, or
+  says Claude isn't connected; the card then shows the one command that connects it.
+- Lexend for text, as in Lemma; Atkinson Hyperlegible Mono for code, which keeps `l`/`1`/`I` and
+  `0`/`O` apart.
+- **Ket** is an original round, fluffy lamb with a soft clay look, and the panel's one playful
+  thing. Its collar bell is a Bloch sphere: the needle sits at |0⟩ when the notebook is clean,
+  precesses while Marginalia reads or Claude works, and is knocked over, red, when a cell raised.
+  It breathes, blinks, follows the pointer, perks its ears on hover, hops when a fix lands, and
+  sleeps when there's nothing to read. A click rings the bell and measures it (Born-rule odds,
+  shown as `|0⟩`/`|1⟩`); three quick clicks roll it over. All motion is CSS, with no script loop;
+  reduced motion stops it.
+- Checked at 380 px in both schemes: nothing wraps mid-identifier (code scrolls), tracebacks wrap.
 
 ## Tokens (`ui/theme.py`)
 
