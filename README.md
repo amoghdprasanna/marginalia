@@ -10,7 +10,10 @@ the parts of the screen it's talking about.
 ## Install it
 
 No terminal needed: download the latest release from the
-[Releases page](https://github.com/amoghdprasanna/marginalia/releases).
+[Releases page](https://github.com/amoghdprasanna/marginalia/releases). To try the newest
+changes before they're released, take the files from
+[Latest build from main](https://github.com/amoghdprasanna/marginalia/releases/tag/latest-main)
+instead: it's rebuilt on every change, and the app won't update itself to it.
 
 - **macOS** (Apple silicon): open `Marginalia-<version>-macos.dmg` and drag Marginalia into
   Applications, then open it from there. Until builds are signed with a Developer ID, macOS

@@ -7,6 +7,7 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 ## [Unreleased]
 
 ### Added
+- Every change to `main` publishes fresh installers to the *Latest build from main* prerelease.
 - Linux package: `marginalia_<version>_amd64.deb` installs from the Software app with a
   double-click (Ubuntu 22.04 and newer, Debian 12), with a menu entry and the icon.
 - The notebook extension's helper sets itself up: the installed app registers it with Chrome,

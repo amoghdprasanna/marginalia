@@ -21,6 +21,14 @@ Chrome extension zip, and
 publishes a GitHub release with that changelog section as its notes. Running the workflow by hand
 from the Actions tab builds everything without publishing (a dry run).
 
+## Builds from main
+
+Every push to `main` runs the same workflow (without the tag check) and replaces the
+`latest-main` prerelease with fresh files, so the newest build is always at
+`/releases/tag/latest-main`. A newer push cancels a build still running. The files carry the
+current `__version__` in their names, and the app's update check skips prereleases, so installed
+copies update only to numbered releases.
+
 Users find out from the app's daily update check (ADR 0021), and the installed app updates itself
 with **Update now** (ADR 0028). That needs the releases to be public, and each release's installers
 to keep the names `packaging/build.py` gives them (`-macos.dmg`, `-windows-setup.exe`, `_amd64.deb`): the app

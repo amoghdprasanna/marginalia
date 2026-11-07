@@ -4,13 +4,23 @@ name: Release
 # tag against __version__ and the changelog, runs the tests, builds the wheel, the macOS app,
 # the Windows app, the Linux package and the Chrome extension, and publishes a GitHub release
 # with the changelog section as its notes.
+#
+# Every push to main builds the same files and replaces the "latest-main" prerelease with them,
+# so the newest build is always downloadable. The app's update check ignores prereleases, so
+# installed copies still update only to tagged releases.
 on:
   push:
+    branches: [main]
     tags: ["v*.*.*"]
   workflow_dispatch:  # a dry run from the Actions tab: builds everything, publishes nothing
 
 permissions:
   contents: write
+
+# A newer push to main supersedes a build still running; tagged releases always finish.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
 
 jobs:
   check:
@@ -159,3 +169,28 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${GITHUB_REF_NAME}" --title "Marginalia ${GITHUB_REF_NAME#v}" --notes-file notes.md artifacts/*
+
+  publish-main:
+    needs: [wheel, macos, windows, linux, extension]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Write the notes
+        run: |
+          cat > notes.md <<EOF
+          The newest build from \`main\` ([\`${GITHUB_SHA::7}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA})), built $(date -u '+%Y-%m-%d %H:%M UTC').
+          It is replaced on every change to \`main\` and may be less tested than a numbered release.
+          The app does not update itself to it.
+          EOF
+      - name: Replace the latest-main prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete latest-main --cleanup-tag --yes || true
+          gh release create latest-main --prerelease --target "${GITHUB_SHA}" \
+            --title "Latest build from main (${GITHUB_SHA::7})" --notes-file notes.md artifacts/*
