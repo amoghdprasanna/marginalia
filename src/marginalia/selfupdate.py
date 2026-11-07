@@ -137,6 +137,8 @@ class Updater:
         """Why this release can't be installed from inside the app, or None if it can."""
         if not self.frozen:
             return "This copy runs from Python: update it the way you installed it (git pull, or pip)."
+        if self.platform.startswith("linux"):  # the package manager owns /opt/marginalia (ADR 0033)
+            return "Open the downloaded package to update: the Software app installs it over this one."
         if self.platform == "darwin" and self.machine != "arm64":
             return "Releases are built for Apple silicon Macs; on this Mac, build the app yourself."
         asset = release.installer(self.platform)

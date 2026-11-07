@@ -1,15 +1,18 @@
 """GeminiBrain against a fake client: request shape, the 0-1000 grid, streaming, refusals, errors."""
 
+import importlib.util
 import sys
 from dataclasses import replace
 from types import SimpleNamespace
 
-import httpx
 import pytest
 from google.genai import errors
 from helpers import envelope, point_dict
 
 from marginalia.brain import ANSWER_SCHEMA, BrainError, Cancelled, GeminiBrain
+
+# google-genai 3 moved from httpx to its fork httpx2; raise from whichever the installed SDK uses.
+http = next(importlib.import_module(m) for m in ("httpx2", "httpx") if importlib.util.find_spec(m))
 
 
 def _chunk(text=None, finish=None, thought=False, usage=None, block=None):
@@ -144,7 +147,7 @@ def _api(cls, code, message, status="X"):
         (_api(errors.ClientError, 429, "Resource exhausted"), "quota", "retry"),
         (_api(errors.ClientError, 400, "Invalid JSON payload"), "Gemini couldn't process", None),
         (_api(errors.ServerError, 503, "overloaded"), "Gemini is having trouble", "retry"),
-        (httpx.ConnectError("no route"), "Couldn't reach Gemini", "retry"),
+        (http.ConnectError("no route"), "Couldn't reach Gemini", "retry"),
     ],
 )
 def test_api_errors_say_what_to_do_next(gem_cfg, prep, error, expected, action):

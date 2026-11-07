@@ -7,6 +7,12 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 ## [Unreleased]
 
 ### Added
+- Linux package: `marginalia_<version>_amd64.deb` installs from the Software app with a
+  double-click (Ubuntu 22.04 and newer, Debian 12), with a menu entry and the icon.
+- The notebook extension's helper sets itself up: the installed app registers it with Chrome,
+  Chromium, Brave and Edge when it starts (the Windows installer and the Linux package do it at
+  install), so `marginalia-browser-host install` is only for source checkouts.
+- Each release carries the Chrome extension as a zip, ready for *Load unpacked*.
 - Install and update without a terminal: a Windows installer (Start menu entry, no administrator
   rights needed), **Update now** in the update notice (downloads the release, checks it against
   GitHub's checksum, restarts into it), and Settings → *Open Marginalia when you log in*.

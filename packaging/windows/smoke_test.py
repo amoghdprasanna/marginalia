@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import os
 import subprocess
 import sys
@@ -65,11 +66,41 @@ def app_pids() -> list[int]:
     return [int(row[1]) for row in csv.reader(io.StringIO(out)) if len(row) > 1 and row[0] == "Marginalia.exe"]
 
 
+def installer_running() -> bool:
+    """Whether a Marginalia installer is still at work (setup.exe hands over to a setup.tmp)."""
+    out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"], capture_output=True, text=True).stdout
+    return any(row and "-windows-setup." in row[0] for row in csv.reader(io.StringIO(out)))
+
+
+def stop_app() -> bool:
+    """Kill every Marginalia.exe until none comes back for a few seconds."""
+
+    def quiet() -> bool:
+        for pid in app_pids():
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+        time.sleep(3)
+        return not app_pids()
+
+    return wait_for(quiet, 60)
+
+
 def run_value() -> str | None:
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
             return winreg.QueryValueEx(key, RUN_VALUE)[0]
     except FileNotFoundError:
+        return None
+
+
+HELPER_KEY = r"Software\Google\Chrome\NativeMessagingHosts\marginalia.browser"
+
+
+def helper_manifest() -> dict | None:
+    """The notebook extension's helper as Chrome would find it, or None (ADR 0033)."""
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, HELPER_KEY) as key:
+            return json.loads(Path(winreg.QueryValueEx(key, "")[0]).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
         return None
 
 
@@ -82,6 +113,8 @@ def main() -> None:
     check((APP_DIR / "Marginalia.exe").exists(), f"installed for this user in {APP_DIR}")
     check((APP_DIR / "unins000.exe").exists(), "with an uninstaller (the updater looks for it)")
     check(SHORTCUT.exists(), "with a Start menu entry")
+    helper = helper_manifest() or {}
+    check(Path(helper.get("path", "")) == APP_DIR / "Marginalia.exe", "and the browser extension's helper is the app")
     check(wait_for(app_pids, 60), "and the app started")
     old = app_pids()[0]
     # Stays up: it didn't crash on start (missing modules in the bundle would show here).
@@ -98,18 +131,23 @@ def main() -> None:
     check(marker.exists(), "the updater waits while the app is running")
     subprocess.run(["taskkill", "/PID", str(old), "/F"], capture_output=True)  # the app quitting
     check(wait_for(lambda: not marker.exists(), 120), "once it quits, the installer runs over the install")
-    check(wait_for(lambda: any(p != old for p in app_pids()), 60), "and starts the app again")
+    # The installer briefly runs Marginalia.exe to register the browser helper before it starts the
+    # app, so a new process alone doesn't mean it's done: wait for the installer to exit too.
+    check(
+        wait_for(lambda: not installer_running() and any(p != old for p in app_pids()), 120),
+        "and starts the app again",
+    )
 
     step("Uninstall")
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:  # as "Open at login" would
         winreg.SetValueEx(key, RUN_VALUE, 0, winreg.REG_SZ, f'"{APP_DIR / "Marginalia.exe"}"')
-    for pid in app_pids():
-        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+    check(stop_app(), "the app is stopped")
     subprocess.run([str(APP_DIR / "unins000.exe"), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"], check=True)
     # The uninstaller hands over to a copy of itself in %TEMP% and returns at once.
     check(wait_for(lambda: not (APP_DIR / "Marginalia.exe").exists(), 120), "the app is removed")
     check(wait_for(lambda: not SHORTCUT.exists(), 30), "and its Start menu entry")
     check(wait_for(lambda: run_value() is None, 30), "and the open-at-login value")
+    check(wait_for(lambda: helper_manifest() is None, 30), "and the browser extension's helper")
     print("\nAll good.")
 
 

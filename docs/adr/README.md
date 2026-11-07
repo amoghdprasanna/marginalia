@@ -37,3 +37,4 @@ supersedes it, so the history of *why* survives.
 | [0026](0026-apple-vision-ocr-and-a-leaner-app.md) | OCR with Apple Vision on macOS, and a leaner app | Accepted |
 | [0027](0027-more-than-one-model-provider.md) | More than one model provider: Claude, OpenAI and Gemini | Accepted |
 | [0028](0028-installers-login-item-and-in-app-updates.md) | An installed app: a Windows installer, opening at login, and updating from the app | Accepted |
+| [0033](0033-a-linux-package-and-a-helper-that-sets-itself-up.md) | A Linux package, and a helper that sets itself up | Accepted |

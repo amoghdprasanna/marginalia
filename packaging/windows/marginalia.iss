@@ -46,13 +46,30 @@ Name: "{autoprograms}\Marginalia"; Filename: "{app}\Marginalia.exe"
 Name: "{autodesktop}\Marginalia"; Filename: "{app}\Marginalia.exe"; Tasks: desktopicon
 
 [Run]
+; Tell Chrome, Edge and Brave where the notebook extension's helper is (ADR 0033). The app also
+; checks this at every start; doing it here means the extension works before the first one.
+Filename: "{app}\Marginalia.exe"; Parameters: "--register-browser-helper"; Flags: runhidden waituntilterminated
 ; A checkbox at the end of a normal install; after a silent update it simply starts the app.
 Filename: "{app}\Marginalia.exe"; Description: "{cm:LaunchProgram,Marginalia}"; Flags: nowait postinstall
 
 [Code]
-// Settings > "Open Marginalia when you log in" writes this value (src/marginalia/autostart.py).
+// What the app wrote outside its folder: the open-at-login value (Settings > "Open Marginalia
+// when you log in", src/marginalia/autostart.py) and the notebook extension's helper
+// registration (src/marginalia/browser/install.py).
+procedure DeleteHelperKey(Browser: String);
+begin
+  RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\' + Browser + '\NativeMessagingHosts\marginalia.browser');
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usPostUninstall then
+  begin
     RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Marginalia');
+    DeleteHelperKey('Google\Chrome');
+    DeleteHelperKey('Chromium');
+    DeleteHelperKey('BraveSoftware\Brave-Browser');
+    DeleteHelperKey('Microsoft\Edge');
+    DeleteFile(ExpandConstant('{localappdata}\Marginalia\marginalia.browser.json'));
+  end;
 end;
