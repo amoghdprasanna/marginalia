@@ -66,6 +66,24 @@ def app_pids() -> list[int]:
     return [int(row[1]) for row in csv.reader(io.StringIO(out)) if len(row) > 1 and row[0] == "Marginalia.exe"]
 
 
+def installer_running() -> bool:
+    """Whether a Marginalia installer is still at work (setup.exe hands over to a setup.tmp)."""
+    out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"], capture_output=True, text=True).stdout
+    return any(row and "-windows-setup." in row[0] for row in csv.reader(io.StringIO(out)))
+
+
+def stop_app() -> bool:
+    """Kill every Marginalia.exe until none comes back for a few seconds."""
+
+    def quiet() -> bool:
+        for pid in app_pids():
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+        time.sleep(3)
+        return not app_pids()
+
+    return wait_for(quiet, 60)
+
+
 def run_value() -> str | None:
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
@@ -113,13 +131,17 @@ def main() -> None:
     check(marker.exists(), "the updater waits while the app is running")
     subprocess.run(["taskkill", "/PID", str(old), "/F"], capture_output=True)  # the app quitting
     check(wait_for(lambda: not marker.exists(), 120), "once it quits, the installer runs over the install")
-    check(wait_for(lambda: any(p != old for p in app_pids()), 60), "and starts the app again")
+    # The installer briefly runs Marginalia.exe to register the browser helper before it starts the
+    # app, so a new process alone doesn't mean it's done: wait for the installer to exit too.
+    check(
+        wait_for(lambda: not installer_running() and any(p != old for p in app_pids()), 120),
+        "and starts the app again",
+    )
 
     step("Uninstall")
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:  # as "Open at login" would
         winreg.SetValueEx(key, RUN_VALUE, 0, winreg.REG_SZ, f'"{APP_DIR / "Marginalia.exe"}"')
-    for pid in app_pids():
-        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+    check(stop_app(), "the app is stopped")
     subprocess.run([str(APP_DIR / "unins000.exe"), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"], check=True)
     # The uninstaller hands over to a copy of itself in %TEMP% and returns at once.
     check(wait_for(lambda: not (APP_DIR / "Marginalia.exe").exists(), 120), "the app is removed")
