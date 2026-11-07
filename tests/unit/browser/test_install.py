@@ -94,9 +94,10 @@ def test_a_moved_app_takes_over_an_older_registration(tmp_path):
 
 def test_a_source_checkout_leaves_the_registration_alone(tmp_path):
     dirs = [tmp_path / "chrome" / "NativeMessagingHosts"]
-    install(dirs, Path("/dev/.venv/bin/marginalia-browser-host"))
+    checkout = Path("/dev/.venv/bin/marginalia-browser-host")
+    install(dirs, checkout)
     assert register_app(dirs, Path("/somewhere/else"), frozen=False) == []
-    assert "/dev/.venv" in (dirs[0] / f"{HOST_NAME}.json").read_text()
+    assert json.loads((dirs[0] / f"{HOST_NAME}.json").read_text())["path"] == str(checkout)
 
 
 def test_an_unwritable_profile_does_not_stop_the_app(tmp_path):
