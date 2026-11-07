@@ -18,6 +18,13 @@ No terminal needed: download the latest release from the
 - **Windows:** run `Marginalia-<version>-windows-setup.exe`. It installs for you only, so it
   needs no administrator password, and adds Marginalia to the Start menu. Until the installer
   is signed, SmartScreen may warn: click **More info → Run anyway**.
+- **Linux** (Ubuntu 22.04 or newer, Debian 12, 64-bit Intel/AMD): double-click
+  `marginalia_<version>_amd64.deb`. It opens in the Software app; click **Install**. Marginalia
+  is then in your applications menu.
+- **The notebook extension** (Chrome, Edge, Brave): download `Marginalia-<version>-chrome-extension.zip`
+  from the same release and unzip it. In `chrome://extensions`, turn on **Developer mode**, click
+  **Load unpacked** and choose the unzipped folder. The app connects the extension to Claude by
+  itself; open Marginalia once if you installed it from the disk image.
 
 To start it with your computer, tick **Open Marginalia when you log in** in Settings (right-click
 the orb). When a new version is out, Marginalia says so and **Update now** downloads it, checks

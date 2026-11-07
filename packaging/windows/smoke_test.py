@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import os
 import subprocess
 import sys
@@ -73,6 +74,18 @@ def run_value() -> str | None:
         return None
 
 
+HELPER_KEY = r"Software\Google\Chrome\NativeMessagingHosts\marginalia.browser"
+
+
+def helper_manifest() -> dict | None:
+    """The notebook extension's helper as Chrome would find it, or None (ADR 0033)."""
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, HELPER_KEY) as key:
+            return json.loads(Path(winreg.QueryValueEx(key, "")[0]).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
 def main() -> None:
     (setup,) = (ROOT / "dist").glob("Marginalia-*-windows-setup.exe")
     print(f"installer: {setup.name}")
@@ -82,6 +95,8 @@ def main() -> None:
     check((APP_DIR / "Marginalia.exe").exists(), f"installed for this user in {APP_DIR}")
     check((APP_DIR / "unins000.exe").exists(), "with an uninstaller (the updater looks for it)")
     check(SHORTCUT.exists(), "with a Start menu entry")
+    helper = helper_manifest() or {}
+    check(Path(helper.get("path", "")) == APP_DIR / "Marginalia.exe", "and the browser extension's helper is the app")
     check(wait_for(app_pids, 60), "and the app started")
     old = app_pids()[0]
     # Stays up: it didn't crash on start (missing modules in the bundle would show here).
@@ -110,6 +125,7 @@ def main() -> None:
     check(wait_for(lambda: not (APP_DIR / "Marginalia.exe").exists(), 120), "the app is removed")
     check(wait_for(lambda: not SHORTCUT.exists(), 30), "and its Start menu entry")
     check(wait_for(lambda: run_value() is None, 30), "and the open-at-login value")
+    check(wait_for(lambda: helper_manifest() is None, 30), "and the browser extension's helper")
     print("\nAll good.")
 
 

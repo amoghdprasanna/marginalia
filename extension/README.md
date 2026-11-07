@@ -11,6 +11,13 @@ tunnel) with one click, or any address you add, with Chrome asking about that on
 network requests itself: Claude is asked by Marginalia's helper on
 your computer, with the key from your keychain.
 
+## Install
+
+Download `Marginalia-<version>-chrome-extension.zip` from the
+[Releases page](https://github.com/amoghdprasanna/marginalia/releases) and unzip it. In Chrome:
+`chrome://extensions` → turn on **Developer mode** → **Load unpacked** → choose the unzipped folder.
+Pin Marginalia from the puzzle-piece menu and click it to open the panel.
+
 ## Install (from this repository)
 
 ```bash
@@ -26,14 +33,17 @@ card.
 
 ## Connect Claude
 
-Once per computer, from the Python environment Marginalia is installed in:
+Install the Marginalia app ([Releases](https://github.com/amoghdprasanna/marginalia/releases)) and
+open it once: it tells Chrome (and Chromium, Brave, Edge) where its helper is, and checks again at
+every start. The Windows installer and the Linux package do it while installing. The helper uses
+the model and Claude key from Marginalia's Settings
+([ADR 0033](../docs/adr/0033-a-linux-package-and-a-helper-that-sets-itself-up.md)).
+
+Running Marginalia from source instead? Register the helper from its Python environment:
 
 ```bash
-marginalia-browser-host install
+marginalia-browser-host install      # uninstall removes it; check says what's wrong
 ```
-
-It tells Chrome (and Chromium, Brave, Edge) where Marginalia's helper is. The helper uses the
-model and Claude key from Marginalia's Settings. `marginalia-browser-host uninstall` removes it.
 
 ## Let it read the notebook
 

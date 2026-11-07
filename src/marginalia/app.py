@@ -1114,6 +1114,12 @@ def main(argv: list[str] | None = None) -> None:
         from .browser.host import main as helper_main
 
         raise SystemExit(helper_main())
+    # The Windows installer runs this once so the extension works before the first start.
+    if args_in[:1] == ["--register-browser-helper"]:
+        from .browser.install import register_app
+
+        register_app()
+        raise SystemExit(0)
     ap = argparse.ArgumentParser(prog="marginalia", description="Screen-aware study companion.")
     ap.add_argument("--demo", action="store_true", help="canned answers, no API key needed")
     ap.add_argument("--no-hotkey", action="store_true", help="disable the global shortcut (use the orb)")
@@ -1122,6 +1128,12 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
 
     setup_logging()  # console only, so problems reading the config are reported
+    from .browser.install import register_app
+
+    # The installed app is the notebook extension's helper (ADR 0033). Before the settings: reading
+    # the key can wait on a keychain prompt, and the extension shouldn't wait with it.
+    for path in register_app():
+        log.info("Set up the notebook extension's helper: %s", path)
     cfg = load_config(demo=args.demo, no_hotkey=args.no_hotkey, no_ocr=args.no_ocr, no_voice=args.no_voice)
     setup_logging(cfg.log_dir, cfg.log_level.upper())
     reporter = CrashReporter(cfg.log_dir)

@@ -270,11 +270,11 @@ function ConnectClaude({ claude }: { claude: Claude }) {
     body = (
       <>
         <p>
-          Fixes come from Marginalia on this computer, with the Claude key from its keychain, so no
-          key lives in the browser. Run this once in a terminal, in the Python environment
-          Marginalia is installed in (in a source checkout, prefix it with <code>.venv/bin/</code>
-          ):
+          Fixes come from the Marginalia app on this computer, with the Claude key from its
+          keychain, so no key lives in the browser. Open the app once: it connects itself. Then
+          check again.
         </p>
+        <p>Running Marginalia from source? Run this in its environment instead:</p>
         <CodeBlock file="Terminal" text={INSTALL_COMMAND} />
       </>
     );
@@ -284,7 +284,8 @@ function ConnectClaude({ claude }: { claude: Claude }) {
       id === EXPECTED_ID ? (
         <>
           <p>
-            The helper on this computer was set up for another copy of Marginalia. Set it up again:
+            The helper on this computer was set up for another copy of Marginalia. Open the
+            Marginalia app once to set it up again, or from source run:
           </p>
           <CodeBlock file="Terminal" text={INSTALL_COMMAND} />
         </>
@@ -292,8 +293,7 @@ function ConnectClaude({ claude }: { claude: Claude }) {
         <p>
           The helper only answers Marginalia&rsquo;s own id, and this copy has a different one (
           <code>{id}</code>), usually because it was reloaded from an older build. In{' '}
-          <code>chrome://extensions</code>, remove Marginalia, then Load unpacked the{' '}
-          <code>extension/.output/chrome-mv3</code> folder again.
+          <code>chrome://extensions</code>, remove Marginalia, then Load unpacked its folder again.
         </p>
       );
   } else {

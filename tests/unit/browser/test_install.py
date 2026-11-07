@@ -9,6 +9,7 @@ from marginalia.browser.install import (
     check,
     install,
     manifest,
+    register_app,
     uninstall,
 )
 
@@ -74,3 +75,31 @@ def test_check_reports_a_helper_that_cannot_start(tmp_path):
 
     ok, lines = check([folder], hello=broken)
     assert not ok and "keyring locked" in lines[-1]
+
+
+def test_the_installed_app_registers_itself(tmp_path):
+    dirs = [tmp_path / "chrome" / "NativeMessagingHosts"]
+    app = Path("/opt/marginalia/Marginalia")
+    assert register_app(dirs, app, frozen=True) == [dirs[0] / f"{HOST_NAME}.json"]
+    assert json.loads((dirs[0] / f"{HOST_NAME}.json").read_text())["path"] == str(app)
+    assert register_app(dirs, app, frozen=True) == []  # already right: nothing rewritten
+
+
+def test_a_moved_app_takes_over_an_older_registration(tmp_path):
+    dirs = [tmp_path / "chrome" / "NativeMessagingHosts"]
+    install(dirs, Path("/old/place/Marginalia"))
+    assert register_app(dirs, Path("/new/place/Marginalia"), frozen=True) == [dirs[0] / f"{HOST_NAME}.json"]
+    assert json.loads((dirs[0] / f"{HOST_NAME}.json").read_text())["path"] == str(Path("/new/place/Marginalia"))
+
+
+def test_a_source_checkout_leaves_the_registration_alone(tmp_path):
+    dirs = [tmp_path / "chrome" / "NativeMessagingHosts"]
+    install(dirs, Path("/dev/.venv/bin/marginalia-browser-host"))
+    assert register_app(dirs, Path("/somewhere/else"), frozen=False) == []
+    assert "/dev/.venv" in (dirs[0] / f"{HOST_NAME}.json").read_text()
+
+
+def test_an_unwritable_profile_does_not_stop_the_app(tmp_path):
+    blocker = tmp_path / "file"
+    blocker.write_text("not a folder")
+    assert register_app([blocker / "NativeMessagingHosts"], Path("/opt/x"), frozen=True) == []

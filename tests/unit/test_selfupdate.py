@@ -287,3 +287,9 @@ def test_the_windows_script_starts_the_installer_once_the_app_has_quit(tmp_path)
     while not ran.exists() and time.monotonic() < deadline:
         time.sleep(0.1)
     assert "/SILENT" in ran.read_text()
+
+
+def test_linux_offers_the_package_instead_of_updating_in_place():
+    name = "marginalia_9.9.9_amd64.deb"
+    deb = Release("9.9.9", "u", assets={name: Asset(name, "https://x", 1, DIGEST)})
+    assert "package" in Updater(platform="linux", frozen=True, executable="/opt/marginalia/Marginalia").problem(deb)

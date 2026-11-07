@@ -37,6 +37,15 @@ def manifest(command: Path, extension_id: str = EXTENSION_ID) -> dict:
     }
 
 
+# Where the Linux package puts a manifest for every user, so the helper works before the app's
+# first start (packaging/build.py). The per-user folders above still win when both exist.
+LINUX_SYSTEM_DIRS = (
+    "/etc/opt/chrome/native-messaging-hosts",  # Chrome, and Brave, which reads Chrome's
+    "/etc/chromium/native-messaging-hosts",
+    "/etc/opt/edge/native-messaging-hosts",
+)
+
+
 def browser_dirs(home: Path | None = None, platform: str = sys.platform) -> list[Path]:
     """Each browser's NativeMessagingHosts folder, for the browsers that are installed."""
     home = home or Path.home()
@@ -71,6 +80,52 @@ def install(dirs: list[Path] | None = None, command: Path | None = None) -> list
         target.write_text(text, encoding="utf-8")
         written.append(target)
     return written
+
+
+def register_app(dirs: list[Path] | None = None, command: Path | None = None, frozen: bool | None = None) -> list[Path]:
+    """Point the browsers at this installed app, so nobody runs `install` (ADR 0033).
+
+    The app calls it at every start and the Windows installer runs it once; it rewrites only a
+    manifest that is missing or names another program (an older copy, a source checkout), so a
+    moved app finds its way back. A copy run from Python leaves the manifests alone: the
+    developer chose which helper the browser runs. Never raises: the app starts regardless.
+    """
+    if not (getattr(sys, "frozen", False) if frozen is None else frozen):
+        return []
+    command = command or helper_command()
+    try:
+        if sys.platform == "win32" and dirs is None:
+            current = _windows_manifest_path()
+            if _names(current, command) and _windows_registered():
+                return []
+            return install(command=command)
+        folders = dirs if dirs is not None else browser_dirs()
+        stale = [f for f in folders if not _names(f / f"{HOST_NAME}.json", command)]
+        return install(stale, command) if stale else []
+    except Exception:  # noqa: BLE001  (a read-only profile folder must not stop the app)
+        return []
+
+
+def _names(path: Path, command: Path) -> bool:
+    """Whether the manifest at `path` already runs `command` for our extension."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) == manifest(command)
+    except (OSError, ValueError):
+        return False
+
+
+def _windows_registered() -> bool:
+    import winreg
+
+    target = str(_windows_manifest_path())
+    for key in _WINDOWS_KEYS:
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, rf"{key}\{HOST_NAME}") as k:
+                if winreg.QueryValueEx(k, "")[0] != target:
+                    return False
+        except OSError:
+            return False
+    return True
 
 
 def uninstall(dirs: list[Path] | None = None) -> list[Path]:
@@ -122,11 +177,16 @@ def check(dirs: list[Path] | None = None, hello=None) -> tuple[bool, list[str]]:
     lines: list[str] = []
     ok = True
     folders = dirs if dirs is not None else browser_dirs()
+    if dirs is None and sys.platform.startswith("linux"):
+        folders = [*folders, *map(Path, LINUX_SYSTEM_DIRS)]
     found = [f / f"{HOST_NAME}.json" for f in folders if (f / f"{HOST_NAME}.json").exists()]
     if sys.platform == "win32" and dirs is None and _windows_manifest_path().exists():
         found.append(_windows_manifest_path())
     if not found:
-        return False, ["No browser knows the helper yet. Run: marginalia-browser-host install"]
+        return False, [
+            "No browser knows the helper yet. Open the Marginalia app once (it sets the helper up),"
+            " or from source run: marginalia-browser-host install"
+        ]
     for path in found:
         try:
             m = json.loads(path.read_text(encoding="utf-8"))

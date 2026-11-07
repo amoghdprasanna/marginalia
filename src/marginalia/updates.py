@@ -41,7 +41,7 @@ def is_newer(latest: str, current: str = __version__) -> bool:
 
 
 # How each platform's installer is named in a release (packaging/build.py makes them).
-INSTALLERS = {"darwin": "-macos.dmg", "win32": "-windows-setup.exe"}
+INSTALLERS = {"darwin": "-macos.dmg", "win32": "-windows-setup.exe", "linux": "_amd64.deb"}
 
 
 @dataclass
