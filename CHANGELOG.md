@@ -6,6 +6,8 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-07
+
 ### Added
 - Every change to `main` publishes fresh installers to the *Latest build from main* prerelease.
 - Linux package: `marginalia_<version>_amd64.deb` installs from the Software app with a
@@ -104,5 +106,6 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 - Eval harness for pointing, content, speed and cost; real questions saved as eval cases.
 - Tests (unit, widget, integration) and CI on Linux and macOS; ADRs 0001 to 0013.
 
-[Unreleased]: https://github.com/amoghdprasanna/marginalia/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/amoghdprasanna/marginalia/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/amoghdprasanna/marginalia/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/amoghdprasanna/marginalia/releases/tag/v0.1.0
