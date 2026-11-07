@@ -45,7 +45,7 @@ jobs:
 
   macos:
     needs: check
-    runs-on: macos-14  # Apple silicon; see ADR 0023 for Intel
+    runs-on: macos-15  # Apple silicon; see ADR 0023 for Intel
     env:
       MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
       MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
