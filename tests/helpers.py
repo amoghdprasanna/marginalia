@@ -226,6 +226,9 @@ class FakeProbes:
     def microphone(self):
         return self.mic
 
+    def forget_screen_recording(self):
+        self.requested.append("forget screen")
+
     def request_screen_recording(self):
         self.requested.append("screen")
 

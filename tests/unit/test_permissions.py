@@ -105,7 +105,8 @@ def test_fixer(mac, cfg):
     fixer = Fixer(probes, lambda: opened.append("settings"))
     checks = by_key(run_checks(replace(cfg, api_key=None, voice_enabled=True), probes))
     fixer.fix(checks["screen"])
-    assert probes.requested == ["screen"] and probes.opened == ["screen"]
+    # A stale entry from an earlier build is cleared first, or the system never asks again.
+    assert probes.requested == ["forget screen", "screen"] and probes.opened == ["screen"]
     fixer.fix(checks["microphone"])
     assert probes.requested[-1] == "microphone"
     fixer.fix(checks["api_key"])
@@ -117,6 +118,16 @@ def test_denied_microphone_opens_the_privacy_pane(mac, cfg):
     check = by_key(run_checks(replace(cfg, voice_enabled=True), probes))["microphone"]
     Fixer(probes).fix(check)
     assert probes.opened == ["microphone"]
+
+
+def test_only_the_packaged_app_forgets_its_screen_recording_entry(monkeypatch):
+    calls = []
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    permissions.MacProbes().forget_screen_recording(run=lambda cmd, **kw: calls.append(cmd))
+    assert calls == []  # from a terminal it would be the terminal's grant
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    permissions.MacProbes().forget_screen_recording(run=lambda cmd, **kw: calls.append(cmd))
+    assert calls == [["tccutil", "reset", "ScreenCapture", permissions.BUNDLE_ID]]
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="asks macOS itself")
@@ -166,3 +177,22 @@ def test_default_probes_per_platform(monkeypatch):
     assert isinstance(permissions.default_probes(), permissions.WindowsProbes)
     monkeypatch.setattr(sys, "platform", "linux")
     assert type(permissions.default_probes()) is permissions.NoProbes
+
+
+def test_fixing_the_microphone_leaves_screen_recording_alone(mac, cfg):
+    probes = FakeProbes(mic="not_determined")
+    Fixer(probes).fix(by_key(run_checks(replace(cfg, voice_enabled=True), probes))["microphone"])
+    assert "forget screen" not in probes.requested
+
+
+def test_forgetting_screen_recording_never_raises_or_hangs(monkeypatch):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    seen = {}
+
+    def broken(cmd, **kw):
+        seen.update(kw)
+        raise OSError("no tccutil")
+
+    permissions.MacProbes().forget_screen_recording(run=broken)
+    assert seen.get("timeout"), "a stuck tccutil must not freeze the setup window"
+    assert seen.get("check") is False, "a failed reset still goes on to ask"

@@ -6,7 +6,7 @@ from helpers import make_snapshot
 from marginalia.brain import Point
 from marginalia.capture import prepare
 from marginalia.ocr import TextLine
-from marginalia.pointing import MERGE_RADIUS, keep_on_screen, place_box, resolve_points
+from marginalia.pointing import MERGE_RADIUS, keep_on_screen, place_box, resolve_points, same_place
 
 
 @pytest.fixture
@@ -108,3 +108,26 @@ def test_keep_on_screen_pulls_a_box_back_onto_the_nearest_screen():
     screens = [(0, 0, 1440, 900), (1440, 0, 1920, 1080)]
     assert keep_on_screen((5000, 40), (48, 48), screens) == (1440 + 1920 - 48, 40)
     assert keep_on_screen((-300, -300), (48, 48), screens) == (0, 0)
+
+
+def test_same_place_on_another_screen_keeps_the_spot_relative_to_the_edges():
+    laptop, monitor = (0, 0, 1440, 900), (1440, -200, 2560, 1440)
+    # Tucked against the laptop's right edge, halfway down: the same on the bigger monitor.
+    x, y = same_place((1440 - 48 - 18, 426), (48, 48), laptop, monitor)
+    assert 1440 + 2560 - 48 - 40 < x < 1440 + 2560 - 48 and abs((y + 200) / 1392 - 426 / 852) < 0.01
+    assert same_place((0, 0), (48, 48), laptop, monitor) == (1440, -200)
+    assert same_place((1392, 852), (48, 48), laptop, monitor) == (1440 + 2512, -200 + 1392)
+
+
+def test_same_place_never_lands_off_the_new_screen():
+    x, y = same_place((5000, -300), (48, 48), (0, 0, 1440, 900), (1440, 0, 800, 600))
+    assert 1440 <= x <= 1440 + 800 - 48 and 0 <= y <= 600 - 48
+
+
+def test_same_place_on_the_same_screen_is_where_it_was():
+    area = (0, 0, 1440, 900)
+    assert same_place((300, 500), (48, 48), area, area) == (300, 500)
+
+
+def test_same_place_on_a_screen_smaller_than_the_box_starts_at_its_corner():
+    assert same_place((700, 400), (48, 48), (0, 0, 1440, 900), (2000, 100, 30, 30)) == (2000, 100)

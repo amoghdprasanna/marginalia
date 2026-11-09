@@ -26,7 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
 sys.path.insert(0, str(ROOT / "src"))
-from marginalia import __version__  # noqa: E402
+from marginalia import BUNDLE_ID, __version__  # noqa: E402
 
 
 def run(*cmd: str) -> None:
@@ -62,6 +62,16 @@ def notarise(path: Path) -> None:
         upload.unlink()
 
 
+def adhoc_sign(app: Path) -> list[str]:
+    """Sign without a Developer ID, with a requirement that names the app rather than this build.
+
+    Ad-hoc signing makes the designated requirement the build's exact hash, and macOS ties the
+    Screen Recording grant to it: every update or reinstall then looked like a new app, so the
+    switch in System Settings stayed on but no longer applied, and the app kept asking.
+    """
+    return ["codesign", "--force", "--sign", "-", f'-r=designated => identifier "{BUNDLE_ID}"', str(app)]
+
+
 def macos() -> Path:
     app = DIST / "Marginalia.app"
     # PyInstaller leaves the one-folder build next to the bundle it copied it into; only the .app ships.
@@ -76,7 +86,8 @@ def macos() -> Path:
         run("codesign", "--verify", "--strict", "--verbose=2", str(app))
         notarise(app)
     else:
-        print("Not signing: MACOS_SIGN_IDENTITY is not set. The app runs here but Gatekeeper will block it elsewhere.")
+        run(*adhoc_sign(app))  # keeps the Screen Recording grant across builds
+        print("Not signing with a Developer ID: MACOS_SIGN_IDENTITY is not set. Gatekeeper will block it elsewhere.")
 
     stage = DIST / "dmg"
     shutil.rmtree(stage, ignore_errors=True)
