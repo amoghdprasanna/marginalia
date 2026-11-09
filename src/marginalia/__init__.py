@@ -1,5 +1,5 @@
 """Marginalia: a screen-aware study companion that answers questions and points at things."""
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 # Where releases and issues live. Crash reports and the update check point here.
 REPO = "amoghdprasanna/marginalia"

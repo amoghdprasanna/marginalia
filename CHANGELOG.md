@@ -6,6 +6,8 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-09
+
 ### Fixed
 - macOS: Screen Recording no longer has to be allowed again after every update or reinstall.
   Builds without a Developer ID were signed so that macOS treated each one as a new app; the
@@ -114,6 +116,7 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 - Eval harness for pointing, content, speed and cost; real questions saved as eval cases.
 - Tests (unit, widget, integration) and CI on Linux and macOS; ADRs 0001 to 0013.
 
-[Unreleased]: https://github.com/amoghdprasanna/marginalia/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/amoghdprasanna/marginalia/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/amoghdprasanna/marginalia/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/amoghdprasanna/marginalia/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/amoghdprasanna/marginalia/releases/tag/v0.1.0
