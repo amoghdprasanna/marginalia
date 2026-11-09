@@ -230,3 +230,24 @@ def test_orb_menu_opens_the_journal(qtbot, cfg):
     actions["Journal…"].trigger()
     qtbot.addWidget(c.journal_window)
     assert c.journal_window.isVisible()
+
+
+def test_allowing_screen_recording_clears_the_old_entry_and_the_window_catches_up(qtbot, cfg, monkeypatch):
+    """Bug: after allowing Screen Recording the setup window still said it was missing, and the
+    stale entry from an earlier build kept the system from asking again."""
+    from helpers import FakeProbes
+    from PySide6.QtCore import QEvent
+
+    monkeypatch.setattr("sys.platform", "darwin")
+    probes = FakeProbes(screen=False)
+    c = build(qtbot, cfg, probes=probes)
+    c.open_setup()
+    w = c.setup_window
+    qtbot.addWidget(w)
+    w.buttons["screen"].click()
+    assert probes.requested == ["forget screen", "screen"] and probes.opened == ["screen"]
+    probes.screen = True  # allowed in System Settings
+    monkeypatch.setattr(w, "isActiveWindow", lambda: True)
+    QApplication.sendEvent(w, QEvent(QEvent.ActivationChange))  # back from System Settings
+    assert "screen" not in w.buttons
+    assert next(ch for ch in w.checks if ch.key == "screen").status == "ok"

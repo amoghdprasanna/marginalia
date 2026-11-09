@@ -73,6 +73,21 @@ def place_box(
     return best
 
 
+def same_place(
+    pos: tuple[int, int], size: tuple[int, int], old: tuple[int, int, int, int], new: tuple[int, int, int, int]
+) -> tuple[int, int]:
+    """Where a w x h box at `pos` on screen `old` goes on screen `new`: the same spot relative to
+    the edges (an orb tucked against the right edge, halfway down, stays so on any size of screen)."""
+    w, h = size
+    out = []
+    for p, o, o_len, n, n_len, length in ((pos[0], old[0], old[2], new[0], new[2], w),
+                                          (pos[1], old[1], old[3], new[1], new[3], h)):  # fmt: skip
+        room_old, room_new = max(o_len - length, 1), max(n_len - length, 0)
+        frac = min(max((p - o) / room_old, 0.0), 1.0)
+        out.append(n + round(frac * room_new))
+    return out[0], out[1]
+
+
 def keep_on_screen(
     pos: tuple[int, int], size: tuple[int, int], screens: list[tuple[int, int, int, int]]
 ) -> tuple[int, int]:

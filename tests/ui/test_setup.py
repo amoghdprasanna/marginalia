@@ -91,3 +91,30 @@ def test_the_highlighted_button_is_the_next_step(qtbot):
     assert w.close_btn.objectName() != "primary", "not 'Done' while something required is missing"
     w.show_checks([Check("api_key", "Claude API key", OK, "Set.")], "Marginalia")
     assert w.close_btn.objectName() == "primary"
+
+
+def test_coming_back_to_the_window_checks_again(qtbot, monkeypatch):
+    from PySide6.QtCore import QEvent
+
+    w = SetupWindow()
+    qtbot.addWidget(w)
+    w.show_checks(CHECKS, "Marginalia")
+    monkeypatch.setattr(w, "isActiveWindow", lambda: True)
+    with qtbot.waitSignal(w.recheck_requested, timeout=500):
+        QApplication.sendEvent(w, QEvent(QEvent.ActivationChange))
+
+
+def test_no_recheck_when_the_window_loses_focus_or_has_nothing_shown(qtbot, monkeypatch):
+    from PySide6.QtCore import QEvent
+
+    w = SetupWindow()
+    qtbot.addWidget(w)
+    fired = []
+    w.recheck_requested.connect(lambda: fired.append(1))
+    monkeypatch.setattr(w, "isActiveWindow", lambda: True)
+    QApplication.sendEvent(w, QEvent(QEvent.ActivationChange))
+    assert fired == [], "nothing to check again before the first check"
+    w.show_checks(CHECKS, "Marginalia")
+    monkeypatch.setattr(w, "isActiveWindow", lambda: False)
+    QApplication.sendEvent(w, QEvent(QEvent.ActivationChange))
+    assert fired == [], "going away from the window is not coming back to it"

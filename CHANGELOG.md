@@ -6,6 +6,14 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 
 ## [Unreleased]
 
+### Fixed
+- macOS: Screen Recording no longer has to be allowed again after every update or reinstall.
+  Builds without a Developer ID were signed so that macOS treated each one as a new app; the
+  switch in System Settings stayed on but no longer applied, and Marginalia kept asking.
+  "Allow…" in the setup check now clears such a stale entry so macOS asks again.
+- The setup check updates when you come back to it from System Settings.
+- With more than one display, the orb follows the pointer to the display you're working on.
+
 ## [0.2.0] - 2026-11-07
 
 ### Added

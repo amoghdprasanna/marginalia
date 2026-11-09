@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 import sys
 from dataclasses import dataclass, field
 
+from . import BUNDLE_ID
 from .config import Config
 from .providers import PROVIDERS
 
@@ -44,6 +46,9 @@ class NoProbes:
         return "unknown"  # authorized | denied | not_determined | restricted | unknown
 
     def request_screen_recording(self) -> None:
+        pass
+
+    def forget_screen_recording(self) -> None:
         pass
 
     def request_microphone(self) -> None:
@@ -94,6 +99,20 @@ class MacProbes(NoProbes):
             self._cg().CGRequestScreenCaptureAccess()  # first time: the system prompt; later: nothing
         except Exception as exc:  # noqa: BLE001
             log.debug("Screen Recording request failed: %s", exc)
+
+    def forget_screen_recording(self, run=subprocess.run) -> None:
+        """Drop the packaged app's Screen Recording entry so the request starts from scratch.
+
+        An entry made for an earlier build can't apply to this one (ad-hoc signatures change with
+        every build), yet System Settings shows it switched on, and the system won't prompt again
+        while it exists. Never from a terminal: that would take the terminal's own grant away.
+        """
+        if not getattr(sys, "frozen", False):
+            return
+        try:
+            run(["tccutil", "reset", "ScreenCapture", BUNDLE_ID], capture_output=True, timeout=10, check=False)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("Could not reset Screen Recording: %s", exc)
 
     def microphone(self) -> str:
         try:
@@ -264,6 +283,7 @@ class Fixer:
         if check.key == "api_key" and self.open_settings_window is not None:
             self.open_settings_window()
         elif check.key == "screen":
+            self.probes.forget_screen_recording()
             self.probes.request_screen_recording()
             self._open("screen")
         elif check.key == "microphone":

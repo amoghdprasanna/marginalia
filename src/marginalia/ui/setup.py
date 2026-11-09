@@ -5,7 +5,7 @@ orb menu. It only displays checks and emits which one to fix; permissions.Fixer 
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
@@ -182,6 +182,12 @@ class SetupWindow(QWidget):
         screen = self.screen().availableGeometry()
         self.move(screen.center() - self.rect().center())
         bring_to_front(self)
+
+    def changeEvent(self, e) -> None:  # noqa: N802
+        # Coming back from System Settings: show what changed without making you press "Check again".
+        if e.type() == QEvent.ActivationChange and self.isActiveWindow() and self.checks:
+            self.recheck_requested.emit()
+        super().changeEvent(e)
 
     def closeEvent(self, e) -> None:  # noqa: N802
         self.done.emit()

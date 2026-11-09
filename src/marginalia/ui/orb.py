@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QPointF, Qt, QTimer, Signal
-from PySide6.QtGui import QGuiApplication, QPainter, QPen
+from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import (
     QMenu,
     QWidget,
 )
 
-from ..pointing import keep_on_screen
+from ..pointing import keep_on_screen, same_place
 from .paint import draw_qubit
 from .theme import (
     AMBER,
@@ -55,6 +55,12 @@ class Orb(QWidget):
         # Unplugging a monitor can leave the orb where no screen is; with no hotkey it is the only way in.
         # A bound method, so Qt disconnects it when the orb goes away.
         QGuiApplication.instance().screenRemoved.connect(self._screen_removed)
+        # A window lives on one display, so with several the orb would stay behind on the one it
+        # started on. It follows the pointer to whichever display you're working on instead.
+        self._follow = QTimer(self)
+        self._follow.setInterval(400)
+        self._follow.timeout.connect(self.follow_pointer)
+        self._follow.start()
 
     def _screen_removed(self, _screen) -> None:
         QTimer.singleShot(0, self, self.rehome)  # after Qt has moved windows off the old screen
@@ -76,6 +82,24 @@ class Orb(QWidget):
         areas = [s.availableGeometry() for s in QGuiApplication.screens()]
         x, y = keep_on_screen(
             (self.x(), self.y()), (self.width(), self.height()), [(a.x(), a.y(), a.width(), a.height()) for a in areas]
+        )
+        self.move(x, y)
+
+    def follow_pointer(self, at: QPoint | None = None) -> None:
+        """Move to the display the pointer is on, in the same place relative to its edges."""
+        if self._press is not None or not self.isVisible() or len(QGuiApplication.screens()) < 2:
+            return
+        target = QGuiApplication.screenAt(QCursor.pos() if at is None else at)
+        here = QGuiApplication.screenAt(self.frameGeometry().center())
+        if target is None or target is here:
+            return
+        old = (here or self.screen()).availableGeometry()
+        new = target.availableGeometry()
+        x, y = same_place(
+            (self.x(), self.y()),
+            (self.width(), self.height()),
+            (old.x(), old.y(), old.width(), old.height()),
+            (new.x(), new.y(), new.width(), new.height()),
         )
         self.move(x, y)
 
