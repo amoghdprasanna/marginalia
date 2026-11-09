@@ -50,7 +50,12 @@ def test_spins_while_busy_and_rests_after(qtbot, orb):
 
 @pytest.mark.parametrize(
     ("label", "signal"),
-    [("Ask by typing", "type_requested"), ("Ask by voice", "voice_requested"), ("Quit Marginalia", "quit_requested")],
+    [
+        ("Ask by typing", "type_requested"),
+        ("Ask by voice", "voice_requested"),
+        ("About Marginalia…", "about_requested"),
+        ("Quit Marginalia", "quit_requested"),
+    ],
 )
 def test_menu_actions(qtbot, orb, label, signal):
     actions = {a.text(): a for a in orb.build_menu().actions() if a.text()}

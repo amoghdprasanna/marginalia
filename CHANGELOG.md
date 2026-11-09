@@ -6,6 +6,10 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 
 ## [Unreleased]
 
+### Added
+- "About Marginalia…" in the orb menu shows which version you have, links its release notes,
+  and mentions a newer version if there is one.
+
 ## [0.2.1] - 2026-11-09
 
 ### Fixed

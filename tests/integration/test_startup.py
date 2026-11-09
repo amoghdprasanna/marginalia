@@ -4,7 +4,7 @@ import sys
 
 import pytest
 from helpers import FakeBrain, FakeOCR, FakeWhisper, ManualExecutor, build, make_snapshot
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QPushButton
 
 from marginalia import app as app_module
 from marginalia.app import default_services
@@ -501,3 +501,31 @@ def test_the_menu_entry_shows_the_update_again(qtbot, cfg, monkeypatch):
     c.orb.update_requested.emit()
     qtbot.addWidget(c.notice)
     assert c.notice.isVisible() and "Update now" in c.notice.buttons
+
+
+# about ------------------------------------------------------------------------------------------
+
+
+def test_about_shows_the_version_and_links_its_release_notes(qtbot, cfg, monkeypatch):
+    """Bug: there was nowhere to see which version you have (an accessory app has no app menu)."""
+    from marginalia import __version__
+
+    c = build(qtbot, cfg)
+    opened = []
+    monkeypatch.setattr(c, "open_url", lambda url: opened.append(url.toString()))
+    c.orb.about_requested.emit()
+    qtbot.addWidget(c.notice)
+    assert c.notice.isVisible() and f"Version {__version__}" in c.notice.text.text()
+    assert "available" not in c.notice.text.text()
+    next(b for b in c.notice.findChildren(QPushButton) if b.text() == "Release notes").click()
+    assert opened == [f"https://github.com/amoghdprasanna/marginalia/releases/tag/v{__version__}"]
+
+
+def test_about_mentions_a_newer_version_when_there_is_one(qtbot, cfg):
+    c = build(qtbot, cfg)
+    with_release(c)
+    c.check_for_updates()
+    qtbot.addWidget(c.notice)
+    c.show_about()
+    qtbot.addWidget(c.notice)
+    assert "9.9.9 is available" in c.notice.text.text()

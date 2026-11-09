@@ -32,6 +32,7 @@ class Orb(QWidget):
     journal_requested = Signal()
     update_requested = Signal()
     check_updates_requested = Signal()
+    about_requested = Signal()
     SIZE = 48
 
     def __init__(self, hotkey_text: str | None, voice_hotkey_text: str | None = None) -> None:
@@ -166,6 +167,7 @@ class Orb(QWidget):
             menu.addAction(f"Update to {self.update_version}…", self.update_requested.emit)
         else:
             menu.addAction("Check for updates", self.check_updates_requested.emit)
+        menu.addAction("About Marginalia…", self.about_requested.emit)
         menu.addSeparator()
         menu.addAction("Quit Marginalia", self.quit_requested.emit)
         return menu
