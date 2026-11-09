@@ -18,7 +18,7 @@ from PySide6.QtCore import QObject, QPoint, QPointF, QProcess, QRect, QRectF, QT
 from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QApplication
 
-from . import __version__
+from . import REPO, __version__
 from .autostart import LoginItem
 from .brain import BrainError, Cancelled, DemoBrain, brain_for
 from .capture import Snapshot, default_frame_grabber, default_grab, prepare, small_frame
@@ -213,6 +213,7 @@ class Controller(QObject):
         self.orb.journal_requested.connect(self.open_journal)
         self.orb.update_requested.connect(self.offer_update)
         self.orb.check_updates_requested.connect(lambda: self.check_for_updates(force=True))
+        self.orb.about_requested.connect(self.show_about)
         self.bus.update_ready.connect(self._on_update_checked)
         self.bus.update_progress.connect(self._on_update_progress)
         self.bus.update_staged.connect(self._on_update_staged)
@@ -493,6 +494,14 @@ class Controller(QObject):
     @staticmethod
     def quit_app() -> None:
         QApplication.quit()
+
+    def show_about(self) -> None:
+        """Which version this is: an accessory app has no app menu, so no About of its own."""
+        text = f"Version {__version__}"
+        if self.available_update is not None:
+            text += f". Version {self.available_update.version} is available."
+        notes = QUrl(f"https://github.com/{REPO}/releases/tag/v{__version__}")
+        self._notice("Marginalia", text, [("Release notes", lambda: self.open_url(notes)), ("OK", None)])
 
     def _notice(self, title: str, text: str, buttons) -> None:
         self.notices = [n for n in self.notices if n.isVisible()]
