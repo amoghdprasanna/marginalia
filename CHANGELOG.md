@@ -10,6 +10,12 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 - "About Marginalia…" in the orb menu shows which version you have, links its release notes,
   and mentions a newer version if there is one.
 
+### Fixed
+- Windows: quitting no longer shows "Unhandled exception in script … 'NoneType' object has no
+  attribute 'flush'". The Windows app has no console window, and quitting assumed it had one.
+- When an answer fails, the log now records the underlying error, not only the message shown in
+  the bubble, so "The answer was interrupted" can be traced.
+
 ## [0.2.1] - 2026-11-09
 
 ### Fixed

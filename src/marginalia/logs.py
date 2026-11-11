@@ -56,11 +56,12 @@ def setup_logging(log_dir: Path | None = None, level: int | str = logging.INFO) 
         logger.removeHandler(h)
         h.close()
 
-    console = logging.StreamHandler(sys.stdout)
-    console.setLevel(level)
-    console.setFormatter(logging.Formatter(CONSOLE_FORMAT))
-    console._marginalia = True
-    logger.addHandler(console)
+    if sys.stdout is not None:  # None in a windowed app (the Windows build): no console to write to
+        console = logging.StreamHandler(sys.stdout)
+        console.setLevel(level)
+        console.setFormatter(logging.Formatter(CONSOLE_FORMAT))
+        console._marginalia = True
+        logger.addHandler(console)
 
     if log_dir is None:
         return None

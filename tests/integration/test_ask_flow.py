@@ -64,6 +64,18 @@ def test_brain_errors_show_in_the_bubble(qtbot, cfg):
     assert c.history == []
 
 
+def test_a_brain_errors_cause_goes_to_the_log(qtbot, cfg, caplog):
+    try:
+        raise ConnectionResetError("peer reset")
+    except ConnectionResetError as cause:
+        error = BrainError("The answer was interrupted. Try again.", "retry")
+        error.__cause__ = cause
+    c = build(qtbot, cfg, brain=FakeBrain(error=error))
+    ask_typed(qtbot, c, "q")
+    assert "interrupted" in c.bubble.body.toPlainText()
+    assert "ConnectionResetError: peer reset" in caplog.text, "the bubble is short; the log says why"
+
+
 def test_capture_failure_is_explained(qtbot, cfg):
     def broken(x, y):
         raise RuntimeError("The screenshot came back blank.")
