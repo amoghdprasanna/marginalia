@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77"]  # 77: SPDX `license` strings (PEP 639)
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,6 +7,8 @@ name = "marginalia"
 dynamic = ["version"]
 description = "A screen-aware study companion that answers questions and points at things."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
     "PySide6>=6.6",

@@ -37,4 +37,9 @@ supersedes it, so the history of *why* survives.
 | [0026](0026-apple-vision-ocr-and-a-leaner-app.md) | OCR with Apple Vision on macOS, and a leaner app | Accepted |
 | [0027](0027-more-than-one-model-provider.md) | More than one model provider: Claude, OpenAI and Gemini | Accepted |
 | [0028](0028-installers-login-item-and-in-app-updates.md) | An installed app: a Windows installer, opening at login, and updating from the app | Accepted |
+| [0029](0029-a-chrome-extension-for-notebooks.md) | A Chrome extension for notebooks, through Jupyter's own app object | Accepted |
+| [0030](0030-fix-notebook-errors-through-a-desktop-helper.md) | Fix notebook errors with Claude, through a helper on your computer | Accepted |
+| [0031](0031-sites-you-allow-models-you-pick-scripts-that-hand-over.md) | Sites you allow, the model you pick, page scripts that hand over | Accepted |
+| [0032](0032-a-live-session-with-claude.md) | A live session with Claude: each error its own note, history in every request | Accepted |
 | [0033](0033-a-linux-package-and-a-helper-that-sets-itself-up.md) | A Linux package, and a helper that sets itself up | Accepted |
+| [0034](0034-mit-license-and-signing-windows-through-signpath.md) | MIT license, and signing the Windows installer through SignPath Foundation | Accepted; signing pending |

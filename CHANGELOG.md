@@ -9,6 +9,9 @@ turns "Unreleased" into a version (see `docs/releasing.md`).
 ### Added
 - "About Marginalia…" in the orb menu shows which version you have, links its release notes,
   and mentions a newer version if there is one.
+- Marginalia is now open source under the MIT license.
+- The README says exactly what the app sends over the network (Privacy) and how Windows releases
+  will be signed (Code signing policy).
 
 ## [0.2.1] - 2026-11-09
 

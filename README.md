@@ -20,7 +20,8 @@ instead: it's rebuilt on every change, and the app won't update itself to it.
   stops the first launch: go to System Settings → Privacy & Security and click **Open Anyway**.
 - **Windows:** run `Marginalia-<version>-windows-setup.exe`. It installs for you only, so it
   needs no administrator password, and adds Marginalia to the Start menu. Until the installer
-  is signed, SmartScreen may warn: click **More info → Run anyway**.
+  is signed (see [Code signing policy](#code-signing-policy)), SmartScreen may warn: click
+  **More info → Run anyway**.
 - **Linux** (Ubuntu 22.04 or newer, Debian 12, 64-bit Intel/AMD): double-click
   `marginalia_<version>_amd64.deb`. It opens in the Software app; click **Install**. Marginalia
   is then in your applications menu.
@@ -166,3 +167,43 @@ ruff check .                         # lint
   tag; see [`docs/releasing.md`](docs/releasing.md), including signing and notarisation.
 - **Logs and crashes:** `<log dir>/logs/marginalia.jsonl` (JSON lines; metrics, never your
   questions) and `<log dir>/crashes/`.
+
+## Privacy
+
+Nothing from your screen leaves your computer until you ask a question. What is sent, and when:
+
+- **When you ask a question:** the screenshot of the screen you're on, a zoomed crop around the
+  pointer, the text OCR read from it, your question and the earlier turns of that conversation
+  go to the model provider you picked in Settings (Anthropic, OpenAI or Google), using your own
+  API key. The notebook extension sends the cells and error you ask about the same way. That
+  provider's privacy policy covers what happens next.
+- **Once a day, if "Check for new versions" is on** (Settings): a request to the GitHub API for
+  the latest release. It carries no information about you beyond what any web request does.
+- **The first time you ask by voice:** the speech model downloads from Hugging Face. Your voice
+  is transcribed on your computer and never uploaded; only the transcribed question is sent, as
+  above.
+- **Crash reports are off by default.** If you turn them on, Marginalia offers to open a GitHub
+  issue in your browser with the error and recent log lines (never your questions or answers),
+  which you read and edit before deciding to send it.
+
+Your API key stays in your system keychain. The journal of questions and answers, its
+screenshots and the logs stay on your computer.
+
+## Code signing policy
+
+Windows releases are to be signed with free code signing provided by
+[SignPath.io](https://about.signpath.io/), certificate by
+[SignPath Foundation](https://signpath.org/) (application pending; until then the installer is
+unsigned). Only files built by this repository's
+[release workflow](.github/workflows/release.yml) on GitHub Actions, from a tagged commit, are
+submitted for signing.
+
+- **Committers and reviewers:** [Amogh D. Prasanna](https://github.com/amoghdprasanna)
+- **Approvers** (who approve each signing request): [Amogh D. Prasanna](https://github.com/amoghdprasanna)
+
+Every change reaches `main` through a pull request that CI tests. See [Privacy](#privacy) for what
+the app sends over the network.
+
+## License
+
+[MIT](LICENSE). The notebook extension in [`extension/`](extension/) is MIT too.
