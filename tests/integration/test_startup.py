@@ -529,3 +529,13 @@ def test_about_mentions_a_newer_version_when_there_is_one(qtbot, cfg):
     c.show_about()
     qtbot.addWidget(c.notice)
     assert "9.9.9 is available" in c.notice.text.text()
+
+
+def test_quitting_a_windowed_app_without_a_console_does_not_crash(monkeypatch):
+    # The Windows build has no console, so sys.stdout and sys.stderr are None (v0.2.1 crashed on quit).
+    exits = []
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+    monkeypatch.setattr(app_module.os, "_exit", exits.append)
+    app_module.hard_exit(0)
+    assert exits == [0]

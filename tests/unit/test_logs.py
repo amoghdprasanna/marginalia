@@ -57,3 +57,10 @@ def test_an_unwritable_log_folder_is_reported_not_raised(tmp_path, caplog):
     assert setup_logging(blocker) is None
     assert "Could not open the log file" in caplog.text
     assert FILE_NAME in caplog.text
+
+
+def test_a_windowed_app_without_a_console_still_logs_to_the_file(tmp_path, monkeypatch):
+    monkeypatch.setattr("sys.stdout", None)  # the Windows build is windowed: no console streams
+    path = setup_logging(tmp_path)
+    log.info("no console")
+    assert any(r["msg"] == "no console" for r in lines(path))

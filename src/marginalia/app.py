@@ -862,7 +862,8 @@ class Controller(QObject):
         try:
             prep, lines, answer = future.result()
         except BrainError as exc:
-            log.warning("Answer failed: %s", exc)
+            # The bubble's wording is for people; the cause (the SDK's own error) is for the log.
+            log.warning("Answer failed: %s", exc, exc_info=exc if exc.__cause__ else None)
             self.bubble.show_error(question, str(exc), self._recovery(exc.action, question))
             self._show_bubble_near(cursor, [])
             return
@@ -1110,8 +1111,9 @@ def restart() -> None:
 def hard_exit(code: int) -> None:
     """End the process now. sys.exit would first wait for every busy worker thread."""
     logging.shutdown()
-    sys.stdout.flush()
-    sys.stderr.flush()
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None:  # a windowed app (the Windows build) has no console: both are None
+            stream.flush()
     os._exit(code)
 
 
